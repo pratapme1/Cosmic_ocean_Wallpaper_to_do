@@ -1,0 +1,1330 @@
+openapi: 3.0.3
+info:
+  title: Supernova API
+  description: |
+    REST API for the Supernova task management application.
+
+    ## Overview
+    Supernova is a task app where your lock screen wallpaper IS your task list,
+    showing you the ONE thing to do right now.
+
+    ## Authentication
+    Most endpoints require JWT authentication via Bearer token in the Authorization header.
+    - **Access Token**: 7-day expiry, used for API access
+    - **Refresh Token**: 30-day expiry, used to obtain new access tokens
+    - **Wallpaper Token**: 365-day expiry, limited scope for widget access
+
+    ## Rate Limiting
+    - Global: 100 req/min
+    - Auth endpoints: 10 req/min
+    - Wallpaper: 20 req/hour
+    - Task creation: 30 req/min
+
+  version: 1.0.0
+  contact:
+    name: Supernova Support
+    url: https://github.com/supernova-app
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.supernova.app
+    description: Production server
+  - url: http://localhost:3000
+    description: Development server
+
+tags:
+  - name: Authentication
+    description: User authentication and token management
+  - name: User
+    description: User profile and settings management
+  - name: Tasks
+    description: Task CRUD operations
+  - name: Sync
+    description: Offline synchronization
+  - name: Wallpaper
+    description: Wallpaper generation
+  - name: Utility
+    description: Health checks and metrics
+
+paths:
+  # ============================================
+  # AUTHENTICATION ENDPOINTS
+  # ============================================
+  /api/auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register new user
+      description: Create a new user account and receive authentication tokens
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              email: user@example.com
+              password: SecurePass123!
+              theme: cosmic
+              timezone: America/New_York
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      description: Authenticate user and receive tokens
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: user@example.com
+              password: SecurePass123!
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: Exchange refresh token for new access token
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refreshToken
+              properties:
+                refreshToken:
+                  type: string
+                  description: Valid refresh token
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/wallpaper-token:
+    post:
+      tags:
+        - Authentication
+      summary: Generate wallpaper token
+      description: Generate a new wallpaper token for widget access (invalidates old one)
+      operationId: generateWallpaperToken
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Token generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  wallpaperToken:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ============================================
+  # USER ENDPOINTS
+  # ============================================
+  /api/user:
+    get:
+      tags:
+        - User
+      summary: Get user profile
+      description: Retrieve current user's profile and settings
+      operationId: getUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    patch:
+      tags:
+        - User
+      summary: Update user settings
+      description: Update user profile settings. Invalidates wallpaper cache.
+      operationId: updateUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    delete:
+      tags:
+        - User
+      summary: Delete user account
+      description: Delete user account and all associated data (GDPR compliance)
+      operationId: deleteUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Account deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Account deleted successfully. All associated data has been removed.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/user/export:
+    get:
+      tags:
+        - User
+      summary: Export user data
+      description: Export all user data in JSON format (GDPR compliance)
+      operationId: exportUserData
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User data export
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserExport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/user/stats/weekly:
+    get:
+      tags:
+        - User
+      summary: Get weekly statistics
+      description: Get usage statistics for the last 8 weeks with trends
+      operationId: getWeeklyStats
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Weekly statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeeklyStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/user/stats/graduation:
+    get:
+      tags:
+        - User
+      summary: Get graduation metrics
+      description: Get graduation metrics showing app usage reduction over 6 months
+      operationId: getGraduationStats
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Graduation metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraduationStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/user/done-for-today:
+    post:
+      tags:
+        - User
+      summary: Mark done for today
+      description: Mark user as done for the day (shows celebration wallpaper)
+      operationId: markDoneForToday
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Marked as done
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  doneForToday:
+                    type: boolean
+                    example: true
+                  doneAt:
+                    type: string
+                    format: date-time
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ============================================
+  # TASK ENDPOINTS
+  # ============================================
+  /api/tasks:
+    get:
+      tags:
+        - Tasks
+      summary: List all tasks
+      description: |
+        Get all active tasks for user, sorted by priority score.
+        Excludes completed tasks and tasks snoozed until future.
+      operationId: listTasks
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - name: location
+          in: query
+          description: Context for location-based prioritization
+          schema:
+            type: string
+        - name: time
+          in: query
+          description: Time context for prioritization
+          schema:
+            type: string
+            enum: [morning, afternoon, evening]
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Tasks
+      summary: Create task
+      description: |
+        Create a new task with natural language parsing.
+        Supports patterns like "Buy milk tomorrow at 3pm in 30m"
+      operationId: createTask
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+            examples:
+              natural_language:
+                summary: Natural language input
+                value:
+                  rawTitle: Buy groceries tomorrow at 3pm in 30m
+              structured:
+                summary: Structured input
+                value:
+                  title: Buy groceries
+                  priority: 2
+                  context_location: grocery_store
+      responses:
+        '201':
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          description: Parse error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    delete:
+      tags:
+        - Tasks
+      summary: Delete all tasks
+      description: Delete all tasks for user
+      operationId: deleteAllTasks
+      security:
+        - bearerAuth: []
+        - {}
+      responses:
+        '200':
+          description: All tasks deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: All tasks deleted
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/tasks/{taskId}:
+    get:
+      tags:
+        - Tasks
+      summary: Get task
+      description: Get a single task by ID
+      operationId: getTask
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/taskId'
+      responses:
+        '200':
+          description: Task details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    patch:
+      tags:
+        - Tasks
+      summary: Update task
+      description: Update task fields. Sets completed_at/archived_at automatically.
+      operationId: updateTask
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/taskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdate'
+      responses:
+        '200':
+          description: Task updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - Tasks
+      summary: Delete task
+      description: Delete a single task
+      operationId: deleteTask
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/taskId'
+      responses:
+        '200':
+          description: Task deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/tasks/{taskId}/snooze:
+    post:
+      tags:
+        - Tasks
+      summary: Snooze task
+      description: Snooze task until tomorrow
+      operationId: snoozeTask
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/taskId'
+      responses:
+        '200':
+          description: Task snoozed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ============================================
+  # SYNC ENDPOINTS
+  # ============================================
+  /api/sync:
+    post:
+      tags:
+        - Sync
+      summary: Sync changes
+      description: |
+        Synchronize offline changes with server using last-write-wins conflict resolution.
+        Returns all tasks modified since lastSyncAt.
+      operationId: syncChanges
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncRequest'
+      responses:
+        '200':
+          description: Sync complete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/sync/status:
+    get:
+      tags:
+        - Sync
+      summary: Get sync status
+      description: Get sync status and metadata
+      operationId: getSyncStatus
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Sync status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ============================================
+  # WALLPAPER ENDPOINT
+  # ============================================
+  /api/wallpaper:
+    get:
+      tags:
+        - Wallpaper
+      summary: Generate wallpaper
+      description: |
+        Generate and return wallpaper PNG image.
+        Cached for 1 hour, invalidated on task/settings changes.
+      operationId: getWallpaper
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: theme
+          in: query
+          description: Wallpaper theme
+          schema:
+            type: string
+            enum: [cosmic, ocean, fantasy]
+            default: cosmic
+        - name: resolution
+          in: query
+          description: Screen resolution (WxH)
+          schema:
+            type: string
+            pattern: '^\d+x\d+$'
+            default: 1080x1920
+          example: 1080x1920
+        - name: enhanced
+          in: query
+          description: Use enhanced generator
+          schema:
+            type: boolean
+            default: true
+        - name: timestamp
+          in: query
+          description: Animation frame timestamp (skips cache)
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Wallpaper PNG image
+          headers:
+            X-Cache:
+              description: Cache hit status
+              schema:
+                type: string
+                enum: [HIT, MISS]
+            X-Fallback:
+              description: Whether fallback was used
+              schema:
+                type: string
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ============================================
+  # UTILITY ENDPOINTS
+  # ============================================
+  /api/health:
+    get:
+      tags:
+        - Utility
+      summary: Health check
+      description: Health check endpoint for monitoring
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  mode:
+                    type: string
+                    enum: [postgres, mock]
+
+  /api/done-for-today:
+    post:
+      tags:
+        - Utility
+      summary: Mark done for today (legacy)
+      description: Legacy endpoint for marking done for today
+      operationId: markDoneForTodayLegacy
+      security:
+        - bearerAuth: []
+        - {}
+      responses:
+        '200':
+          description: Marked as done
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+
+  /api/metrics/app-open:
+    post:
+      tags:
+        - Utility
+      summary: Track app open
+      description: Track app open event for analytics
+      operationId: trackAppOpen
+      security:
+        - bearerAuth: []
+        - {}
+      responses:
+        '200':
+          description: Event tracked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+
+# ============================================
+# COMPONENTS
+# ============================================
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token
+
+  parameters:
+    taskId:
+      name: taskId
+      in: path
+      required: true
+      description: Task UUID
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              message: Authentication required
+              code: AUTHENTICATION_ERROR
+
+  schemas:
+    # ----------------------------------------
+    # Authentication Schemas
+    # ----------------------------------------
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: Valid email address
+        password:
+          type: string
+          minLength: 8
+          description: Minimum 8 characters
+        theme:
+          type: string
+          enum: [cosmic, ocean, fantasy]
+          default: cosmic
+        timezone:
+          type: string
+          description: IANA timezone
+          default: UTC
+        resolution:
+          type: string
+          pattern: '^\d+x\d+$'
+          default: 1170x2532
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          description: JWT access token (7-day expiry)
+        refreshToken:
+          type: string
+          description: JWT refresh token (30-day expiry)
+        wallpaperToken:
+          type: string
+          description: UUID token for widget access (1-year expiry)
+        user:
+          $ref: '#/components/schemas/UserBasic'
+
+    # ----------------------------------------
+    # User Schemas
+    # ----------------------------------------
+    UserBasic:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        theme:
+          type: string
+          enum: [cosmic, ocean, fantasy]
+        timezone:
+          type: string
+        resolution:
+          type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        theme:
+          type: string
+          enum: [cosmic, ocean, fantasy]
+        resolution:
+          type: string
+        display_mode:
+          type: string
+          enum: [one_thing, all_tasks]
+        timezone:
+          type: string
+        setup_complete:
+          type: boolean
+        done_for_today:
+          type: boolean
+        done_for_today_at:
+          type: string
+          format: date-time
+          nullable: true
+        wallpaper_token:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    UserUpdate:
+      type: object
+      properties:
+        theme:
+          type: string
+          enum: [cosmic, ocean, fantasy]
+        resolution:
+          type: string
+          pattern: '^\d+x\d+$'
+        display_mode:
+          type: string
+          enum: [one_thing, all_tasks]
+        timezone:
+          type: string
+        setup_complete:
+          type: boolean
+        done_for_today:
+          type: boolean
+
+    UserExport:
+      type: object
+      properties:
+        exportedAt:
+          type: string
+          format: date-time
+        version:
+          type: string
+          example: "1.0"
+        user:
+          $ref: '#/components/schemas/User'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+        stats:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserStat'
+
+    UserStat:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        week_start:
+          type: string
+          format: date
+        app_opens:
+          type: integer
+        widget_interactions:
+          type: integer
+        tasks_created:
+          type: integer
+        tasks_completed:
+          type: integer
+        tasks_completed_via_widget:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    WeeklyStats:
+      type: object
+      properties:
+        weeks:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserStat'
+        trends:
+          type: object
+          properties:
+            appOpenTrend:
+              type: number
+              nullable: true
+              description: Percentage change in app opens
+            widgetCompletionRate:
+              type: number
+              description: Percentage of tasks completed via widget
+
+    GraduationStats:
+      type: object
+      properties:
+        months:
+          type: array
+          items:
+            type: object
+            properties:
+              month:
+                type: string
+                format: date-time
+              total_app_opens:
+                type: integer
+              total_widget_interactions:
+                type: integer
+              total_tasks_completed:
+                type: integer
+              total_tasks_completed_via_widget:
+                type: integer
+        graduation:
+          type: object
+          properties:
+            score:
+              type: integer
+              description: Graduation score (0-100)
+            message:
+              type: string
+            widgetCompletionRate:
+              type: number
+
+    # ----------------------------------------
+    # Task Schemas
+    # ----------------------------------------
+    Task:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        due_date:
+          type: string
+          format: date
+          nullable: true
+        due_time:
+          type: string
+          pattern: '^\d{2}:\d{2}$'
+          nullable: true
+        estimate_minutes:
+          type: integer
+          nullable: true
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 3
+          description: "1=critical, 2=normal, 3=low"
+        completed:
+          type: boolean
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        snoozed_until:
+          type: string
+          format: date-time
+          nullable: true
+        context_location:
+          type: string
+          nullable: true
+        context_time:
+          type: string
+          enum: [morning, afternoon, evening]
+          nullable: true
+        energy_required:
+          type: string
+          enum: [low, medium, high]
+          nullable: true
+        times_rescheduled:
+          type: integer
+        original_due_date:
+          type: string
+          format: date
+          nullable: true
+        x:
+          type: number
+          nullable: true
+          description: Spatial coordinate
+        y:
+          type: number
+          nullable: true
+          description: Spatial coordinate
+        is_subtask:
+          type: boolean
+        is_recurring:
+          type: boolean
+        echo_interval:
+          type: string
+          nullable: true
+          description: "Recurrence interval (1d, 1w, etc.)"
+        archived:
+          type: boolean
+        archived_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        score:
+          type: integer
+          description: Calculated priority score (higher = more urgent)
+
+    CreateTaskRequest:
+      type: object
+      properties:
+        rawTitle:
+          type: string
+          description: Natural language task input
+        title:
+          type: string
+          description: Plain title (alternative to rawTitle)
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 3
+        context_location:
+          type: string
+        context_time:
+          type: string
+          enum: [morning, afternoon, evening]
+        x:
+          type: number
+        y:
+          type: number
+        is_subtask:
+          type: boolean
+        is_recurring:
+          type: boolean
+        echo_interval:
+          type: string
+
+    TaskUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 3
+        estimate_minutes:
+          type: integer
+        due_date:
+          type: string
+          format: date
+        due_time:
+          type: string
+        completed:
+          type: boolean
+        snoozed_until:
+          type: string
+          format: date-time
+        context_location:
+          type: string
+        context_time:
+          type: string
+          enum: [morning, afternoon, evening]
+        energy_required:
+          type: string
+          enum: [low, medium, high]
+        x:
+          type: number
+        y:
+          type: number
+        is_subtask:
+          type: boolean
+        is_recurring:
+          type: boolean
+        echo_interval:
+          type: string
+        archived:
+          type: boolean
+        source:
+          type: string
+          description: "Set to 'widget' for widget-based completions"
+
+    # ----------------------------------------
+    # Sync Schemas
+    # ----------------------------------------
+    SyncRequest:
+      type: object
+      properties:
+        lastSyncAt:
+          type: integer
+          description: Unix timestamp (ms) of last sync
+        pendingChanges:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncChange'
+
+    SyncChange:
+      type: object
+      required:
+        - type
+        - clientId
+        - timestamp
+      properties:
+        type:
+          type: string
+          enum: [create, update, delete]
+        action:
+          type: string
+          enum: [create, update, delete]
+          description: Legacy alias for type
+        clientId:
+          type: string
+          description: Client-generated UUID
+        timestamp:
+          type: integer
+          description: Unix timestamp (ms)
+        data:
+          type: object
+          description: Change payload (task data)
+
+    SyncResponse:
+      type: object
+      properties:
+        syncedAt:
+          type: integer
+          description: Server timestamp (ms)
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+        results:
+          type: object
+          properties:
+            applied:
+              type: integer
+            rejected:
+              type: integer
+            conflicts:
+              type: array
+              items:
+                $ref: '#/components/schemas/SyncConflict'
+        conflicts:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncConflict'
+          description: For backward compatibility
+
+    SyncConflict:
+      type: object
+      properties:
+        clientId:
+          type: string
+        reason:
+          type: string
+          enum: [already_exists, not_found, stale_data, server_error]
+        serverData:
+          $ref: '#/components/schemas/Task'
+
+    SyncStatus:
+      type: object
+      properties:
+        taskCount:
+          type: integer
+          description: Total active tasks
+        lastModified:
+          type: integer
+          nullable: true
+          description: Timestamp of most recent task update
+        serverTime:
+          type: integer
+          description: Current server timestamp
+
+    # ----------------------------------------
+    # Error Schemas
+    # ----------------------------------------
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            message:
+              type: string
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - AUTHENTICATION_ERROR
+                - AUTHORIZATION_ERROR
+                - NOT_FOUND
+                - CONFLICT
+                - RATE_LIMIT
+                - DATABASE_ERROR
+                - CACHE_ERROR
+                - INTERNAL_ERROR
+            timestamp:
+              type: string
+              format: date-time
+            path:
+              type: string
+            method:
+              type: string
+            details:
+              type: object
+
+    ValidationError:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              value:
+                type: string
+              msg:
+                type: string
+              path:
+                type: string
+              location:
+                type: string

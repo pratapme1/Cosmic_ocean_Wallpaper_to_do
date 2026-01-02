@@ -1,0 +1,126 @@
+# ===== ENVIRONMENT & SECRETS =====
+.env
+.env.local
+.env.production
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ===== NODE.JS =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# ===== ANDROID =====
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/*.apk
+android/*.aab
+android/.cxx/
+android/captures/
+android/.externalNativeBuild/
+android/keystore/
+android/*.jks
+android/*.keystore
+android/keystore.properties
+
+# ===== BACKEND TEST IMAGES =====
+backend/*.png
+backend/*.jpg
+
+# ===== PWA - KEEP LOCAL ONLY =====
+cosmic-ocean/
+cosmic-ocean-agents/
+
+# ===== TESTING & AGENTS =====
+testing/
+.claude/
+.agents/
+.summaries/
+
+# ===== VERCEL =====
+.vercel/
+
+# ===== TEMP & LARGE FILES =====
+*.tmp
+*.temp
+*.bak
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# ===== INTERNAL DOCS (Keep local) =====
+AGENT_SYSTEM.md
+ANDROID_PWA_ALIGNMENT_SPEC.md
+ARCHIVE_IMPLEMENTATION_REPORT.md
+AUTH_TESTING_REPORT.md
+brief.md
+BUG_FIX_SUMMARY.md
+BUILD_VERIFICATION_REPORT.md
+CACHE_BUG_FIX_REPORT.md
+CLAUDE_cosmic_ocean_complete_prd.md
+CLAUDE_cosmic_ocean.md
+code_review.md
+CONTEXT.md
+CRITICAL_BUG_TASK_COMPLETION.md
+DECISIONS.md
+DOCUMENTATION_SUMMARY.md
+DOCUMENTS_INDEX.md
+ENFORCEMENT_GUIDE.md
+errors.md
+FIX_SUMMARY.md
+FRONTEND_BACKEND_GAP_ANALYSIS.md
+HOW_TO_ENFORCE_AGENTS.md
+QUICK_START.md
+ROADMAP.md
+SESSION_SUMMARY_*.md
+STATUS.md
+TESTING_CHECKLIST.md
+WALLPAPER_*.md
+WORKFLOW.md
+debug-all.sh
+show-all-logs.sh
+
+# Android internal docs (keep local)
+android/ANDROID_STUDIO_TROUBLESHOOTING.md
+android/BUILD_VERIFICATION_REPORT.md
+android/COMPREHENSIVE_TESTING_GUIDE.md
+android/CORE_BUG_FIX_NLP_PRIORITY.md
+android/CRITICAL_BUG_FIXES.md
+android/CRITICAL_MISSING_FEATURES.md
+android/EPIC_0_PROGRESS_REPORT.md
+android/FINAL_VISUAL_FIXES.md
+android/PHASE_3_COMPLETE.md
+android/PWA_ANDROID_COMPARISON.md
+android/STAR_SIZE_FIX.md
+android/TASK_*.md
+android/WALLPAPER_*.md
+android/generate-*.mjs
+android/test-data-setup.sh
+
+# Backend internal docs (keep local)
+backend/API_QUICK_REFERENCE.md
+backend/DEVICE_TESTING_GUIDE.md
+backend/EPIC_3_COMPLETION_SUMMARY.md
+backend/REDIS_OPTIMIZATION_PLAN.md
+backend/TESTING_GUIDE.md
+backend/WALLPAPER_SYSTEM.md
+backend/clear-*.js
+backend/debug-*.mjs
+backend/e2e-*.mjs
+backend/fix-db.js
+backend/setup-db.js
+backend/test-*.js
+backend/test-*.sh
+backend/update-schema-pwa.js
+backend/verify-*.js
