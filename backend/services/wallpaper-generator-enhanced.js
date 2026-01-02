@@ -17,6 +17,7 @@ const { getLayoutConfig } = require('./layout-system');
 const { generateParticles } = require('./particle-system');
 const { getColorPalette, lerpColor, verifyWCAG } = require('./color-system');
 const { getAnimationState } = require('./animation-system');
+const { renderTextToSvg } = require('./text-renderer');
 
 /**
  * Determine urgency level from tasks
@@ -351,8 +352,8 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now()) {
     const transitionSvg = generateTransitionLayer(layout, colors);
     layers.push({ input: Buffer.from(transitionSvg), blend: 'over' });
 
-    // Layer 4: Task overlay with text
-    const textSvg = generateTextLayer(layout, tasks, colors, done_for_today);
+    // Layer 4: Task overlay with text (using satori for serverless font rendering)
+    const textSvg = await renderTextToSvg(layout, tasks, colors, done_for_today);
     layers.push({ input: Buffer.from(textSvg), blend: 'over' });
 
     // Composite all layers
