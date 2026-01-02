@@ -109,7 +109,9 @@ async function getDbClient() {
 
   const dbUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
   console.log('🔧 DB Init: DATABASE_URL set:', !!process.env.DATABASE_URL);
+  console.log('🔧 DB Init: DATABASE_URL value:', process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 30) + '...' : 'undefined');
   console.log('🔧 DB Init: NODE_ENV:', process.env.NODE_ENV);
+  console.log('🔧 DB Init: All env keys:', Object.keys(process.env).filter(k => k.includes('DATABASE') || k.includes('POSTGRES') || k.includes('DB')));
 
   if (!dbUrl) {
     console.log('⚠️  No DATABASE_URL, using In-Memory Mock Database');
@@ -604,7 +606,13 @@ app.get('/api/health', async (req, res) => {
   res.json({
     status: 'ok',
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
-    dbInitialized
+    dbInitialized,
+    env: {
+      hasDbUrl: !!process.env.DATABASE_URL,
+      hasPostgresUrl: !!process.env.POSTGRES_URL,
+      nodeEnv: process.env.NODE_ENV,
+      dbKeys: Object.keys(process.env).filter(k => k.includes('DATABASE') || k.includes('POSTGRES') || k.includes('DB_'))
+    }
   });
 });
 
