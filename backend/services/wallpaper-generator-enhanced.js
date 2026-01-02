@@ -353,7 +353,9 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now()) {
     layers.push({ input: Buffer.from(transitionSvg), blend: 'over' });
 
     // Layer 4: Task overlay with text (using satori for serverless font rendering)
+    console.log(`[Wallpaper] Rendering text with SATORI (${tasks.length} tasks)`);
     const textSvg = await renderTextToSvg(layout, tasks, colors, done_for_today);
+    console.log(`[Wallpaper] Text SVG generated: ${textSvg.length} chars, has paths: ${textSvg.includes('<path')}`);
     layers.push({ input: Buffer.from(textSvg), blend: 'over' });
 
     // Composite all layers

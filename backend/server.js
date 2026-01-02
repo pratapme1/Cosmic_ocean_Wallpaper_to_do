@@ -613,6 +613,7 @@ app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
+    version: '1.1.0-satori', // Font rendering fix version
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {
