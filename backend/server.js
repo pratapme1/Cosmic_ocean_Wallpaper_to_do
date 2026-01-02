@@ -3,6 +3,12 @@ const path = require('path');
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config({ path: path.join(__dirname, '../.env') });
 }
+
+// Configure fontconfig for serverless environments (Vercel has no system fonts)
+const fontsDir = path.join(__dirname, 'fonts');
+process.env.FONTCONFIG_PATH = fontsDir;
+process.env.FONTCONFIG_FILE = path.join(fontsDir, 'fonts.conf');
+
 const express = require('express');
 const { Pool, types } = require('pg');
 const cors = require('cors');

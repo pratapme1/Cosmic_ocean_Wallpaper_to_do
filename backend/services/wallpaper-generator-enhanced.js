@@ -129,6 +129,10 @@ function generateTransitionLayer(layout, colors) {
   `;
 }
 
+// Font configuration for serverless - relies on bundled fonts in /fonts directory
+// Fontconfig is configured via FONTCONFIG_PATH in server.js
+const FONT_FAMILY = "Inter, sans-serif";
+
 /**
  * Generate SVG for text with multiple layers (glow, shadow, main)
  * WCAG-compliant rendering
@@ -149,8 +153,9 @@ function generateTextLayer(layout, tasks, colors, doneForToday) {
     return `
       <svg width="${width}" height="${height}">
         <style>
-          .celebration { fill: ${colors.textPrimary}; font-family: sans-serif; font-weight: 400; font-size: ${typography.displayMedium}px; text-anchor: middle; }
-          .celebration-sub { fill: ${colors.textSecondary}; font-family: sans-serif; font-size: ${typography.bodyLarge}px; text-anchor: middle; }
+          
+          .celebration { fill: ${colors.textPrimary}; font-family: ${FONT_FAMILY}; font-weight: 400; font-size: ${typography.displayMedium}px; text-anchor: middle; }
+          .celebration-sub { fill: ${colors.textSecondary}; font-family: ${FONT_FAMILY}; font-size: ${typography.bodyLarge}px; text-anchor: middle; }
           .glow { filter: url(#textGlow); }
         </style>
         <defs>
@@ -174,7 +179,8 @@ function generateTextLayer(layout, tasks, colors, doneForToday) {
     return `
       <svg width="${width}" height="${height}">
         <style>
-          .clear-text { fill: ${colors.textPrimary}; font-family: sans-serif; font-weight: 400; font-size: ${typography.headlineLarge}px; text-anchor: middle; }
+          
+          .clear-text { fill: ${colors.textPrimary}; font-family: ${FONT_FAMILY}; font-weight: 400; font-size: ${typography.headlineLarge}px; text-anchor: middle; }
           .glow { filter: url(#textGlow); }
         </style>
         <defs>
@@ -256,10 +262,11 @@ function generateTextLayer(layout, tasks, colors, doneForToday) {
   return `
     <svg width="${width}" height="${height}">
       <style>
-        .header { fill: ${colors.textSecondary}; font-family: sans-serif; font-size: ${typography.labelLarge}px; letter-spacing: 2px; text-transform: uppercase; filter: url(#textShadow); }
-        .task-title { fill: ${colors.textPrimary}; font-family: sans-serif; font-weight: 500; font-size: ${typography.headlineLarge}px; filter: url(#textShadow); }
-        .meta-text { fill: ${colors.textSecondary}; font-family: sans-serif; font-size: ${typography.bodyMedium}px; filter: url(#textShadow); }
-        .time { fill: ${colors.textSecondary}; font-family: sans-serif; font-weight: 300; font-size: ${typography.displayLarge}px; text-anchor: middle; opacity: 0.5; filter: url(#textShadow); }
+        
+        .header { fill: ${colors.textSecondary}; font-family: ${FONT_FAMILY}; font-size: ${typography.labelLarge}px; letter-spacing: 2px; text-transform: uppercase; filter: url(#textShadow); }
+        .task-title { fill: ${colors.textPrimary}; font-family: ${FONT_FAMILY}; font-weight: 500; font-size: ${typography.headlineLarge}px; filter: url(#textShadow); }
+        .meta-text { fill: ${colors.textSecondary}; font-family: ${FONT_FAMILY}; font-size: ${typography.bodyMedium}px; filter: url(#textShadow); }
+        .time { fill: ${colors.textSecondary}; font-family: ${FONT_FAMILY}; font-weight: 300; font-size: ${typography.displayLarge}px; text-anchor: middle; opacity: 0.5; filter: url(#textShadow); }
         .glow { filter: url(#textGlow); }
       </style>
       <defs>
@@ -376,7 +383,8 @@ async function generateFallbackWallpaper(width, height, errorMessage = 'Unable t
   const svgFallback = `
     <svg width="${width}" height="${height}">
       <style>
-        .error-text { fill: white; font-family: sans-serif; font-size: ${Math.floor(width * 0.04)}px; text-anchor: middle; }
+        
+        .error-text { fill: white; font-family: ${FONT_FAMILY}; font-size: ${Math.floor(width * 0.04)}px; text-anchor: middle; }
         .icon { fill: rgba(255,255,255,0.3); font-size: ${Math.floor(width * 0.08)}px; }
       </style>
       <rect width="${width}" height="${height}" fill="rgb(20,20,40)" />
