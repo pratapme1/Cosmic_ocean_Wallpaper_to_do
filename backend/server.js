@@ -153,7 +153,9 @@ async function getDbClient() {
 // Middleware to ensure DB is initialized before handling requests
 app.use(async (req, res, next) => {
   try {
-    req.dbClient = await getDbClient();
+    const dbClient = await getDbClient();
+    req.dbClient = dbClient;
+    req.app.locals.dbClient = dbClient; // For routes that use app.locals
     next();
   } catch (err) {
     console.error('DB middleware error:', err);
