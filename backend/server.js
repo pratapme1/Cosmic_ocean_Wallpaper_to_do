@@ -100,6 +100,9 @@ app.use((req, res, next) => {
 let client;
 // Use mock only if no database URL is provided (not just because we're in test mode)
 // Tests should run against real database for proper E2E testing
+console.log('🔧 ENV CHECK: DATABASE_URL set:', !!process.env.DATABASE_URL);
+console.log('🔧 ENV CHECK: POSTGRES_URL set:', !!process.env.POSTGRES_URL);
+console.log('🔧 ENV CHECK: NODE_ENV:', process.env.NODE_ENV);
 const useMock = !process.env.DATABASE_URL && !process.env.POSTGRES_URL;
 
 if (useMock) {
@@ -482,13 +485,24 @@ app.post('/api/tasks/:id/snooze', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = getUserId(req);
+    const { duration_minutes } = req.body;
+
+    // Use provided duration or default to 1 day (1440 minutes)
+    const minutes = duration_minutes || 1440;
+
+    console.log(`[SNOOZE] Task ${id}: duration=${minutes} minutes`);
+
     const query = `
       UPDATE tasks
-      SET original_due_date = COALESCE(original_due_date, due_date), due_date = CURRENT_DATE + INTERVAL '1 day',
-          snoozed_until = CURRENT_DATE + INTERVAL '1 day', times_rescheduled = COALESCE(times_rescheduled, 0) + 1, updated_at = NOW()
+      SET original_due_date = COALESCE(original_due_date, due_date),
+          due_date = (NOW() + INTERVAL '1 minute' * $3)::date,
+          due_time = (NOW() + INTERVAL '1 minute' * $3)::time,
+          snoozed_until = NOW() + INTERVAL '1 minute' * $3,
+          times_rescheduled = COALESCE(times_rescheduled, 0) + 1,
+          updated_at = NOW()
       WHERE user_id = $1 AND id = $2 RETURNING *
     `;
-    const result = await client.query(query, [userId, id]);
+    const result = await client.query(query, [userId, id, minutes]);
 
     // Invalidate wallpaper cache
     await cacheService.invalidateUserWallpapers(userId);
