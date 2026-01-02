@@ -80,6 +80,9 @@ function parseDateForDB(value) {
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Trust proxy for Vercel/cloud deployments (needed for rate limiting)
+app.set('trust proxy', 1);
+
 app.use(cors());
 app.use(bodyParser.json());
 
@@ -401,6 +404,11 @@ app.patch('/api/tasks/:id', optionalAuth, async (req, res) => {
     const { id } = req.params;
     const userId = getUserId(req);
     const updates = req.body;
+
+    // DEBUG: Log all PATCH requests
+    console.log(`[PATCH DEBUG] Task: ${id}`);
+    console.log(`[PATCH DEBUG] Body:`, JSON.stringify(updates));
+
     const fields = [];
     const values = [userId, id];
     let i = 3;
