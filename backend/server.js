@@ -96,48 +96,68 @@ app.use((req, res, next) => {
     next();
 });
 
-// Database Connection Pool
-let client;
-// Use mock only if no database URL is provided (not just because we're in test mode)
-// Tests should run against real database for proper E2E testing
-console.log('🔧 ENV CHECK: DATABASE_URL set:', !!process.env.DATABASE_URL);
-console.log('🔧 ENV CHECK: POSTGRES_URL set:', !!process.env.POSTGRES_URL);
-console.log('🔧 ENV CHECK: NODE_ENV:', process.env.NODE_ENV);
-const useMock = !process.env.DATABASE_URL && !process.env.POSTGRES_URL;
+// Database Connection Pool - Lazy initialization for serverless
+let client = null;
+let dbInitialized = false;
 
-if (useMock) {
-  client = new MockClient();
-  client.connect();
-  console.log('⚠️  Using In-Memory Mock Database');
-} else {
-  // Use connection pool for production
-  client = new Pool({
-    connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
-    // Pool configuration
-    max: 20, // Maximum number of clients in the pool
-    idleTimeoutMillis: 30000, // How long a client can remain idle before being closed
-    connectionTimeoutMillis: 2000, // How long to wait for a connection
-  });
+/**
+ * Get database client (lazy initialization for serverless environments)
+ * This ensures env vars are available before creating the connection
+ */
+async function getDbClient() {
+  if (dbInitialized) return client;
 
-  // Test the connection
-  client.query('SELECT NOW()').then(() => {
-    console.log('✅ PostgreSQL pool connected');
-  }).catch(err => {
-    console.error('Failed to connect to DB, falling back to mock:', err);
+  const dbUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  console.log('🔧 DB Init: DATABASE_URL set:', !!process.env.DATABASE_URL);
+  console.log('🔧 DB Init: NODE_ENV:', process.env.NODE_ENV);
+
+  if (!dbUrl) {
+    console.log('⚠️  No DATABASE_URL, using In-Memory Mock Database');
     client = new MockClient();
     client.connect();
-    console.log('⚠️  Using In-Memory Mock Database');
-  });
+    dbInitialized = true;
+    return client;
+  }
 
-  // Handle pool errors
-  client.on('error', (err) => {
-    console.error('Unexpected database error:', err);
-  });
+  try {
+    client = new Pool({
+      connectionString: dbUrl,
+      ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+      max: 10, // Reduced for serverless
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 5000,
+    });
+
+    // Test the connection
+    await client.query('SELECT NOW()');
+    console.log('✅ PostgreSQL pool connected');
+
+    client.on('error', (err) => {
+      console.error('Database pool error:', err);
+    });
+
+    dbInitialized = true;
+    return client;
+  } catch (err) {
+    console.error('❌ Failed to connect to PostgreSQL:', err.message);
+    console.log('⚠️  Falling back to In-Memory Mock Database');
+    client = new MockClient();
+    client.connect();
+    dbInitialized = true;
+    return client;
+  }
 }
 
-// Make database client available to routes
-app.locals.dbClient = client;
+// Middleware to ensure DB is initialized before handling requests
+app.use(async (req, res, next) => {
+  try {
+    req.dbClient = await getDbClient();
+    next();
+  } catch (err) {
+    console.error('DB middleware error:', err);
+    next(err);
+  }
+});
 
 // Initialize cache service
 cacheService.connect().catch(err => {
@@ -159,7 +179,8 @@ function scheduleMidnightReset() {
   setTimeout(async () => {
     try {
       console.log('🔄 Running midnight reset for done_for_today...');
-      const result = await client.query(
+      const db = await getDbClient();
+      const result = await db.query(
         'UPDATE users SET done_for_today = FALSE, done_for_today_at = NULL WHERE done_for_today = TRUE'
       );
       console.log(`✅ Reset done_for_today for ${result.rowCount} users`);
@@ -302,7 +323,7 @@ app.get('/api/tasks', optionalAuth, async (req, res) => {
   try {
     const userId = getUserId(req);
     const { location, time } = req.query;
-    const result = await client.query(`
+    const result = await req.dbClient.query(`
       SELECT * FROM tasks
       WHERE user_id = $1 AND completed = false
       AND (archived = false OR archived IS NULL)
@@ -320,7 +341,7 @@ app.get('/api/tasks/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = getUserId(req);
-    const result = await client.query(
+    const result = await req.dbClient.query(
       'SELECT * FROM tasks WHERE user_id = $1 AND id = $2',
       [userId, id]
     );
@@ -388,8 +409,8 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
       x || null, y || null, is_subtask || false, is_recurring || false, echo_interval || null
     ];
 
-    const result = await client.query(query, values);
-    await client.query("UPDATE users SET done_for_today = FALSE WHERE id = $1", [userId]);
+    const result = await req.dbClient.query(query, values);
+    await req.dbClient.query("UPDATE users SET done_for_today = FALSE WHERE id = $1", [userId]);
 
     // Invalidate wallpaper cache
     await cacheService.invalidateUserWallpapers(userId);
@@ -457,7 +478,7 @@ app.patch('/api/tasks/:id', optionalAuth, async (req, res) => {
     if (updates.completed === true) fields.push(`completed_at = NOW()`);
     if (updates.archived === true) fields.push(`archived_at = NOW()`);
     const query = `UPDATE tasks SET ${fields.join(', ')}, updated_at = NOW() WHERE user_id = $1 AND id = $2 RETURNING *`;
-    const result = await client.query(query, values);
+    const result = await req.dbClient.query(query, values);
     
     if (result.rows.length > 0 && updates.completed === true) {
       const viaWidget = updates.source === 'widget' ? 1 : 0;
@@ -467,7 +488,7 @@ app.patch('/api/tasks/:id', optionalAuth, async (req, res) => {
         ON CONFLICT (user_id, week_start)
         DO UPDATE SET tasks_completed = user_stats.tasks_completed + 1, tasks_completed_via_widget = user_stats.tasks_completed_via_widget + $2, updated_at = NOW()
       `;
-      await client.query(metricQuery, [userId, viaWidget]);
+      await req.dbClient.query(metricQuery, [userId, viaWidget]);
     }
 
     // Invalidate wallpaper cache
@@ -502,7 +523,7 @@ app.post('/api/tasks/:id/snooze', optionalAuth, async (req, res) => {
           updated_at = NOW()
       WHERE user_id = $1 AND id = $2 RETURNING *
     `;
-    const result = await client.query(query, [userId, id, minutes]);
+    const result = await req.dbClient.query(query, [userId, id, minutes]);
 
     // Invalidate wallpaper cache
     await cacheService.invalidateUserWallpapers(userId);
@@ -518,7 +539,7 @@ app.post('/api/done-for-today', optionalAuth, async (req, res) => {
   try {
     const userId = getUserId(req);
     const query = `UPDATE users SET done_for_today = TRUE, done_for_today_at = NOW() WHERE id = $1`;
-    await client.query(query, [userId]);
+    await req.dbClient.query(query, [userId]);
 
     // Invalidate wallpaper cache
     await cacheService.invalidateUserWallpapers(userId);
@@ -539,7 +560,7 @@ app.post('/api/metrics/app-open', optionalAuth, async (req, res) => {
       ON CONFLICT (user_id, week_start)
       DO UPDATE SET app_opens = user_stats.app_opens + 1, updated_at = NOW()
     `;
-    await client.query(query, [userId]);
+    await req.dbClient.query(query, [userId]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to track metric' });
@@ -550,7 +571,7 @@ app.post('/api/metrics/app-open', optionalAuth, async (req, res) => {
 app.delete('/api/tasks', optionalAuth, async (req, res) => {
   try {
     const userId = getUserId(req);
-    await client.query('DELETE FROM tasks WHERE user_id = $1', [userId]);
+    await req.dbClient.query('DELETE FROM tasks WHERE user_id = $1', [userId]);
 
     // Invalidate wallpaper cache
     await cacheService.invalidateUserWallpapers(userId);
@@ -566,7 +587,7 @@ app.delete('/api/tasks/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = getUserId(req);
-    const result = await client.query('DELETE FROM tasks WHERE user_id = $1 AND id = $2 RETURNING *', [userId, id]);
+    const result = await req.dbClient.query('DELETE FROM tasks WHERE user_id = $1 AND id = $2 RETURNING *', [userId, id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Task not found' });
 
     // Invalidate wallpaper cache
@@ -578,8 +599,13 @@ app.delete('/api/tasks/:id', optionalAuth, async (req, res) => {
   }
 });
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', mode: client instanceof MockClient ? 'mock' : 'postgres' });
+app.get('/api/health', async (req, res) => {
+  const dbClient = req.dbClient || await getDbClient();
+  res.json({
+    status: 'ok',
+    mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
+    dbInitialized
+  });
 });
 
 // --- ERROR HANDLERS (Must be last) ---
