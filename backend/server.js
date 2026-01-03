@@ -19,7 +19,7 @@ const cors = require('cors');
 types.setTypeParser(1082, (val) => val);  // Return DATE as string, not Date object
 const bodyParser = require('body-parser');
 
-const { parseTimeEstimate } = require('./utils/time-parser');
+const { parseTask } = require('./utils/task-parser');
 const { prioritizeTasks, daysSince } = require('./utils/priority-scorer');
 const { generateWallpaper } = require('./services/wallpaper-generator');
 const { generateEnhancedWallpaper, generateFallbackWallpaper } = require('./services/wallpaper-generator-enhanced');
@@ -45,8 +45,12 @@ function parseDateTimeForDB(value) {
 
   let dateObj;
 
+  // FIX: Handle Date objects directly (from chrono-node NLP parser)
+  if (value instanceof Date) {
+    dateObj = value;
+  }
   // Check if it's a millisecond timestamp (all digits)
-  if (typeof value === 'number' || (typeof value === 'string' && /^\d{10,13}$/.test(value))) {
+  else if (typeof value === 'number' || (typeof value === 'string' && /^\d{10,13}$/.test(value))) {
     const ms = typeof value === 'number' ? value : parseInt(value, 10);
     dateObj = new Date(ms);
   } else if (typeof value === 'string') {
@@ -310,9 +314,9 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
       }
     }
 
-    // Cache the generated wallpaper (1 hour TTL) - only if not animated
+    // Cache the generated wallpaper (1 minute TTL for live countdown) - only if not animated
     if (!req.query.timestamp) {
-      await cacheService.setBuffer(cacheKey, imageBuffer, 3600);
+      await cacheService.setBuffer(cacheKey, imageBuffer, 60);
     }
 
     res.set('Content-Type', 'image/png');
@@ -384,50 +388,93 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
     const userId = getUserId(req);
     const { rawTitle, title: directTitle, priority, context_location, context_time, x, y, is_subtask, is_recurring, echo_interval } = req.body;
 
-    // Parse time estimate with error handling for very long or malformed input
-    let title, dueDate, estimateMinutes;
+    // Parse with comprehensive NLP (Epic 7: NLP Integration)
+    let title, dueDate, estimateMinutes, category, contextTags, energy, recurring, timeContext, calculatedPriority;
+    const inputText = rawTitle || directTitle;
+
     try {
-      const parsed = parseTimeEstimate(rawTitle || directTitle);
+      const parsed = parseTask(inputText);
       title = parsed.title;
       dueDate = parsed.dueDate;
       estimateMinutes = parsed.estimateMinutes;
+
+      // NEW: Extract NLP metadata
+      category = parsed.category || 'general';
+      contextTags = parsed.context || [];
+      energy = parsed.energy || 'medium';
+      recurring = parsed.recurring;
+      timeContext = parsed.timeContext;
+
+      // Use explicit priority if provided, otherwise use NLP-inferred priority
+      calculatedPriority = priority !== undefined ? priority : (parsed.priority || 2);
+
+      console.log('[NLP] Parsed task:', {
+        input: inputText,
+        title,
+        category,
+        contextTags,
+        priority: calculatedPriority,
+        energy,
+        recurring: recurring ? recurring.interval : null,
+        confidence: parsed.confidence
+      });
     } catch (parseErr) {
-      console.warn('Failed to parse time estimate:', parseErr);
-      // Fallback to using rawTitle or directTitle as-is
-      title = rawTitle || directTitle || 'New Task';
+      console.error('Failed to parse task with NLP:', parseErr);
+      // Fallback to basic parsing
+      title = inputText || 'New Task';
       dueDate = null;
       estimateMinutes = null;
+      category = 'general';
+      contextTags = [];
+      energy = 'medium';
+      recurring = null;
+      timeContext = null;
+      calculatedPriority = 2;
     }
 
-    // CRITICAL: Calculate priority from due_date (PWA-accurate logic)
-    // Priority is auto-calculated, NOT sent by client
-    let calculatedPriority = 2; // Default: P2 (normal)
+    // CRITICAL: Extract date and time separately from dueDate (FIX: was losing time!)
+    let dueDateForDB = null;
+    let dueTimeForDB = null;
     if (dueDate) {
-      const now = Date.now();
-      const dueInMs = dueDate.getTime() - now;
-      const dueInMinutes = Math.round(dueInMs / (1000 * 60));
-
-      if (dueInMinutes < 0) {
-        calculatedPriority = 1; // Overdue = P1 (urgent)
-      } else if (dueInMinutes < 120) {
-        calculatedPriority = 2; // Due within 2h = P2 (normal)
-      } else {
-        calculatedPriority = 3; // Future = P3 (low priority)
-      }
-    } else {
-      // No due date = future task = P3
-      calculatedPriority = 3;
+      const parsed = parseDateTimeForDB(dueDate);
+      dueDateForDB = parsed.date;
+      dueTimeForDB = parsed.time;
+      console.log(`[NLP] Parsed due: ${dueDate.toISOString()} -> date=${dueDateForDB}, time=${dueTimeForDB}`);
     }
 
     const query = `
-      INSERT INTO tasks (user_id, title, estimate_minutes, priority, due_date, context_location, context_time, x, y, is_subtask, is_recurring, echo_interval)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      INSERT INTO tasks (
+        user_id, title, raw_title, estimate_minutes, priority, due_date, due_time,
+        context_location, context_time, x, y, is_subtask, is_recurring, echo_interval,
+        category, context_tags, energy_level, time_context,
+        recurring_interval, recurring_day_of_week, recurring_day_of_month
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
       RETURNING *
     `;
     const values = [
-      userId, title, estimateMinutes, calculatedPriority, dueDate || null,
-      context_location || null, context_time || null,
-      x || null, y || null, is_subtask || false, is_recurring || false, echo_interval || null
+      userId,
+      title,
+      inputText,  // Store raw input
+      estimateMinutes,
+      calculatedPriority,  // Use NLP priority
+      dueDateForDB,
+      dueTimeForDB,
+      context_location || null,
+      context_time || null,
+      x || null,
+      y || null,
+      is_subtask || false,
+      is_recurring || false,
+      echo_interval || null,
+      // NEW NLP fields:
+      category,
+      contextTags,  // Array of @tags
+      energy,
+      timeContext,
+      recurring ? recurring.interval : null,
+      recurring ? recurring.dayOfWeek : null,
+      recurring ? recurring.dayOfMonth : null
     ];
 
     const result = await req.dbClient.query(query, values);
@@ -527,7 +574,7 @@ app.post('/api/tasks/:id/snooze', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = getUserId(req);
-    const { duration_minutes } = req.body;
+    const { duration_minutes } = req.body || {};
 
     // Use provided duration or default to 1 day (1440 minutes)
     const minutes = duration_minutes || 1440;
@@ -551,7 +598,10 @@ app.post('/api/tasks/:id/snooze', optionalAuth, async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to snooze task' });
+    console.error('[SNOOZE ERROR]:', err.message);
+    console.error('[SNOOZE ERROR] Code:', err.code);
+    console.error('[SNOOZE ERROR] Detail:', err.detail);
+    res.status(500).json({ error: 'Failed to snooze task', details: err.message });
   }
 });
 
@@ -624,7 +674,7 @@ app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
-    version: '1.2.0', // Epic 5 Intelligence + Epic 6 Testing
+    version: '1.2.1', // NLP fixes + Android star physics
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {

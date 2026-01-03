@@ -24,104 +24,105 @@ const MESSAGE_TYPES = {
 };
 
 // Message templates organized by type
+// NOTE: Emojis removed for proper Satori rendering (no emoji font support)
 const MESSAGE_TEMPLATES = {
   // Critical messages (highest priority)
   critical: {
     overdue: [
-      { text: '⚠️ {task} was due {timeAgo}', icon: '⚠️' },
-      { text: '🔥 Overdue: {task}', icon: '🔥' },
-      { text: '❗ {task} needs attention', icon: '❗' }
+      { text: 'OVERDUE: {task} was due {timeAgo}', icon: '!' },
+      { text: 'Overdue: {task}', icon: '!' },
+      { text: '{task} needs attention', icon: '!' }
     ],
     urgent: [
-      { text: '🔥 {task} is due in {timeLeft}', icon: '🔥' },
-      { text: '⏰ {timeLeft} until {task}', icon: '⏰' },
-      { text: '🚨 {task} - {timeLeft} remaining', icon: '🚨' }
+      { text: 'URGENT: {task} is due in {timeLeft}', icon: '!' },
+      { text: '{timeLeft} until {task}', icon: '!' },
+      { text: '{task} - {timeLeft} remaining', icon: '!' }
     ]
   },
 
   // Achievement messages
   achievement: {
     streak: [
-      { text: '🔥 {days}-day streak! Keep going!', icon: '🔥' },
-      { text: '💪 {days} days in a row!', icon: '💪' },
-      { text: '🌟 Amazing! {days}-day streak!', icon: '🌟' }
+      { text: '{days}-day streak! Keep going!', icon: '*' },
+      { text: '{days} days in a row!', icon: '*' },
+      { text: 'Amazing! {days}-day streak!', icon: '*' }
     ],
     daily: [
-      { text: '🎉 {count} tasks done today!', icon: '🎉' },
-      { text: '✨ {count} completed today!', icon: '✨' },
-      { text: '🏆 Crushed {count} tasks today!', icon: '🏆' }
+      { text: '{count} tasks done today!', icon: '*' },
+      { text: '{count} completed today!', icon: '*' },
+      { text: 'Crushed {count} tasks today!', icon: '*' }
     ],
     weekly: [
-      { text: '📈 {count} tasks this week!', icon: '📈' },
-      { text: '💪 {count} completed this week', icon: '💪' }
+      { text: '{count} tasks this week!', icon: '+' },
+      { text: '{count} completed this week', icon: '+' }
     ],
     milestone: [
-      { text: '🎊 {count} tasks all-time!', icon: '🎊' },
-      { text: '🏆 Milestone: {count} tasks!', icon: '🏆' },
-      { text: '⭐ You\'ve done {count} tasks!', icon: '⭐' }
+      { text: '{count} tasks all-time!', icon: '+' },
+      { text: 'Milestone: {count} tasks!', icon: '+' },
+      { text: 'You\'ve done {count} tasks!', icon: '+' }
     ],
     allDone: [
-      { text: '🌟 All done for today!', icon: '🌟' },
-      { text: '🎉 Task list cleared!', icon: '🎉' },
-      { text: '✅ Zero inbox achieved!', icon: '✅' }
+      { text: 'All done for today!', icon: '*' },
+      { text: 'Task list cleared!', icon: '*' },
+      { text: 'Zero inbox achieved!', icon: '*' }
     ]
   },
 
   // Pattern messages
   pattern: {
     productivity: [
-      { text: '📊 You\'re most productive in the {period}', icon: '📊' },
-      { text: '💡 Peak performance: {period}', icon: '💡' }
+      { text: 'You\'re most productive in the {period}', icon: '+' },
+      { text: 'Peak performance: {period}', icon: '+' }
     ],
     category: [
-      { text: '🎯 {category} tasks are your strength', icon: '🎯' },
-      { text: '📌 You excel at {category} tasks', icon: '📌' }
+      { text: '{category} tasks are your strength', icon: '+' },
+      { text: 'You excel at {category} tasks', icon: '+' }
     ],
     insight: [
-      { text: '💡 Try {category} tasks in the {period}', icon: '💡' },
-      { text: '📈 Your {category} game is strong', icon: '📈' }
+      { text: 'Try {category} tasks in the {period}', icon: '+' },
+      { text: 'Your {category} game is strong', icon: '+' }
     ]
   },
 
   // Time context messages
   timeContext: {
     morning: [
-      { text: '☀️ Good morning! Focus on: {task}', icon: '☀️' },
-      { text: '🌅 Rise and shine! Top priority: {task}', icon: '🌅' },
-      { text: '☕ New day, fresh start. Begin with: {task}', icon: '☕' }
+      { text: 'Good morning! Focus on: {task}', icon: '>' },
+      { text: 'Rise and shine! Top priority: {task}', icon: '>' },
+      { text: 'New day, fresh start. Begin with: {task}', icon: '>' }
     ],
     afternoon: [
-      { text: '🌤️ Keep the momentum! Next: {task}', icon: '🌤️' },
-      { text: '💪 Afternoon push: {task}', icon: '💪' },
-      { text: '📋 Stay focused: {task}', icon: '📋' }
+      { text: 'Keep the momentum! Next: {task}', icon: '>' },
+      { text: 'Afternoon push: {task}', icon: '>' },
+      { text: 'Stay focused: {task}', icon: '>' }
     ],
     evening: [
-      { text: '🌙 {remaining} tasks left today', icon: '🌙' },
-      { text: '🌆 Evening wrap-up: {task}', icon: '🌆' },
-      { text: '✨ Finish strong: {task}', icon: '✨' }
+      { text: '{remaining} tasks left today', icon: '>' },
+      { text: 'Evening wrap-up: {task}', icon: '>' },
+      { text: 'Finish strong: {task}', icon: '>' }
     ],
     night: [
-      { text: '🌙 Tomorrow\'s priority: {task}', icon: '🌙' },
-      { text: '😴 Rest up. Tomorrow: {task}', icon: '😴' }
+      { text: 'Tomorrow\'s priority: {task}', icon: '>' },
+      { text: 'Rest up. Tomorrow: {task}', icon: '>' }
     ]
   },
 
   // Encouragement messages (fallback)
   encouragement: {
     general: [
-      { text: '✨ One step at a time', icon: '✨' },
-      { text: '🎯 Focus on the ONE thing', icon: '🎯' },
-      { text: '💪 You\'ve got this!', icon: '💪' },
-      { text: '🌟 Small wins add up', icon: '🌟' },
-      { text: '🚀 Progress, not perfection', icon: '🚀' },
-      { text: '🔥 Keep moving forward', icon: '🔥' },
-      { text: '💫 Every task counts', icon: '💫' },
-      { text: '🌊 Flow with your tasks', icon: '🌊' }
+      { text: 'One step at a time', icon: '~' },
+      { text: 'Focus on the ONE thing', icon: '~' },
+      { text: 'You\'ve got this!', icon: '~' },
+      { text: 'Small wins add up', icon: '~' },
+      { text: 'Progress, not perfection', icon: '~' },
+      { text: 'Keep moving forward', icon: '~' },
+      { text: 'Every task counts', icon: '~' },
+      { text: 'Flow with your tasks', icon: '~' }
     ],
     empty: [
-      { text: '🎉 No tasks! Enjoy your day', icon: '🎉' },
-      { text: '✅ Nothing pending', icon: '✅' },
-      { text: '🌈 Clear skies ahead', icon: '🌈' }
+      { text: 'No tasks! Enjoy your day', icon: '*' },
+      { text: 'Nothing pending', icon: '*' },
+      { text: 'Clear skies ahead', icon: '*' }
     ]
   }
 };

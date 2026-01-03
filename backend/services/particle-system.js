@@ -9,39 +9,39 @@
  */
 const STAR_PARAMS = {
   calm: {
-    count: 30,
-    sizeRange: [1, 3],
+    count: 40,
+    sizeRange: [2, 6],  // Increased for visibility on high-res
     twinkleSpeed: [3000, 5000], // ms
     driftSpeed: 0.5,
-    opacity: [0.3, 0.8]
+    opacity: [0.5, 0.9]  // Increased minimum opacity
   },
   attention: {
-    count: 50,
-    sizeRange: [2, 4],
+    count: 60,
+    sizeRange: [3, 8],  // Increased for visibility
     twinkleSpeed: [2000, 4000],
     driftSpeed: 1.0,
-    opacity: [0.4, 0.9]
+    opacity: [0.6, 1.0]
   },
   urgent: {
-    count: 70,
-    sizeRange: [2, 5],
+    count: 80,
+    sizeRange: [4, 10],  // Increased for visibility
     twinkleSpeed: [1000, 3000],
     driftSpeed: 2.0,
-    opacity: [0.5, 1.0]
+    opacity: [0.7, 1.0]
   },
   critical: {
-    count: 100,
-    sizeRange: [3, 6],
+    count: 120,
+    sizeRange: [5, 12],  // Increased for visibility
     twinkleSpeed: [500, 2000],
     driftSpeed: 3.0,
-    opacity: [0.6, 1.0]
+    opacity: [0.8, 1.0]
   },
   clear: {
     count: 50,
-    sizeRange: [2, 4],
+    sizeRange: [3, 7],  // Increased for visibility
     twinkleSpeed: [2000, 4000],
     driftSpeed: 0.3,
-    opacity: [0.5, 1.0]
+    opacity: [0.6, 1.0]
   }
 };
 
@@ -50,52 +50,53 @@ const STAR_PARAMS = {
  */
 const BUBBLE_PARAMS = {
   calm: {
-    count: 20,
-    sizeRange: [4, 12],
+    count: 30,
+    sizeRange: [6, 16],  // Increased for visibility
     riseSpeed: 20, // pixels per second
     wobble: 5,
-    opacity: [0.2, 0.6]
+    opacity: [0.4, 0.7]  // Increased minimum opacity
   },
   attention: {
-    count: 35,
-    sizeRange: [6, 16],
+    count: 45,
+    sizeRange: [8, 20],  // Increased for visibility
     riseSpeed: 35,
     wobble: 8,
-    opacity: [0.3, 0.7]
+    opacity: [0.5, 0.8]
   },
   urgent: {
-    count: 50,
-    sizeRange: [8, 20],
+    count: 60,
+    sizeRange: [10, 24],  // Increased for visibility
     riseSpeed: 50,
     wobble: 12,
-    opacity: [0.4, 0.8]
+    opacity: [0.6, 0.9]
   },
   critical: {
-    count: 80,
-    sizeRange: [10, 24],
+    count: 90,
+    sizeRange: [12, 28],  // Increased for visibility
     riseSpeed: 70,
     wobble: 16,
-    opacity: [0.5, 0.9]
+    opacity: [0.7, 1.0]
   },
   clear: {
-    count: 30,
-    sizeRange: [6, 14],
+    count: 40,
+    sizeRange: [8, 18],  // Increased for visibility
     riseSpeed: 25,
     wobble: 6,
-    opacity: [0.3, 0.7]
+    opacity: [0.5, 0.8]
   }
 };
 
 /**
  * Zone-based particle density weights
  * Particles are less dense in task area to maintain readability
+ * Increased weights to ensure more particles are visible
  */
 const ZONE_WEIGHTS = {
-  clock: 0.3,
-  scene: 1.0,
-  transition: 0.5,
-  task: 0.2,
-  interaction: 0.1
+  clock: 0.6,      // More particles in clock area
+  scene: 1.0,      // Full density in scene area
+  transition: 0.8, // Good density in transition
+  task: 0.4,       // Some particles in task area (keep readable)
+  interaction: 0.3 // Minimal in bottom navigation area
 };
 
 /**

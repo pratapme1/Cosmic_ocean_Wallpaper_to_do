@@ -66,18 +66,21 @@ function parseTask(rawTitle) {
     extractions.push('timeContext');
   }
 
-  // 4. Extract duration (including natural language like "quick", "long")
-  const { estimateMinutes, cleanedText: afterDuration } = extractDuration(workingTitle);
-  workingTitle = afterDuration;
-  if (estimateMinutes !== null) {
-    extractions.push('duration');
-  }
-
-  // 5. Extract date/time using chrono-node
+  // 4. Extract date/time using chrono-node FIRST (before duration!)
+  // CRITICAL: "in 10 minutes" should be a DUE DATE, not estimate
+  // chrono-node must see full text before duration extraction eats it
   const { dueDate, dueTime, cleanedText: afterDateTime } = extractDateTime(workingTitle, suggestedHour);
   workingTitle = afterDateTime;
   if (dueDate) {
     extractions.push('date');
+  }
+
+  // 5. Extract duration AFTER chrono (for explicit estimates only)
+  // Now only catches things like "30m task", "quick errand" that chrono didn't parse
+  const { estimateMinutes, cleanedText: afterDuration } = extractDuration(workingTitle);
+  workingTitle = afterDuration;
+  if (estimateMinutes !== null) {
+    extractions.push('duration');
   }
 
   // 6. Detect energy level
@@ -200,12 +203,13 @@ function extractDuration(text) {
 
   // 1. Check NUMERIC patterns FIRST (before keywords like "quick")
   // Pattern: "1h30m", "1.5h", "90m", "90 minutes", "1 hour"
+  // Also captures optional prepositions like "in" before the duration
   const numericPatterns = [
-    { regex: /\b(\d+(?:\.\d+)?)\s*h(?:ours?)?\s*(\d+)?\s*m(?:in(?:ute)?s?)?\b/i, handler: (m) => (parseFloat(m[1]) * 60) + (m[2] ? parseInt(m[2]) : 0) },
-    { regex: /\b(\d+)\s*m(?:in(?:ute)?s?)?\b/i, handler: (m) => parseInt(m[1]) },
-    { regex: /\b(\d+(?:\.\d+)?)\s*h(?:ours?)?\b/i, handler: (m) => Math.round(parseFloat(m[1]) * 60) },
-    { regex: /\b(\d+)\s*minutes?\b/i, handler: (m) => parseInt(m[1]) },
-    { regex: /\b(\d+)\s*hours?\b/i, handler: (m) => parseInt(m[1]) * 60 }
+    { regex: /\b(?:in\s+)?(\d+(?:\.\d+)?)\s*h(?:ours?)?\s*(\d+)?\s*m(?:in(?:ute)?s?)?\b/i, handler: (m) => (parseFloat(m[1]) * 60) + (m[2] ? parseInt(m[2]) : 0) },
+    { regex: /\b(?:in\s+)?(\d+)\s*m(?:in(?:ute)?s?)?\b/i, handler: (m) => parseInt(m[1]) },
+    { regex: /\b(?:in\s+)?(\d+(?:\.\d+)?)\s*h(?:ours?)?\b/i, handler: (m) => Math.round(parseFloat(m[1]) * 60) },
+    { regex: /\b(?:in\s+)?(\d+)\s*minutes?\b/i, handler: (m) => parseInt(m[1]) },
+    { regex: /\b(?:in\s+)?(\d+)\s*hours?\b/i, handler: (m) => parseInt(m[1]) * 60 }
   ];
 
   for (const { regex, handler } of numericPatterns) {
@@ -235,6 +239,11 @@ function extractDuration(text) {
 
 /**
  * Extract date/time using chrono-node
+ *
+ * IMPORTANT: Only treat as due date if:
+ * - Has preposition like "in", "at", "by", "on" before the time
+ * - Has date words like "tomorrow", "monday", "next"
+ * - NOT just a bare duration like "2 hours" or "45m" (that's an estimate)
  */
 function extractDateTime(text, suggestedHour = null) {
   // Use custom reference date for chrono
@@ -244,6 +253,37 @@ function extractDateTime(text, suggestedHour = null) {
 
   if (results.length > 0) {
     const result = results[0];
+    const matchedText = result.text.toLowerCase();
+
+    // Check if this is a "due date" expression vs a "duration" expression
+    // Due date: "in 10 minutes", "at 3pm", "by friday", "tomorrow", "next week"
+    // Duration: "2 hours", "45m", "90 minutes" (no preposition)
+
+    // Patterns that indicate DUE DATE (when something should be done)
+    const isDueDate =
+      matchedText.startsWith('in ') ||           // "in 10 minutes"
+      matchedText.startsWith('at ') ||           // "at 3pm"
+      matchedText.startsWith('by ') ||           // "by friday"
+      matchedText.startsWith('on ') ||           // "on monday"
+      matchedText.startsWith('before ') ||       // "before noon"
+      matchedText.startsWith('after ') ||        // "after lunch"
+      matchedText.includes('tomorrow') ||        // "tomorrow"
+      matchedText.includes('today') ||           // "today"
+      matchedText.includes('tonight') ||         // "tonight"
+      matchedText.match(/\b(mon|tue|wed|thu|fri|sat|sun)/i) ||  // weekdays
+      matchedText.includes('next ') ||           // "next week"
+      matchedText.includes('this ') ||           // "this evening"
+      /\d{1,2}[:\s]?\d{2}\s*(am|pm)/i.test(matchedText) ||  // "3:30pm"
+      /\d{1,2}\s*(am|pm)/i.test(matchedText) ||  // "3pm"
+      /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(matchedText) ||  // month names
+      /\d{4}-\d{2}-\d{2}/.test(matchedText) ||   // ISO date "2026-01-15"
+      /\d{1,2}\/\d{1,2}(\/\d{2,4})?/.test(matchedText);  // "12/25" or "12/25/2026"
+
+    // If it's just a bare duration (no preposition), let extractDuration handle it
+    if (!isDueDate) {
+      return { dueDate: null, dueTime: null, cleanedText: text };
+    }
+
     let date = result.start.date();
 
     // If we have a suggested hour from time context and chrono didn't get a specific time
@@ -293,21 +333,24 @@ function detectEnergy(text) {
 
 /**
  * Infer priority from keywords and due date
+ * NOTE: Check LOW priority FIRST because "low priority" contains "priority"
+ * and we need the more specific match to win
  */
 function inferPriority(text, dueDate) {
   const lowerText = text.toLowerCase();
 
-  // Check high priority keywords
-  for (const keyword of HIGH_PRIORITY_KEYWORDS) {
-    if (lowerText.includes(keyword)) {
-      return { priority: 1, priorityReason: `Contains "${keyword}"` };
-    }
-  }
-
-  // Check low priority keywords
+  // Check LOW priority keywords FIRST (more specific patterns like "low priority")
+  // This prevents "priority" from matching before "low priority"
   for (const keyword of LOW_PRIORITY_KEYWORDS) {
     if (lowerText.includes(keyword)) {
       return { priority: 3, priorityReason: `Contains "${keyword}"` };
+    }
+  }
+
+  // Then check high priority keywords
+  for (const keyword of HIGH_PRIORITY_KEYWORDS) {
+    if (lowerText.includes(keyword)) {
+      return { priority: 1, priorityReason: `Contains "${keyword}"` };
     }
   }
 
