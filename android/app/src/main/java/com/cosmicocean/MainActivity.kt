@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var viewModel: MainViewModel
     private lateinit var tokenManager: TokenManager
     private lateinit var wallpaperPreferences: WallpaperPreferencesManager
+    private lateinit var database: CosmicDatabase
 
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,7 +51,7 @@ class MainActivity : ComponentActivity() {
         // Detect device resolution on first run or if not set
         wallpaperPreferences.detectDeviceResolution()
 
-        val database = CosmicDatabase.getDatabase(this)
+        database = CosmicDatabase.getDatabase(this)
         val repository = TaskRepository(database.starDao(), NetworkModule.getApi(this))
         val engine = VerletEngine()
         val constellationSystem = ConstellationSystem(engine)
@@ -307,11 +308,18 @@ class MainActivity : ComponentActivity() {
             try {
                 val api = NetworkModule.getApi(this@MainActivity)
                 api.clearAllTasks()
+
+                // CRITICAL FIX: Also clear local Room database to prevent duplicate/zombie tasks
+                database.starDao().deleteAllStars()
+                database.constellationDao().deleteAllLinks()
+                database.orbitDao().deleteAllOrbits()
+
                 viewModel.stars.clear()
                 viewModel.completedStars.clear()
                 triggerImmediateUpdate()
                 Toast.makeText(this@MainActivity, "Ocean Cleared", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "Failed to clear data: ${e.message}")
                 Toast.makeText(this@MainActivity, "Failed to clear data", Toast.LENGTH_SHORT).show()
             }
         }
@@ -319,8 +327,21 @@ class MainActivity : ComponentActivity() {
 
     private fun createNewStar(title: String, offset: androidx.compose.ui.geometry.Offset?) {
         val random = java.util.Random()
-        val x = offset?.x ?: (200f + random.nextFloat() * 600f)
-        val y = offset?.y ?: (200f + random.nextFloat() * 800f)
+
+        // Get screen dimensions for better placement
+        val displayMetrics = resources.displayMetrics
+        val screenWidth = displayMetrics.widthPixels.toFloat()
+        val screenHeight = displayMetrics.heightPixels.toFloat()
+
+        // FIX: Smart initial placement - distribute stars across screen
+        // Use larger padding to avoid edges (15% on each side)
+        val horizontalPadding = screenWidth * 0.15f
+        val verticalPadding = screenHeight * 0.1f
+
+        // If user tapped, use that position; otherwise, random in center zone
+        // Center zone = middle 70% of screen (default for new tasks with no due date)
+        val x = offset?.x ?: (horizontalPadding + random.nextFloat() * (screenWidth - 2 * horizontalPadding))
+        val y = offset?.y ?: (verticalPadding + screenHeight * 0.3f + random.nextFloat() * (screenHeight * 0.4f))
 
         // Create star with default P3 (will be updated from backend)
         // TaskRepository.addStar() handles both local DB insert AND backend sync
@@ -466,6 +487,20 @@ class MainActivity : ComponentActivity() {
     private fun handleLogout() {
         // Stop real-time wallpaper service
         RealTimeWallpaperService.stop(this)
+
+        // CRITICAL FIX: Clear local database to prevent user data leakage
+        // This ensures new user doesn't see previous user's cached tasks
+        lifecycleScope.launch {
+            try {
+                database.starDao().deleteAllStars()
+                database.constellationDao().deleteAllLinks()
+                database.orbitDao().deleteAllOrbits()
+                android.util.Log.d("MainActivity", "Local database cleared on logout")
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "Failed to clear database: ${e.message}")
+            }
+        }
+
         tokenManager.clearTokens()
         Toast.makeText(this@MainActivity, "Logged out successfully", Toast.LENGTH_SHORT).show()
     }

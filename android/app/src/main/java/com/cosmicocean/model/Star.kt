@@ -56,10 +56,12 @@ class Star(
             val diffMs = it - System.currentTimeMillis()
             dueIn = diffMs / 60000f
         }
-        // CRITICAL FIX: If no due date, treat as future (BLUE), not urgent
-        // Tasks without due dates should be calm blue, not orange
+        // HYBRID COLOR LOGIC: Priority + Time based
+        // P1 = ALWAYS urgent (user explicitly said "urgently", "asap", "critical", etc.)
+        // Otherwise fall back to time-based logic
         temperature = when {
-            dueDate == null -> Temperature.BLUE  // No due date = Future/Calm
+            urgency == 1 -> Temperature.RED      // P1 = ALWAYS urgent (user said so!)
+            dueDate == null -> Temperature.BLUE  // No urgency keyword, no date = calm
             dueIn < 0 -> Temperature.RED         // Overdue
             dueIn < 120 -> Temperature.ORANGE    // Due within 2 hours
             else -> Temperature.BLUE             // Future

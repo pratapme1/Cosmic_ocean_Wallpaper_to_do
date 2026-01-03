@@ -55,10 +55,35 @@ class TaskRepository(
                 // Parse due date from backend if available
                 if (!backendTask.dueDate.isNullOrEmpty()) {
                     try {
-                        // Backend returns date as ISO string, we need to convert
-                        star.dueDate = backendTask.dueDate.toLongOrNull()
+                        // FIX: Handle both formats:
+                        // - Date-only: "2026-01-15" (from PostgreSQL DATE)
+                        // - ISO string: "2026-01-15T10:00:00.000Z" (full timestamp)
+                        val dueDateMs = if (backendTask.dueDate.contains("T")) {
+                            // Full ISO timestamp
+                            java.time.Instant.parse(backendTask.dueDate).toEpochMilli()
+                        } else {
+                            // Date-only: combine with due_time or use end of day
+                            val datePart = java.time.LocalDate.parse(backendTask.dueDate)
+                            val timePart = if (!backendTask.dueTime.isNullOrEmpty()) {
+                                // Handle both "HH:MM" and "HH:MM:SS" formats
+                                val timeStr = backendTask.dueTime
+                                if (timeStr.count { it == ':' } == 1) {
+                                    java.time.LocalTime.parse("$timeStr:00") // Add seconds
+                                } else {
+                                    java.time.LocalTime.parse(timeStr)
+                                }
+                            } else {
+                                java.time.LocalTime.of(23, 59, 59) // Default to end of day
+                            }
+                            java.time.LocalDateTime.of(datePart, timePart)
+                                .atZone(java.time.ZoneId.systemDefault())
+                                .toInstant()
+                                .toEpochMilli()
+                        }
+                        star.dueDate = dueDateMs
+                        Log.d(TAG, "Parsed due date: ${backendTask.dueDate} + ${backendTask.dueTime ?: "EOD"} -> ${star.dueDate}")
                     } catch (e: Exception) {
-                        Log.w(TAG, "Could not parse due date: ${backendTask.dueDate}")
+                        Log.w(TAG, "Could not parse due date: ${backendTask.dueDate} - ${e.message}")
                     }
                 }
 

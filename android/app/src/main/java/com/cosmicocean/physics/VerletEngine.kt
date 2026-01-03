@@ -6,20 +6,34 @@ class VerletEngine {
     private val particles = mutableListOf<Particle>()
     private var gravityX = 0f
     private var gravityY = 0f
-    private val damping = 0.98f
+    private val damping = 0.95f  // REDUCED from 0.98 for smoother stopping
+
     private var boundsWidth = 0f
     private var boundsHeight = 0f
 
-    private val TARGET_SPACING = 100f
-    private val TARGET_SPACING_SQ = 10000f
-    private val REPULSION_FORCE_COEFF = 0.8f
+    // FIX: Dynamic spacing based on screen size
+    // Mobile screens are smaller, so we need proportionally less spacing
+    private var targetSpacing = 80f  // Reduced from 100 for mobile
+    private var targetSpacingSq = 6400f
+    private val REPULSION_FORCE_COEFF = 1.2f  // INCREASED from 0.8 for stronger separation
 
-    private val spatialHash = SpatialHash(100f)
+    private var spatialHash = SpatialHash(80f)
     private var useSpatialHash = true
 
     fun setBounds(width: Float, height: Float) {
+        // Only update if bounds actually changed (avoid recreating spatial hash every frame)
+        if (boundsWidth == width && boundsHeight == height) return
+
         boundsWidth = width
         boundsHeight = height
+
+        // FIX: Scale spacing by screen density (smaller screens = smaller spacing)
+        val densityFactor = (width / 1080f).coerceIn(0.6f, 1.2f)
+        targetSpacing = 70f * densityFactor  // Base 70px, scaled
+        targetSpacingSq = targetSpacing * targetSpacing
+
+        // Rebuild spatial hash with new cell size (only when bounds change)
+        spatialHash = SpatialHash(targetSpacing)
     }
 
     fun addParticle(particle: Particle) {
@@ -109,8 +123,9 @@ class VerletEngine {
 
                 if (distSq < 1f) return@forEach
 
-                val baseMinDist = (p1.radius + p2.radius) * 1.5f
-                val minDist = max(baseMinDist, TARGET_SPACING)
+                // FIX: Use dynamic targetSpacing instead of hardcoded value
+                val baseMinDist = (p1.radius + p2.radius) * 1.8f  // Increased from 1.5 for better separation
+                val minDist = max(baseMinDist, targetSpacing)
                 val minDistSq = minDist * minDist
 
                 if (distSq < minDistSq) {
@@ -125,13 +140,14 @@ class VerletEngine {
                     p2.y += fy / p2.mass
                 }
 
-                // Subtle gravitational clustering
-                val maxGravityDist = 300f
+                // FIX: Greatly reduced gravitational clustering (was causing piling)
+                // Only apply very weak attraction to prevent complete scattering
+                val maxGravityDist = 200f  // Reduced from 300
                 val maxGravityDistSq = maxGravityDist * maxGravityDist
 
                 if (distSq < maxGravityDistSq && distSq > minDistSq) {
                     val dist = sqrt(distSq)
-                    val gravityStrength = 0.0001f * (1f - dist / maxGravityDist)
+                    val gravityStrength = 0.00002f * (1f - dist / maxGravityDist)  // REDUCED from 0.0001
                     val fx = (dx / dist) * gravityStrength
                     val fy = (dy / dist) * gravityStrength
 
@@ -160,8 +176,9 @@ class VerletEngine {
 
                 if (distSq < 1f) continue
 
-                val baseMinDist = (p1.radius + p2.radius) * 1.5f
-                val minDist = max(baseMinDist, TARGET_SPACING)
+                // FIX: Use dynamic targetSpacing instead of hardcoded value
+                val baseMinDist = (p1.radius + p2.radius) * 1.8f  // Increased from 1.5
+                val minDist = max(baseMinDist, targetSpacing)
                 val minDistSq = minDist * minDist
 
                 if (distSq < minDistSq) {
@@ -176,13 +193,13 @@ class VerletEngine {
                     p2.y += fy / p2.mass
                 }
 
-                // Subtle gravitational clustering
-                val maxGravityDist = 300f
+                // FIX: Greatly reduced gravitational clustering (was causing piling)
+                val maxGravityDist = 200f  // Reduced from 300
                 val maxGravityDistSq = maxGravityDist * maxGravityDist
 
                 if (distSq < maxGravityDistSq && distSq > minDistSq) {
                     val dist = sqrt(distSq)
-                    val gravityStrength = 0.0001f * (1f - dist / maxGravityDist)
+                    val gravityStrength = 0.00002f * (1f - dist / maxGravityDist)  // REDUCED from 0.0001
                     val fx = (dx / dist) * gravityStrength
                     val fy = (dy / dist) * gravityStrength
 
