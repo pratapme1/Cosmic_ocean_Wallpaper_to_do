@@ -124,3 +124,6 @@ backend/test-*.js
 backend/test-*.sh
 backend/update-schema-pwa.js
 backend/verify-*.js
+.vercel
+.env*.local
+android/app/keystore/
