@@ -18,6 +18,14 @@ const { generateParticles } = require('./particle-system');
 const { getColorPalette, lerpColor, verifyWCAG } = require('./color-system');
 const { getAnimationState } = require('./animation-system');
 const { renderTextToSvg } = require('./text-renderer');
+const { MessageEngine } = require('./message-engine');
+const { AtmosphereController } = require('./atmosphere-controller');
+const { StatsAggregator } = require('./stats-aggregator');
+
+// Initialize intelligence layer components
+const messageEngine = new MessageEngine();
+const atmosphereController = new AtmosphereController();
+const statsAggregator = new StatsAggregator();
 
 /**
  * Determine urgency level from tasks
@@ -321,18 +329,43 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now()) {
     const { theme = 'cosmic', resolution = '1080x1920', done_for_today = false } = user;
     const [width, height] = resolution.split('x').map(Number);
     const tasks = data.tasks || [];
+    const allTasks = data.allTasks || tasks; // Include completed tasks for stats
 
     // Calculate layout
     const layout = getLayoutConfig(width, height);
 
-    // Determine urgency
-    const urgency = calculateUrgency(tasks, done_for_today);
+    // =====================================
+    // INTELLIGENCE LAYER INTEGRATION
+    // =====================================
 
-    // Get color palette
+    // Get atmosphere state with urgency calculation and visual params
+    const atmosphere = atmosphereController.calculateState(tasks);
+    const urgency = atmosphere.state;
+    const visualParams = atmosphere.visualParams;
+
+    console.log(`[Intelligence] Atmosphere: ${urgency} (score: ${atmosphere.urgencyScore})`);
+    console.log(`[Intelligence] Visual params: particles=${visualParams.particleCount}, speed=${visualParams.animationSpeed}`);
+
+    // Get user stats for intelligent messaging
+    const stats = statsAggregator.computeStats(allTasks);
+    console.log(`[Intelligence] Stats: streak=${stats.streakDays}, today=${stats.completedToday}`);
+
+    // Generate intelligent message
+    const intelligentMessage = messageEngine.generateMessage(user, tasks, new Date(), stats);
+    console.log(`[Intelligence] Message: "${intelligentMessage.text}" (type: ${intelligentMessage.type})`);
+
+    // =====================================
+    // END INTELLIGENCE LAYER
+    // =====================================
+
+    // Get color palette (use urgency from atmosphere)
     const colors = getColorPalette(theme, urgency);
 
-    // Get animation state
+    // Get animation state (enhanced with visual params)
     const animState = getAnimationState(timestamp, urgency);
+    // Apply intelligence-driven animation speed
+    animState.animationSpeed = visualParams.animationSpeed;
+    animState.breathingRate = visualParams.breathingRate;
 
     console.log(`[Wallpaper] Generating ${theme} theme, ${urgency} urgency, ${width}x${height}`);
     console.log(`[Wallpaper] Animation state: breath=${animState.breathPhase.toFixed(2)}, scale=${animState.breathScale.toFixed(3)}`);
@@ -344,8 +377,8 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now()) {
     const backgroundSvg = generateBackgroundLayer(layout, colors, animState);
     layers.push({ input: Buffer.from(backgroundSvg), blend: 'over' });
 
-    // Layer 2: Particles (stars, bubbles)
-    const particleSvg = generateParticleLayer(layout, theme, urgency, animState);
+    // Layer 2: Particles (stars, bubbles) - use visual params for particle count
+    const particleSvg = generateParticleLayerWithParams(layout, theme, urgency, animState, visualParams);
     layers.push({ input: Buffer.from(particleSvg), blend: 'over' });
 
     // Layer 3: Transition gradient
@@ -353,8 +386,9 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now()) {
     layers.push({ input: Buffer.from(transitionSvg), blend: 'over' });
 
     // Layer 4: Task overlay with text (using satori for serverless font rendering)
+    // Now includes intelligent message!
     console.log(`[Wallpaper] Rendering text with SATORI (${tasks.length} tasks)`);
-    const textSvg = await renderTextToSvg(layout, tasks, colors, done_for_today);
+    const textSvg = await renderTextToSvg(layout, tasks, colors, done_for_today, intelligentMessage);
     console.log(`[Wallpaper] Text SVG generated: ${textSvg.length} chars, has paths: ${textSvg.includes('<path')}`);
     layers.push({ input: Buffer.from(textSvg), blend: 'over' });
 
@@ -377,6 +411,31 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now()) {
     console.error('Enhanced wallpaper generation failed:', err);
     throw err;
   }
+}
+
+/**
+ * Generate particle layer with intelligence-driven params
+ */
+function generateParticleLayerWithParams(layout, theme, urgency, animState, visualParams) {
+  const { width, height } = layout;
+
+  // Override particle count from visual params
+  const overrideOptions = {
+    particleCount: visualParams.particleCount,
+    animationSpeed: visualParams.animationSpeed
+  };
+
+  const particles = generateParticles(theme, layout, urgency, animState.timestamp, overrideOptions);
+
+  const particleElements = particles.map(p => {
+    return `<circle cx="${p.x}" cy="${p.y}" r="${p.size}" fill="${p.color}" opacity="${p.opacity}" />`;
+  }).join('\n');
+
+  return `
+    <svg width="${width}" height="${height}">
+      ${particleElements}
+    </svg>
+  `;
 }
 
 /**

@@ -228,24 +228,137 @@ function generateBubbles(layout, urgency, timestamp = 0) {
  * @param {object} layout - Layout configuration
  * @param {string} urgency - Urgency level
  * @param {number} timestamp - Animation timestamp
+ * @param {object} overrides - Optional overrides from intelligence layer
  * @returns {array} Array of particle objects
  */
-function generateParticles(theme, layout, urgency, timestamp = 0) {
+function generateParticles(theme, layout, urgency, timestamp = 0, overrides = {}) {
+  // Apply intelligence layer overrides
+  const particleCountOverride = overrides.particleCount || null;
+
+  let particles;
   switch (theme) {
     case 'cosmic':
-      return generateStars(layout, urgency, timestamp);
+      particles = generateStarsWithOverrides(layout, urgency, timestamp, particleCountOverride);
+      break;
     case 'ocean':
-      return generateBubbles(layout, urgency, timestamp);
+      particles = generateBubblesWithOverrides(layout, urgency, timestamp, particleCountOverride);
+      break;
     case 'fantasy':
-      // Fantasy theme could use sparkles or magical particles
-      // For now, use stars with different colors
-      return generateStars(layout, urgency, timestamp).map(star => ({
+      // Fantasy theme uses stars with purple color
+      particles = generateStarsWithOverrides(layout, urgency, timestamp, particleCountOverride).map(star => ({
         ...star,
         color: '#B8A0FF' // Purple sparkles
       }));
+      break;
     default:
-      return generateStars(layout, urgency, timestamp);
+      particles = generateStarsWithOverrides(layout, urgency, timestamp, particleCountOverride);
   }
+
+  return particles;
+}
+
+/**
+ * Generate stars with optional count override from intelligence layer
+ */
+function generateStarsWithOverrides(layout, urgency, timestamp, countOverride) {
+  const params = { ...STAR_PARAMS[urgency] || STAR_PARAMS.calm };
+  if (countOverride) {
+    params.count = countOverride;
+  }
+  return generateStarsWithParams(layout, params, timestamp);
+}
+
+/**
+ * Generate bubbles with optional count override from intelligence layer
+ */
+function generateBubblesWithOverrides(layout, urgency, timestamp, countOverride) {
+  const params = { ...BUBBLE_PARAMS[urgency] || BUBBLE_PARAMS.calm };
+  if (countOverride) {
+    params.count = countOverride;
+  }
+  return generateBubblesWithParams(layout, params, timestamp);
+}
+
+/**
+ * Generate stars with explicit params (for override support)
+ */
+function generateStarsWithParams(layout, params, timestamp) {
+  const { width, height, layoutZones } = layout;
+  const stars = [];
+  const zones = ['clock', 'scene', 'transition', 'task', 'interaction'];
+
+  for (let i = 0; i < params.count; i++) {
+    const seed = i * 7919;
+    const zoneIndex = Math.floor((i / params.count) * zones.length);
+    const zoneName = zones[zoneIndex];
+    const zone = layoutZones[zoneName];
+    const weight = ZONE_WEIGHTS[zoneName];
+
+    if (seededRandom(seed) > weight) continue;
+
+    const x = randomRange(layout.margins.horizontal, width - layout.margins.horizontal, seededRandom(seed + 1));
+    const y = randomRange(zone.y, zone.y + zone.height, seededRandom(seed + 2));
+    const size = randomRange(params.sizeRange[0], params.sizeRange[1], seededRandom(seed + 3));
+    const twinkleDuration = randomRange(params.twinkleSpeed[0], params.twinkleSpeed[1], seededRandom(seed + 4));
+    const twinklePhase = ((timestamp + i * 100) % twinkleDuration) / twinkleDuration;
+    const twinkleOpacity = Math.sin(twinklePhase * Math.PI * 2) * 0.5 + 0.5;
+    const baseOpacity = randomRange(params.opacity[0], params.opacity[1], seededRandom(seed + 5));
+    const opacity = baseOpacity * twinkleOpacity;
+
+    stars.push({
+      x: Math.floor(x),
+      y: Math.floor(y),
+      size: Math.floor(size),
+      opacity,
+      twinklePhase,
+      color: '#FFFFFF'
+    });
+  }
+
+  return stars;
+}
+
+/**
+ * Generate bubbles with explicit params (for override support)
+ */
+function generateBubblesWithParams(layout, params, timestamp) {
+  const { width, height, layoutZones } = layout;
+  const bubbles = [];
+  const zones = ['clock', 'scene', 'transition', 'task', 'interaction'];
+
+  for (let i = 0; i < params.count; i++) {
+    const seed = i * 7919;
+    const zoneIndex = Math.floor((i / params.count) * zones.length);
+    const zoneName = zones[zoneIndex];
+    const zone = layoutZones[zoneName];
+    const weight = ZONE_WEIGHTS[zoneName];
+
+    if (seededRandom(seed) > weight) continue;
+
+    const baseX = randomRange(layout.margins.horizontal, width - layout.margins.horizontal, seededRandom(seed + 1));
+    const wobbleOffset = Math.sin((timestamp / 1000 + i) * 2) * params.wobble;
+    const x = baseX + wobbleOffset;
+
+    const riseOffset = (timestamp / 1000 * params.riseSpeed + i * 50) % height;
+    const baseY = zone.y + zone.height - riseOffset;
+    const y = ((baseY - zone.y) % zone.height) + zone.y;
+
+    const size = randomRange(params.sizeRange[0], params.sizeRange[1], seededRandom(seed + 3));
+    const baseOpacity = randomRange(params.opacity[0], params.opacity[1], seededRandom(seed + 4));
+    const fadeIn = Math.min(1, (y - zone.y) / 50);
+    const fadeOut = Math.min(1, (zone.y + zone.height - y) / 50);
+    const opacity = baseOpacity * fadeIn * fadeOut;
+
+    bubbles.push({
+      x: Math.floor(x),
+      y: Math.floor(y),
+      size: Math.floor(size),
+      opacity,
+      color: 'rgba(100, 200, 255, 0.6)'
+    });
+  }
+
+  return bubbles;
 }
 
 module.exports = {

@@ -55,7 +55,10 @@ interface ApiService {
     suspend fun clearAllTasks(): Response<Void>
 
     @POST("api/tasks/{id}/snooze")
-    suspend fun snoozeTask(@Path("id") id: String): Response<com.cosmicocean.model.TaskResponse>
+    suspend fun snoozeTask(
+        @Path("id") id: String,
+        @Body body: Map<String, Any> = emptyMap()
+    ): Response<com.cosmicocean.model.TaskResponse>
 
     // ==================== Task Actions ====================
     @POST("api/done-for-today")

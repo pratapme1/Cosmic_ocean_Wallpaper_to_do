@@ -279,7 +279,7 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
         imageBuffer = await generateWallpaper(user, { topTask: null, count: 0 });
       }
     } else {
-      // Get tasks
+      // Get active tasks
       const result = await queryWithRetry(client, `
         SELECT * FROM tasks
         WHERE user_id = $1
@@ -293,7 +293,18 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
       const count = Math.max(0, prioritized.length - 3);
 
       if (useEnhanced) {
-        imageBuffer = await generateEnhancedWallpaper(user, { tasks: prioritized }, timestamp);
+        // Fetch all tasks (including completed) for intelligence layer stats
+        const allTasksResult = await queryWithRetry(client, `
+          SELECT * FROM tasks
+          WHERE user_id = $1
+          AND (archived = false OR archived IS NULL)
+          AND (created_at > NOW() - INTERVAL '30 days' OR completed_at > NOW() - INTERVAL '30 days')
+        `, [userId]);
+
+        imageBuffer = await generateEnhancedWallpaper(user, {
+          tasks: prioritized,
+          allTasks: allTasksResult.rows
+        }, timestamp);
       } else {
         imageBuffer = await generateWallpaper(user, { tasks: topTasks, count });
       }
@@ -613,7 +624,7 @@ app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
-    version: '1.1.0-satori', // Font rendering fix version
+    version: '1.2.0', // Epic 5 Intelligence + Epic 6 Testing
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {

@@ -31,6 +31,7 @@ import com.cosmicocean.ui.components.*
 import com.cosmicocean.utils.WallpaperPreferencesManager
 import com.cosmicocean.viewmodel.MainViewModel
 import com.cosmicocean.viewmodel.MainViewModelFactory
+import com.cosmicocean.service.RealTimeWallpaperService
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -260,7 +261,10 @@ class MainActivity : ComponentActivity() {
         // Sync to backend API
         lifecycleScope.launch {
             try {
-                NetworkModule.getApi(this@MainActivity).snoozeTask(star.id)
+                NetworkModule.getApi(this@MainActivity).snoozeTask(
+                    star.id,
+                    mapOf("duration_minutes" to durationMinutes)
+                )
                 val durationText = when {
                     durationMinutes < 60 -> "${durationMinutes}m"
                     durationMinutes < 1440 -> "${durationMinutes / 60}h"
@@ -350,7 +354,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun schedulePeriodicWallpaperUpdates() {
-        // Update wallpaper every 15 minutes to keep urgency states current
+        // Start real-time wallpaper service (1-minute updates)
+        if (tokenManager.isLoggedIn()) {
+            RealTimeWallpaperService.start(this)
+        }
+
+        // Keep WorkManager as fallback (every 15 minutes) in case service is killed
         val periodicWorkRequest = androidx.work.PeriodicWorkRequestBuilder<com.cosmicocean.worker.WallpaperUpdateWorker>(
             15, java.util.concurrent.TimeUnit.MINUTES
         )
@@ -395,6 +404,8 @@ class MainActivity : ComponentActivity() {
                         authResponse.user.id,
                         authResponse.user.email
                     )
+                    // Start real-time wallpaper service
+                    RealTimeWallpaperService.start(this@MainActivity)
                     Toast.makeText(this@MainActivity, "Welcome back, ${authResponse.user.email}!", Toast.LENGTH_SHORT).show()
                     onSuccess()
                 } else {
@@ -434,6 +445,8 @@ class MainActivity : ComponentActivity() {
                         authResponse.user.id,
                         authResponse.user.email
                     )
+                    // Start real-time wallpaper service
+                    RealTimeWallpaperService.start(this@MainActivity)
                     Toast.makeText(this@MainActivity, "Account created! Welcome ${authResponse.user.email}!", Toast.LENGTH_SHORT).show()
                     onSuccess()
                 } else {
@@ -451,6 +464,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleLogout() {
+        // Stop real-time wallpaper service
+        RealTimeWallpaperService.stop(this)
         tokenManager.clearTokens()
         Toast.makeText(this@MainActivity, "Logged out successfully", Toast.LENGTH_SHORT).show()
     }

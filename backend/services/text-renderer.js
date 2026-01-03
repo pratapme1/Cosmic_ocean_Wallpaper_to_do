@@ -33,9 +33,10 @@ const fonts = [
  * @param {array} tasks - Array of tasks
  * @param {object} colors - Color palette
  * @param {boolean} doneForToday - Done for today flag
+ * @param {object} intelligentMessage - Optional intelligent message from MessageEngine
  * @returns {Promise<string>} SVG string
  */
-async function renderTextToSvg(layout, tasks, colors, doneForToday) {
+async function renderTextToSvg(layout, tasks, colors, doneForToday, intelligentMessage = null) {
   const { width, height, layoutZones, typography, margins } = layout;
   const taskZone = layoutZones.task;
 
@@ -193,6 +194,35 @@ async function renderTextToSvg(layout, tasks, colors, doneForToday) {
       hour12: true
     });
 
+    // Build intelligent message element if provided
+    const messageElement = intelligentMessage ? {
+      type: 'div',
+      props: {
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: margins.vertical + 15,
+          padding: '12px 20px',
+          backgroundColor: 'rgba(255, 255, 255, 0.08)',
+          borderRadius: 12,
+        },
+        children: {
+          type: 'div',
+          props: {
+            style: {
+              color: colors.textPrimary,
+              fontSize: typography.bodyLarge,
+              fontWeight: 400,
+              textAlign: 'center',
+              textShadow: '0 0 15px rgba(255,255,255,0.3)',
+            },
+            children: intelligentMessage.text,
+          },
+        },
+      },
+    } : null;
+
     element = {
       type: 'div',
       props: {
@@ -205,6 +235,8 @@ async function renderTextToSvg(layout, tasks, colors, doneForToday) {
           paddingTop: taskZone.y + margins.vertical,
         },
         children: [
+          // Intelligent Message (from Message Engine)
+          messageElement,
           // Header
           {
             type: 'div',
