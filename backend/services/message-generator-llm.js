@@ -10,15 +10,15 @@
  * - Graceful fallback to templates
  */
 
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const Anthropic = require('@anthropic-ai/sdk');
 const pool = require('../db/pool');
 
-// Initialize Gemini
-let genAI = null;
+// Initialize Claude
+let anthropic = null;
 
-function initializeGemini() {
-  if (!process.env.GEMINI_API_KEY) {
-    console.warn('[MessageGen] GEMINI_API_KEY not set - LLM messages disabled');
+function initializeClaude() {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.warn('[MessageGen] ANTHROPIC_API_KEY not set - LLM messages disabled');
     return false;
   }
 
@@ -28,11 +28,13 @@ function initializeGemini() {
   }
 
   try {
-    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    console.log('[MessageGen] Gemini initialized successfully');
+    anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+    });
+    console.log('[MessageGen] Claude initialized successfully');
     return true;
   } catch (error) {
-    console.error('[MessageGen] Failed to initialize Gemini:', error.message);
+    console.error('[MessageGen] Failed to initialize Claude:', error.message);
     return false;
   }
 }
@@ -398,8 +400,8 @@ function validateMessages(messages, recentMessages) {
  * Generate messages using LLM
  */
 async function generateMessagesLLM(userId, context) {
-  if (!initializeGemini()) {
-    console.log('[MessageGen] Gemini not available, falling back to templates');
+  if (!initializeClaude()) {
+    console.log('[MessageGen] Claude not available, falling back to templates');
     return null;  // Fallback to templates
   }
 
@@ -416,33 +418,32 @@ async function generateMessagesLLM(userId, context) {
     // Build prompt
     const prompt = buildMessagePrompt(context, voice, intent, recentMessages);
 
-    // Call Gemini
-    // Use configurable model name, default to gemini-2.0-flash-lite
-    const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite';
-    const model = genAI.getGenerativeModel({
-      model: modelName,
-      generationConfig: {
-        temperature: 0.9,  // Higher creativity for variety
-        maxOutputTokens: 150,
-        responseMimeType: 'application/json'
-      }
-    });
+    // Call Claude
+    // Use configurable model name, default to claude-3-haiku
+    const modelName = process.env.CLAUDE_MODEL || 'claude-3-haiku-20240307';
 
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Gemini timeout (10s)')), 10000);
+      setTimeout(() => reject(new Error('Claude timeout (10s)')), 10000);
     });
 
-    const generatePromise = model.generateContent(prompt);
+    const generatePromise = anthropic.messages.create({
+      model: modelName,
+      max_tokens: 1024,
+      temperature: 0.9,  // Higher creativity for variety
+      messages: [{
+        role: 'user',
+        content: prompt
+      }]
+    });
 
     const result = await Promise.race([generatePromise, timeoutPromise]);
-    const response = result.response;
-    const text = response.text();
+    const text = result.content[0].text;
 
     // Parse JSON response
     const parsed = JSON.parse(text);
 
     if (!parsed.messages || !Array.isArray(parsed.messages)) {
-      throw new Error('Invalid response format from Gemini');
+      throw new Error('Invalid response format from Claude');
     }
 
     console.log(`[MessageGen] Generated ${parsed.messages.length} raw messages`);

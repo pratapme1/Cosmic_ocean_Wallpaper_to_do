@@ -26,6 +26,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
     "@fontsource/inter": "^5.2.8",
     "@google/generative-ai": "^0.24.1",
     "bcrypt": "^6.0.0",

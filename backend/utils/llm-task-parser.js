@@ -1,5 +1,5 @@
 /**
- * LLM Task Parser - Gemini-powered natural language task parsing
+ * LLM Task Parser - Claude-powered natural language task parsing
  *
  * Handles complex task inputs like:
  * - "Email manager by 5pm tomorrow about budget review"
@@ -7,7 +7,7 @@
  * - "Workout in 30 minutes high energy"
  *
  * Features:
- * - Semantic understanding via Gemini 1.5 Flash
+ * - Semantic understanding via Claude Haiku
  * - Hallucination validation (strips invented dates/times)
  * - Graceful fallback to pattern-based parser
  * - Rate limiting (handled at endpoint level)
@@ -15,30 +15,22 @@
  * @module utils/llm-task-parser
  */
 
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const Anthropic = require('@anthropic-ai/sdk');
 const { parseTask } = require('./task-parser'); // Fallback parser
 
-// Initialize Gemini client (lazy-loaded)
-let genAI = null;
-let model = null;
+// Initialize Claude client (lazy-loaded)
+let anthropic = null;
 
 /**
- * Initialize Gemini client (called on first use)
+ * Initialize Claude client (called on first use)
  */
-function initializeGemini() {
-  if (!genAI && process.env.GEMINI_API_KEY) {
-    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    // Use configurable model name, default to gemini-2.0-flash-lite
-    const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite';
-    model = genAI.getGenerativeModel({
-      model: modelName,
-      generationConfig: {
-        temperature: 0, // Deterministic parsing
-        responseMimeType: 'application/json'
-      }
+function initializeClaude() {
+  if (!anthropic && process.env.ANTHROPIC_API_KEY) {
+    anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
     });
   }
-  return !!model;
+  return !!anthropic;
 }
 
 /**
@@ -200,7 +192,7 @@ function validateAndClean(llmResponse, input) {
  */
 async function parseLLM(input) {
   // Check if LLM is enabled
-  if (!process.env.GEMINI_API_KEY || process.env.ENABLE_LLM_PARSING === 'false') {
+  if (!process.env.ANTHROPIC_API_KEY || process.env.ENABLE_LLM_PARSING === 'false') {
     console.log('[LLM Parser] LLM disabled, using fallback parser');
     return {
       ...parseTask(input),
@@ -209,9 +201,9 @@ async function parseLLM(input) {
     };
   }
 
-  // Initialize Gemini
-  if (!initializeGemini()) {
-    console.error('[LLM Parser] Failed to initialize Gemini, using fallback');
+  // Initialize Claude
+  if (!initializeClaude()) {
+    console.error('[LLM Parser] Failed to initialize Claude, using fallback');
     return {
       ...parseTask(input),
       source: 'local_fallback',
@@ -231,15 +223,26 @@ async function parseLLM(input) {
     // Build prompt
     const prompt = buildPrompt(input, context);
 
-    // Call Gemini with timeout
+    // Call Claude with timeout
     const timeoutMs = 5000; // 5 second timeout
-    const parsePromise = model.generateContent(prompt);
+    const modelName = process.env.CLAUDE_MODEL || 'claude-3-haiku-20240307';
+
+    const parsePromise = anthropic.messages.create({
+      model: modelName,
+      max_tokens: 1024,
+      temperature: 0,
+      messages: [{
+        role: 'user',
+        content: prompt
+      }]
+    });
+
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('LLM timeout')), timeoutMs)
     );
 
     const result = await Promise.race([parsePromise, timeoutPromise]);
-    const responseText = result.response.text();
+    const responseText = result.content[0].text;
 
     // Parse JSON response
     let llmResponse;
@@ -269,7 +272,7 @@ async function parseLLM(input) {
       recurring_pattern: validated.recurringPattern,
       confidence: validated.confidence || 0.85,
       source: 'llm',
-      model: 'gemini-1.5-flash'
+      model: modelName
     };
 
   } catch (error) {
