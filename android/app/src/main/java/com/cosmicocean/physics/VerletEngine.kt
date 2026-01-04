@@ -6,16 +6,19 @@ class VerletEngine {
     private val particles = mutableListOf<Particle>()
     private var gravityX = 0f
     private var gravityY = 0f
-    private val damping = 0.95f  // REDUCED from 0.98 for smoother stopping
+    private val damping = 0.98f  // INCREASED back to 0.98 to dampen oscillations
 
     private var boundsWidth = 0f
     private var boundsHeight = 0f
 
     // FIX: Dynamic spacing based on screen size
     // Mobile screens are smaller, so we need proportionally less spacing
-    private var targetSpacing = 80f  // Reduced from 100 for mobile
-    private var targetSpacingSq = 6400f
-    private val REPULSION_FORCE_COEFF = 1.2f  // INCREASED from 0.8 for stronger separation
+    private var targetSpacing = 60f  // REDUCED from 80 for small screens (393px width)
+    private var targetSpacingSq = 3600f
+    private val REPULSION_FORCE_COEFF = 0.5f  // REDUCED from 1.2 to prevent aggressive bouncing
+
+    // Velocity cap to prevent explosive movements
+    private val MAX_VELOCITY = 15f
 
     private var spatialHash = SpatialHash(80f)
     private var useSpatialHash = true
@@ -27,9 +30,9 @@ class VerletEngine {
         boundsWidth = width
         boundsHeight = height
 
-        // FIX: Scale spacing by screen density (smaller screens = smaller spacing)
-        val densityFactor = (width / 1080f).coerceIn(0.6f, 1.2f)
-        targetSpacing = 70f * densityFactor  // Base 70px, scaled
+        // FIX: Scale spacing by screen density (smaller screens = MUCH smaller spacing)
+        val densityFactor = (width / 1080f).coerceIn(0.4f, 1.0f)  // Allow smaller factor for tiny screens
+        targetSpacing = 50f * densityFactor  // REDUCED base from 70 to 50 for small screens
         targetSpacingSq = targetSpacing * targetSpacing
 
         // Rebuild spatial hash with new cell size (only when bounds change)
@@ -60,13 +63,17 @@ class VerletEngine {
             p.oldX = p.x
             p.oldY = p.y
 
+            // Cap velocity to prevent explosive movements
+            val cappedVx = vx.coerceIn(-MAX_VELOCITY, MAX_VELOCITY)
+            val cappedVy = vy.coerceIn(-MAX_VELOCITY, MAX_VELOCITY)
+
             // Verlet integration
-            p.x += vx + gravityX * d
-            p.y += vy + gravityY * d
+            p.x += cappedVx + gravityX * d
+            p.y += cappedVy + gravityY * d
 
             // Store velocity for external use
-            p.vx = vx
-            p.vy = vy
+            p.vx = cappedVx
+            p.vy = cappedVy
         }
 
         applyConstraints()
@@ -124,15 +131,17 @@ class VerletEngine {
                 if (distSq < 1f) return@forEach
 
                 // FIX: Use dynamic targetSpacing instead of hardcoded value
-                val baseMinDist = (p1.radius + p2.radius) * 1.8f  // Increased from 1.5 for better separation
-                val minDist = max(baseMinDist, targetSpacing)
+                val baseMinDist = (p1.radius + p2.radius) * 1.3f  // REDUCED from 1.8 for gentler separation
+                val minDist = max(baseMinDist, targetSpacing * 0.8f)  // Use 80% of targetSpacing
                 val minDistSq = minDist * minDist
 
                 if (distSq < minDistSq) {
                     val dist = sqrt(distSq)
-                    val force = (minDist - dist) / dist * REPULSION_FORCE_COEFF
-                    val fx = dx * force
-                    val fy = dy * force
+                    // SOFTENED force calculation: use square root to reduce explosive force when very close
+                    val penetration = minDist - dist
+                    val force = sqrt(max(0f, penetration)) * REPULSION_FORCE_COEFF
+                    val fx = (dx / dist) * force
+                    val fy = (dy / dist) * force
 
                     p1.x -= fx / p1.mass
                     p1.y -= fy / p1.mass
@@ -177,15 +186,17 @@ class VerletEngine {
                 if (distSq < 1f) continue
 
                 // FIX: Use dynamic targetSpacing instead of hardcoded value
-                val baseMinDist = (p1.radius + p2.radius) * 1.8f  // Increased from 1.5
-                val minDist = max(baseMinDist, targetSpacing)
+                val baseMinDist = (p1.radius + p2.radius) * 1.3f  // REDUCED from 1.8 for gentler separation
+                val minDist = max(baseMinDist, targetSpacing * 0.8f)  // Use 80% of targetSpacing
                 val minDistSq = minDist * minDist
 
                 if (distSq < minDistSq) {
                     val dist = sqrt(distSq)
-                    val force = (minDist - dist) / dist * REPULSION_FORCE_COEFF
-                    val fx = dx * force
-                    val fy = dy * force
+                    // SOFTENED force calculation: use square root to reduce explosive force when very close
+                    val penetration = minDist - dist
+                    val force = sqrt(max(0f, penetration)) * REPULSION_FORCE_COEFF
+                    val fx = (dx / dist) * force
+                    val fy = (dy / dist) * force
 
                     p1.x -= fx / p1.mass
                     p1.y -= fy / p1.mass

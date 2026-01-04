@@ -52,7 +52,8 @@ class MainActivity : ComponentActivity() {
         wallpaperPreferences.detectDeviceResolution()
 
         database = CosmicDatabase.getDatabase(this)
-        val repository = TaskRepository(database.starDao(), NetworkModule.getApi(this))
+        // Epic 8: Pass applicationContext for network connectivity checks
+        val repository = TaskRepository(database.starDao(), NetworkModule.getApi(this), applicationContext)
         val engine = VerletEngine()
         val constellationSystem = ConstellationSystem(engine)
         val orbitalSystem = OrbitalSystem(engine)

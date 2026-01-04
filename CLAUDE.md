@@ -1,8 +1,90 @@
 # Claude Instructions - Cosmic Ocean Project
 
-> **Last Updated:** 2026-01-02
-> **Read Time:** 3 minutes
+> **Last Updated:** 2026-01-04
+> **Read Time:** 5 minutes
 > **Purpose:** Core AI assistant instructions
+
+---
+
+## 🛑 NO-GO: MANDATORY TESTING BEFORE DEPLOYMENT
+
+**THIS IS NON-NEGOTIABLE. VIOLATION = BROKEN TRUST.**
+
+### Before ANY Code is Deployed or Built:
+
+#### Step 1: Write Tests FIRST (TDD)
+```bash
+# Create test with REAL user inputs, not ideal cases
+# Example: User will type "email manager in 10 minutes"
+# NOT: Assume user types "30m task"
+```
+
+#### Step 2: Run Locally and SHOW Output
+```bash
+# For NLP changes:
+node -e "const {parseTask} = require('./utils/task-parser'); console.log(JSON.stringify(parseTask('email manager in 10 minutes'), null, 2))"
+
+# SHOW the actual output to user before proceeding
+```
+
+#### Step 3: Verify Full Data Flow
+```
+User Input → API Request → NLP Parse → DB Storage → DB Query → API Response → Android Display
+                ↑              ↑            ↑           ↑            ↑              ↑
+            Log this       Log this     Query DB    Log this     Log this      Test this
+```
+
+#### Step 4: Test with User's EXACT Inputs
+```bash
+# If user says "these 3 inputs fail", test THOSE 3 inputs:
+1. "Email manager in 10 minutes"
+2. "call mom urgently"
+3. "Complete email tasks in 10m"
+
+# Don't test similar inputs. Test THE EXACT inputs.
+```
+
+#### Step 5: Verify Database Contains Expected Values
+```sql
+-- After creating task, VERIFY:
+SELECT title, due_date, due_time, estimate_minutes, priority
+FROM tasks WHERE id = [new_task_id];
+
+-- Expected vs Actual must match
+```
+
+### What Gets You BLOCKED from Deployment:
+
+| Violation | Consequence |
+|-----------|-------------|
+| ❌ Skip local testing | NO deployment |
+| ❌ Test ideal cases only | NO deployment |
+| ❌ Assume code works | NO deployment |
+| ❌ Don't verify DB storage | NO deployment |
+| ❌ Don't show test output | NO deployment |
+
+### Correct Workflow Example:
+
+```
+User: "Fix NLP parsing for 'in 10 minutes'"
+
+Claude:
+1. ✅ Write test: parseTask("email manager in 10 minutes")
+2. ✅ Run test locally, show output
+3. ✅ If fails, fix code
+4. ✅ Run test again, show PASSING output
+5. ✅ Create task via API, show DB query result
+6. ✅ ONLY THEN ask: "Ready to deploy?"
+```
+
+### Why This Exists (Incident Report 2026-01-04):
+- 263 tests existed but real user inputs failed
+- "in 10 minutes" wasn't parsed correctly
+- due_time wasn't stored in DB
+- Tests tested ideal cases, not real usage
+- **Result: Broken app, wasted user time, lost trust**
+
+**NEVER AGAIN.**
 
 ---
 
@@ -50,6 +132,7 @@ if (mentions test/testing/verify) → testing-agent
 if (mentions review/check/audit) → review-agent
 if (mentions docs/STATUS/ROADMAP) → doc-agent
 if (mentions PWA/cosmic-ocean/analyze) → pwa-reference-agent
+if (mentions LLM/NLP/parsing/intelligence/Gemini) → Read LLM_INTEGRATION_ARCHITECTURE.md first
 ```
 
 ### Step 2: Auto-Load Agent Files
@@ -83,6 +166,62 @@ Update docs automatically (via doc-agent)
 3. **Backend (backend/)** - API development - **WORK HERE** ✅
 
 **Your Mission:** Replicate PWA features in Android app + complete backend API
+
+---
+
+## 🚀 DEPLOYMENT & VERSIONING
+
+### Current Version: **1.2.0** (2026-01-03)
+
+| Component | Version | Location | Status |
+|-----------|---------|----------|--------|
+| **Backend API** | 1.2.0 | https://cosmic-ocean-api.vercel.app | ✅ LIVE |
+| **Android APK** | 1.2.0 (versionCode 2) | `/home/vi/supernova/cosmic-ocean-v1.2.0.apk` | ✅ Ready |
+| **PWA** | 2.8.0 | https://cosmic-ocean-sigma.vercel.app | ✅ Reference Only |
+
+### Deployment Commands
+
+```bash
+# Backend (Vercel) - Auto-deploys from git, or manual:
+cd /home/vi/supernova/backend && npx vercel --prod
+
+# Android APK Build:
+cd /home/vi/supernova/android && ./gradlew clean assembleRelease
+# Output: android/app/build/outputs/apk/release/app-release.apk
+
+# Verify Backend Health:
+curl https://cosmic-ocean-api.vercel.app/api/health
+```
+
+### Version Files to Update
+
+When releasing a new version, update these files:
+1. `backend/package.json` → `"version": "X.Y.Z"`
+2. `backend/server.js` → Health endpoint version string
+3. `android/app/build.gradle` → `versionCode` and `versionName`
+4. `CHANGELOG.md` → Add release notes
+
+### Infrastructure
+
+| Service | Provider | Purpose |
+|---------|----------|---------|
+| Backend Hosting | Vercel | Serverless Express.js |
+| Database | Supabase PostgreSQL | User data, tasks |
+| Cache | Upstash Redis | Wallpaper caching |
+| Android Signing | Local Keystore | `android/app/keystore/release.jks` |
+| Git Repository | GitHub | https://github.com/pratapme1/Cosmic_ocean_task_management |
+
+### API Endpoints (Production)
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/health` | GET | Health check with version |
+| `/api/auth/register` | POST | User registration |
+| `/api/auth/login` | POST | User login (JWT) |
+| `/api/tasks` | GET/POST | Task list/create |
+| `/api/tasks/:id` | PATCH/DELETE | Update/delete task |
+| `/api/wallpaper` | GET | Generate wallpaper PNG |
+| `/api/user/preferences` | GET/PATCH | User settings |
 
 ---
 
@@ -261,6 +400,7 @@ Before marking ANY task complete:
 | Detailed workflow? | [WORKFLOW.md](WORKFLOW.md) |
 | All docs index? | [DOCUMENTS_INDEX.md](DOCUMENTS_INDEX.md) |
 | Design system? | [ANDROID_UI_UX_DESIGN_SYSTEM.md](ANDROID_UI_UX_DESIGN_SYSTEM.md) |
+| LLM integration architecture? | [LLM_INTEGRATION_ARCHITECTURE.md](LLM_INTEGRATION_ARCHITECTURE.md) |
 
 ---
 

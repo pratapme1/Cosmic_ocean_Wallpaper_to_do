@@ -127,3 +127,62 @@ data class StatsTrends(
     val appOpenTrend: Int? = null,
     val widgetCompletionRate: Int? = null
 )
+
+/**
+ * Epic 8: LLM Intelligence Enhancement
+ * Request for POST /api/tasks/parse-llm
+ */
+data class ParseRequest(
+    val title: String
+)
+
+/**
+ * Parsed task result from LLM parser
+ * Response from POST /api/tasks/parse-llm
+ */
+data class ParsedTaskResult(
+    val title: String,
+    @SerializedName("due_date")
+    val dueDate: String? = null,
+    @SerializedName("due_time")
+    val dueTime: String? = null,
+    @SerializedName("estimate_minutes")
+    val estimateMinutes: Int? = null,
+    val priority: Int = 2,
+    val category: String? = null,
+    @SerializedName("energy_level")
+    val energyLevel: String? = null,
+    @SerializedName("context_tags")
+    val contextTags: List<String>? = null,
+    @SerializedName("is_recurring")
+    val isRecurring: Boolean = false,
+    @SerializedName("recurring_pattern")
+    val recurringPattern: String? = null,
+    val confidence: Double = 0.0,
+    val source: String = "local_fallback", // "llm" or "local_fallback"
+    val reason: String? = null,            // Fallback reason if applicable
+    @SerializedName("rate_limit_info")
+    val rateLimitInfo: RateLimitInfo? = null
+)
+
+/**
+ * Rate limit information (if rate limited)
+ */
+data class RateLimitInfo(
+    val window: String,      // "minute" or "day"
+    val limit: Int,          // Rate limit value
+    @SerializedName("reset_in")
+    val resetIn: Int,        // Seconds until reset
+    val message: String
+)
+
+/**
+ * Full response wrapper from parse-llm endpoint
+ */
+data class ParseLLMResponse(
+    val success: Boolean,
+    val parsed: ParsedTaskResult,
+    @SerializedName("original_input")
+    val originalInput: String,
+    val timestamp: String
+)

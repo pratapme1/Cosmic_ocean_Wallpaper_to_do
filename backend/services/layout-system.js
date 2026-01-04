@@ -16,10 +16,17 @@
  * @returns {object} Safe zone insets
  */
 function calculateSafeZones(width, height) {
-  // Density calculation - real DPI scale (fixed 2026-01-02)
-  // Most Android devices @ 1080x2408 are ~400dpi = 2.5x scale
-  // Smaller devices @ 720x are ~240dpi = 1.5x scale
-  const density = width >= 1080 ? 2.5 : 2.0; // Real device DPI scale (was: Math.max(width, height) / 1920)
+  // Density calculation - optimized for lock screen readability
+  // Reduced from 2.5x to 2.0x on large screens for better spacing
+  // - 393px @ ~240dpi = 1.0x density (small screens)
+  // - 720px @ ~320dpi = 1.5x density
+  // - 1080px @ ~400dpi = 2.0x density (reduced from 2.5x)
+  // - 1440px @ ~560dpi = 2.5x density (reduced from 3.5x)
+  const density = width >= 1440 ? 2.5 :
+                  width >= 1080 ? 2.0 :
+                  width >= 720  ? 1.5 :
+                  width >= 540  ? 1.2 :
+                  1.0; // Small screens (< 540px) = 1.0x to fit content
 
   // Status bar height (typically 24-48dp)
   const statusBarHeight = Math.floor(32 * density);

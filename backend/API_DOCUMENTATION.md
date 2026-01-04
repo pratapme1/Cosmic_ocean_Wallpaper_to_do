@@ -664,6 +664,71 @@ Single task object (same structure as GET /api/tasks)
 
 ---
 
+### GET /api/tasks/all
+
+Get ALL tasks regardless of status (active, completed, archived, snoozed) with summary statistics.
+
+**Auth Required:** Optional
+
+**Request:**
+```http
+GET /api/tasks/all
+Authorization: Bearer <access_token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "total": 10,
+  "active": 5,
+  "completed": 3,
+  "archived": 1,
+  "snoozed": 1,
+  "tasks": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "title": "Email manager about project status",
+      "completed": false,
+      "archived": false,
+      "priority": 1,
+      "category": "work",
+      "context_tags": ["@office"],
+      "estimate_minutes": 30,
+      "due_date": "2026-01-05",
+      "due_time": "14:00:00",
+      "snoozed_until": null,
+      "created_at": "2026-01-04T10:00:00.000Z",
+      "updated_at": "2026-01-04T10:00:00.000Z",
+      "status": "active"
+    }
+  ]
+}
+```
+
+**Status Field Values:**
+- `active` - Normal active task (not completed, not archived, not snoozed)
+- `completed` - Task is completed
+- `archived` - Task is archived
+- `snoozed` - Task is snoozed until a future date
+
+**Sort Order:**
+1. Active tasks first
+2. Snoozed tasks
+3. Completed tasks
+4. Archived tasks last
+
+Within each group, sorted by:
+- Priority (descending)
+- Due date (ascending, nulls last)
+- Creation date (descending)
+
+**Notes:**
+- Returns ALL tasks regardless of completion/archive status
+- Includes computed `status` field for easy filtering
+- Provides summary statistics for each status category
+
+---
+
 ### POST /api/tasks
 
 Create a new task with natural language parsing.

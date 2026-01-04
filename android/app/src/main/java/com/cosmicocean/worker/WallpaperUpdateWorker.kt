@@ -29,13 +29,15 @@ class WallpaperUpdateWorker(
 
             // 2. Fetch from API with preferences + timestamp to bust cache
             val timestamp = System.currentTimeMillis()
-            Log.e(TAG, "Requesting wallpaper with timestamp: $timestamp (cache-busting)")
+            val timezone = java.util.TimeZone.getDefault().id // e.g., "Asia/Kolkata"
+            Log.e(TAG, "Requesting wallpaper with timestamp: $timestamp, timezone: $timezone (cache-busting)")
 
             val response = NetworkModule.getApi(applicationContext).getWallpaper(
                 theme = theme,
                 resolution = resolution,
                 enhanced = true,
-                timestamp = timestamp  // Force fresh generation
+                timestamp = timestamp,  // Force fresh generation
+                timezone = timezone
             )
 
             if (!response.isSuccessful || response.body() == null) {

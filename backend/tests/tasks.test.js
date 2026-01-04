@@ -26,8 +26,10 @@ describe('Task CRUD Operations', () => {
 
   describe('POST /api/tasks', () => {
     it('should create a new task successfully', async () => {
+      // NOTE: "in 30m" is a DUE DATE (when to do it), not estimate (how long it takes)
+      // Use "30m task" format for estimates, "in 30m" for due dates
       const task = await createTestTask(app, accessToken, {
-        rawTitle: 'Buy groceries in 30m',
+        rawTitle: 'Buy groceries 30m',  // No "in" = estimate of duration
         priority: 1
       });
 

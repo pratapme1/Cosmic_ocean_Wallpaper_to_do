@@ -32,12 +32,17 @@ interface ApiService {
         @Query("theme") theme: String? = null,
         @Query("resolution") resolution: String? = null,
         @Query("enhanced") enhanced: Boolean = true,
-        @Query("timestamp") timestamp: Long? = null
+        @Query("timestamp") timestamp: Long? = null,
+        @Query("timezone") timezone: String? = null
     ): Response<ResponseBody>
 
     // ==================== Tasks ====================
     @POST("api/tasks")
     suspend fun createTask(@Body body: Map<String, String>): Response<com.cosmicocean.model.TaskResponse>
+
+    // Epic 8: LLM Intelligence Enhancement
+    @POST("api/tasks/parse-llm")
+    suspend fun parseTaskLLM(@Body body: com.cosmicocean.model.ParseRequest): Response<com.cosmicocean.model.ParseLLMResponse>
 
     @GET("api/tasks")
     suspend fun getTasks(): Response<List<com.cosmicocean.model.TaskResponse>>

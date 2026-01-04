@@ -27,6 +27,11 @@ const { MockClient } = require('./utils/mock-client');
 const cacheService = require('./services/cache');
 const { queryWithRetry } = require('./utils/db-retry');
 
+// LLM Intelligence (Epic 8)
+const { parseLLM } = require('./utils/llm-task-parser');
+const { llmRateLimiter } = require('./middleware/rate-limiter');
+const { startWorker, stopWorker } = require('./services/message-worker');
+
 // Authentication & Rate Limiting
 const { verifyToken, optionalAuth, getUserId } = require('./middleware/auth');
 const { globalLimiter, authLimiter, wallpaperLimiter, taskCreationLimiter } = require('./middleware/rate-limit');
@@ -239,8 +244,9 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
     const mode = 'one_thing';
     const useEnhanced = req.query.enhanced !== 'false'; // Use enhanced by default
     const timestamp = req.query.timestamp ? parseInt(req.query.timestamp) : Date.now();
+    const timezone = req.query.timezone || 'UTC'; // User's timezone (e.g., 'Asia/Kolkata')
 
-    console.log(`🎨 WALLPAPER REQUEST: userId=${userId}, theme=${theme}, resolution=${resolution}`);
+    console.log(`🎨 WALLPAPER REQUEST: userId=${userId}, theme=${theme}, resolution=${resolution}, timezone=${timezone}`);
 
     // Check cache first (only for non-animated wallpapers)
     const cacheKey = cacheService.wallpaperKey(userId, theme, resolution, mode);
@@ -278,7 +284,7 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
     if (userObj && userObj.done_for_today) {
       // Done for today - celebration wallpaper
       if (useEnhanced) {
-        imageBuffer = await generateEnhancedWallpaper(user, { tasks: [] }, timestamp);
+        imageBuffer = await generateEnhancedWallpaper(user, { tasks: [] }, timestamp, timezone);
       } else {
         imageBuffer = await generateWallpaper(user, { topTask: null, count: 0 });
       }
@@ -308,7 +314,7 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
         imageBuffer = await generateEnhancedWallpaper(user, {
           tasks: prioritized,
           allTasks: allTasksResult.rows
-        }, timestamp);
+        }, timestamp, timezone);
       } else {
         imageBuffer = await generateWallpaper(user, { tasks: topTasks, count });
       }
@@ -361,6 +367,61 @@ app.get('/api/tasks', optionalAuth, async (req, res) => {
   }
 });
 
+// GET /api/tasks/all - Returns ALL tasks with their current status
+app.get('/api/tasks/all', optionalAuth, async (req, res) => {
+  try {
+    const userId = getUserId(req);
+
+    // Get all tasks regardless of status
+    const result = await req.dbClient.query(`
+      SELECT
+        id,
+        title,
+        completed,
+        archived,
+        priority,
+        category,
+        context_tags,
+        estimate_minutes,
+        due_date,
+        due_time,
+        snoozed_until,
+        created_at,
+        updated_at,
+        CASE
+          WHEN completed THEN 'completed'
+          WHEN archived THEN 'archived'
+          WHEN snoozed_until IS NOT NULL AND snoozed_until > NOW() THEN 'snoozed'
+          ELSE 'active'
+        END as status
+      FROM tasks
+      WHERE user_id = $1
+      ORDER BY
+        CASE
+          WHEN completed THEN 3
+          WHEN archived THEN 4
+          WHEN snoozed_until IS NOT NULL AND snoozed_until > NOW() THEN 2
+          ELSE 1
+        END,
+        priority DESC,
+        due_date ASC NULLS LAST,
+        created_at DESC
+    `, [userId]);
+
+    res.json({
+      total: result.rows.length,
+      active: result.rows.filter(t => t.status === 'active').length,
+      completed: result.rows.filter(t => t.status === 'completed').length,
+      archived: result.rows.filter(t => t.status === 'archived').length,
+      snoozed: result.rows.filter(t => t.status === 'snoozed').length,
+      tasks: result.rows
+    });
+  } catch (err) {
+    console.error('Get all tasks error:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
 // GET /api/tasks/:id
 app.get('/api/tasks/:id', optionalAuth, async (req, res) => {
   try {
@@ -379,6 +440,49 @@ app.get('/api/tasks/:id', optionalAuth, async (req, res) => {
   } catch (err) {
     console.error('Get task error:', err);
     res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// POST /api/tasks/parse-llm (Epic 8: LLM Intelligence)
+// Parses user input using Gemini LLM with graceful fallback
+app.post('/api/tasks/parse-llm', llmRateLimiter, verifyToken, async (req, res) => {
+  try {
+    const { title } = req.body;
+
+    if (!title || typeof title !== 'string') {
+      return res.status(400).json({
+        error: 'Invalid input',
+        message: 'title is required and must be a string'
+      });
+    }
+
+    // Parse using LLM (automatically falls back to local parser on error)
+    const parsedData = await parseLLM(title);
+
+    // Return parsed result
+    res.json({
+      success: true,
+      parsed: parsedData,
+      originalInput: title,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('[Parse LLM Endpoint] Error:', error);
+
+    // Fallback to local parser on any error
+    const fallbackResult = parseTask(req.body.title || '');
+
+    res.json({
+      success: true,
+      parsed: {
+        ...fallbackResult,
+        source: 'local_fallback',
+        reason: 'endpoint_error'
+      },
+      originalInput: req.body.title,
+      timestamp: new Date().toISOString()
+    });
   }
 });
 
@@ -674,7 +778,7 @@ app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
-    version: '1.2.1', // NLP fixes + Android star physics
+    version: '1.3.0', // Epic 8 Week 4: LLM Message Intelligence + v1.2.2 bug fixes
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {
@@ -695,9 +799,19 @@ app.use(errorHandler);
 
 // Only start server if not in test mode
 let server;
+let messageWorkerInterval;
+
 if (process.env.NODE_ENV !== 'test') {
   server = app.listen(port, () => {
     console.log(`Backend running on http://localhost:${port}`);
+
+    // Start message generation worker (Epic 8)
+    if (process.env.ENABLE_LLM_MESSAGES === 'true') {
+      messageWorkerInterval = startWorker();
+      console.log('[Epic8] Message generation worker started');
+    } else {
+      console.log('[Epic8] Message generation worker disabled (ENABLE_LLM_MESSAGES not set)');
+    }
   });
 }
 
@@ -707,6 +821,12 @@ process.on('SIGTERM', async () => {
   if (server) {
     server.close(async () => {
       console.log('HTTP server closed');
+
+      // Stop message worker (Epic 8)
+      if (messageWorkerInterval) {
+        stopWorker(messageWorkerInterval);
+        console.log('Message worker stopped');
+      }
 
       // Close database pool
       if (client && !(client instanceof MockClient)) {

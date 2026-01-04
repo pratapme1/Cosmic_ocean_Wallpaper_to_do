@@ -125,14 +125,16 @@ class RealTimeWallpaperService : Service() {
                 val theme = prefsManager.getTheme()
                 val resolution = prefsManager.getResolution()
                 val timestamp = System.currentTimeMillis()
+                val timezone = java.util.TimeZone.getDefault().id // e.g., "Asia/Kolkata"
 
-                Log.d(TAG, "Fetching wallpaper: theme=$theme, resolution=$resolution, ts=$timestamp")
+                Log.d(TAG, "Fetching wallpaper: theme=$theme, resolution=$resolution, timezone=$timezone, ts=$timestamp")
 
                 val response = NetworkModule.getApi(applicationContext).getWallpaper(
                     theme = theme,
                     resolution = resolution,
                     enhanced = true,
-                    timestamp = timestamp
+                    timestamp = timestamp,
+                    timezone = timezone
                 )
 
                 if (response.isSuccessful && response.body() != null) {

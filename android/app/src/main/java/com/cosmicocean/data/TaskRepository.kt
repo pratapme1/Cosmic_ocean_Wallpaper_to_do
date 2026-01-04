@@ -1,8 +1,12 @@
 package com.cosmicocean.data
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.util.Log
 import com.cosmicocean.model.EchoInterval
+import com.cosmicocean.model.ParseRequest
+import com.cosmicocean.model.ParsedTaskResult
 import com.cosmicocean.model.Star
 import com.cosmicocean.model.TaskResponse
 import com.cosmicocean.network.ApiService
@@ -11,7 +15,8 @@ import kotlinx.coroutines.flow.map
 
 class TaskRepository(
     private val starDao: StarDao,
-    private val apiService: ApiService
+    private val apiService: ApiService,
+    private val context: Context
 ) {
     companion object {
         private const val TAG = "TaskRepository"
@@ -20,6 +25,93 @@ class TaskRepository(
         return starDao.getAllActiveStars().map { entities ->
             entities.map { it.toDomain() }
         }
+    }
+
+    /**
+     * Epic 8: LLM Intelligence Enhancement
+     * Parse task input using LLM with graceful fallback
+     *
+     * Decision logic:
+     * 1. Check network connectivity
+     * 2. Check if LLM enabled in user preferences (default: true)
+     * 3. If both true, call LLM endpoint
+     * 4. On any error, return local fallback
+     *
+     * @param input User's natural language input
+     * @return ParsedTaskResult with structured data
+     */
+    suspend fun parseTaskInput(input: String): ParsedTaskResult {
+        // Check network connectivity
+        if (!isNetworkAvailable()) {
+            Log.d(TAG, "LLM Parser: Network unavailable, using local fallback")
+            return createLocalFallback(input, "network_unavailable")
+        }
+
+        // TODO: Check user preferences (default: enabled)
+        // For now, always attempt LLM parsing if network is available
+        val llmEnabled = true
+
+        if (!llmEnabled) {
+            Log.d(TAG, "LLM Parser: Disabled by user preferences")
+            return createLocalFallback(input, "user_disabled")
+        }
+
+        // Attempt LLM parsing
+        return try {
+            val response = apiService.parseTaskLLM(ParseRequest(title = input))
+
+            if (response.isSuccessful && response.body() != null) {
+                val result = response.body()!!.parsed
+                Log.d(TAG, "LLM Parser: Success (source=${result.source}, confidence=${result.confidence})")
+                result
+            } else {
+                Log.e(TAG, "LLM Parser: API error ${response.code()}")
+                createLocalFallback(input, "api_error_${response.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "LLM Parser: Exception - ${e.message}")
+            createLocalFallback(input, "exception")
+        }
+    }
+
+    /**
+     * Check if network is available
+     */
+    private fun isNetworkAvailable(): Boolean {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val network = connectivityManager?.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    /**
+     * Create local fallback parse result
+     * This is a simplified version - the backend's local parser is more comprehensive
+     */
+    private fun createLocalFallback(input: String, reason: String): ParsedTaskResult {
+        return ParsedTaskResult(
+            title = input.trim(),
+            dueDate = null,
+            dueTime = null,
+            estimateMinutes = null,
+            priority = 2, // Default medium priority
+            category = null,
+            energyLevel = "medium",
+            contextTags = extractContextTags(input),
+            isRecurring = false,
+            recurringPattern = null,
+            confidence = 0.5,
+            source = "local_fallback",
+            reason = reason
+        )
+    }
+
+    /**
+     * Extract @tags from input (simple regex)
+     */
+    private fun extractContextTags(input: String): List<String> {
+        val regex = Regex("@\\w+")
+        return regex.findAll(input).map { it.value }.toList()
     }
 
     suspend fun addStar(star: Star) {

@@ -21,6 +21,7 @@ const { renderTextToSvg } = require('./text-renderer');
 const { MessageEngine } = require('./message-engine');
 const { AtmosphereController } = require('./atmosphere-controller');
 const { StatsAggregator } = require('./stats-aggregator');
+const { getCurrentMessage } = require('./wallpaper-message-provider');
 
 // Initialize intelligence layer components
 const messageEngine = new MessageEngine();
@@ -322,9 +323,10 @@ function escapeXml(text) {
  * @param {object} user - User object with theme, resolution preferences
  * @param {object} data - Data object with tasks array
  * @param {number} timestamp - Optional timestamp for animation state
+ * @param {string} timezone - User's timezone (e.g., 'Asia/Kolkata')
  * @returns {Promise<Buffer>} PNG image buffer
  */
-async function generateEnhancedWallpaper(user, data, timestamp = Date.now()) {
+async function generateEnhancedWallpaper(user, data, timestamp = Date.now(), timezone = 'UTC') {
   try {
     const { theme = 'cosmic', resolution = '1080x1920', done_for_today = false } = user;
     const [width, height] = resolution.split('x').map(Number);
@@ -350,9 +352,38 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now()) {
     const stats = statsAggregator.computeStats(allTasks);
     console.log(`[Intelligence] Stats: streak=${stats.streakDays}, today=${stats.completedToday}`);
 
-    // Generate intelligent message
-    const intelligentMessage = messageEngine.generateMessage(user, tasks, new Date(), stats);
-    console.log(`[Intelligence] Message: "${intelligentMessage.text}" (type: ${intelligentMessage.type})`);
+    // Generate intelligent message (Epic 8: LLM-powered with fallback)
+    let intelligentMessage;
+
+    try {
+      // Try to get LLM-generated message from cache
+      const messageContext = {
+        pendingCount: tasks.length,
+        completedToday: stats.completedToday,
+        timeOfDay: new Date().getHours() < 12 ? 'MORNING' : new Date().getHours() < 17 ? 'AFTERNOON' : 'EVENING',
+        urgencyScore: atmosphere.urgencyScore
+      };
+
+      const llmMessage = await getCurrentMessage(user.id, messageContext);
+
+      if (llmMessage && llmMessage.message) {
+        intelligentMessage = {
+          text: llmMessage.message,
+          type: llmMessage.intent || 'llm_generated',
+          source: llmMessage.source,
+          voice: llmMessage.voice
+        };
+        console.log(`[Intelligence] LLM Message: "${intelligentMessage.text}" (source: ${llmMessage.source})`);
+      } else {
+        throw new Error('No LLM message available');
+      }
+    } catch (error) {
+      // Fallback to template-based message engine
+      console.log(`[Intelligence] LLM message unavailable (${error.message}), using templates`);
+      intelligentMessage = messageEngine.generateMessage(user, tasks, new Date(), stats);
+      intelligentMessage.source = 'template_engine';
+      console.log(`[Intelligence] Template Message: "${intelligentMessage.text}" (type: ${intelligentMessage.type})`);
+    }
 
     // =====================================
     // END INTELLIGENCE LAYER
@@ -387,8 +418,8 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now()) {
 
     // Layer 4: Task overlay with text (using satori for serverless font rendering)
     // Now includes intelligent message!
-    console.log(`[Wallpaper] Rendering text with SATORI (${tasks.length} tasks)`);
-    const textSvg = await renderTextToSvg(layout, tasks, colors, done_for_today, intelligentMessage);
+    console.log(`[Wallpaper] Rendering text with SATORI (${tasks.length} tasks, timezone=${timezone})`);
+    const textSvg = await renderTextToSvg(layout, tasks, colors, done_for_today, intelligentMessage, timezone);
     console.log(`[Wallpaper] Text SVG generated: ${textSvg.length} chars, has paths: ${textSvg.includes('<path')}`);
     layers.push({ input: Buffer.from(textSvg), blend: 'over' });
 

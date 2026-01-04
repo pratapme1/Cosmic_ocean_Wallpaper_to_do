@@ -6,6 +6,7 @@
 const satori = require('satori').default;
 const fs = require('fs');
 const path = require('path');
+const { createCanvas } = require('canvas');
 
 // Load font files as ArrayBuffer (required by satori)
 const fontsDir = path.join(__dirname, '../fonts');
@@ -69,15 +70,74 @@ function dp(dpValue, density) {
 }
 
 /**
+ * Truncate text to fit within maxWidth pixels using proper font measurement
+ * Based on WallpaperGenerator.kt approach - uses pixel-based measurement instead of character count
+ *
+ * @param {string} text - Text to truncate
+ * @param {number} fontSize - Font size in pixels
+ * @param {number} fontWeight - Font weight (400 or 500)
+ * @param {number} maxWidth - Maximum width in pixels
+ * @returns {string} Truncated text with ellipsis if needed
+ */
+function truncateText(text, fontSize, fontWeight, maxWidth) {
+  if (!text || maxWidth <= 0) return '';
+
+  // Create a canvas context for text measurement
+  const canvas = createCanvas(1, 1);
+  const ctx = canvas.getContext('2d');
+  ctx.font = `${fontWeight} ${fontSize}px Inter`;
+
+  // Measure full text width
+  const fullWidth = ctx.measureText(text).width;
+  if (fullWidth <= maxWidth) {
+    return text;
+  }
+
+  // Need to truncate - measure ellipsis
+  const ellipsis = '...';
+  const ellipsisWidth = ctx.measureText(ellipsis).width;
+  const availableWidth = maxWidth - ellipsisWidth;
+
+  if (availableWidth <= 0) {
+    return ellipsis;
+  }
+
+  // Binary search for the maximum number of characters that fit
+  let left = 0;
+  let right = text.length;
+  let bestFit = 0;
+
+  while (left <= right) {
+    const mid = Math.floor((left + right) / 2);
+    const substring = text.substring(0, mid);
+    const width = ctx.measureText(substring).width;
+
+    if (width <= availableWidth) {
+      bestFit = mid;
+      left = mid + 1;
+    } else {
+      right = mid - 1;
+    }
+  }
+
+  if (bestFit === 0) {
+    return ellipsis;
+  }
+
+  return text.substring(0, bestFit) + ellipsis;
+}
+
+/**
  * Render text layer to SVG using satori
  * @param {object} layout - Layout configuration
  * @param {array} tasks - Array of tasks
  * @param {object} colors - Color palette
  * @param {boolean} doneForToday - Done for today flag
  * @param {object} intelligentMessage - Optional intelligent message from MessageEngine
+ * @param {string} timezone - User's timezone (e.g., 'Asia/Kolkata', 'America/New_York')
  * @returns {Promise<string>} SVG string
  */
-async function renderTextToSvg(layout, tasks, colors, doneForToday, intelligentMessage = null) {
+async function renderTextToSvg(layout, tasks, colors, doneForToday, intelligentMessage = null, timezone = 'UTC') {
   const { width, height, layoutZones, typography, margins, density } = layout;
   const taskZone = layoutZones.task;
 
@@ -150,21 +210,31 @@ async function renderTextToSvg(layout, tasks, colors, doneForToday, intelligentM
       },
     };
   } else {
-    // Task list
-    const topTasks = tasks.slice(0, 3);
-    const remainingCount = Math.max(0, tasks.length - 3);
+    // Task list - show fewer tasks on small screens to fit
+    const maxTasks = width < 500 ? 2 : 3; // Small screens = 2 tasks only
+    const topTasks = tasks.slice(0, maxTasks);
+    const remainingCount = Math.max(0, tasks.length - maxTasks);
 
     const taskElements = topTasks.map((task, index) => {
       const priorityColor = task.priority === 2 ? colors.accentSecondary :
                            task.priority === 1 ? colors.accentPrimary :
                            colors.textSecondary;
 
-      // Truncate long titles
-      const maxTitleLength = 35;
-      let title = task.title || 'Untitled';
-      if (title.length > maxTitleLength) {
-        title = title.substring(0, maxTitleLength - 3) + '...';
-      }
+      // Calculate available width for title (pixel-based, not character-based!)
+      // Task area uses 88% of screen width (6% margins on each side = 12% total)
+      const taskAreaWidth = width * 0.88;
+      // Priority dot: 6dp diameter + 12dp margin
+      const priorityDotWidth = dp(6, density) + dp(12, density);
+      // Available width for title text
+      const titleMaxWidth = taskAreaWidth - priorityDotWidth - margins.horizontal;
+
+      // Truncate title using pixel-based measurement
+      const title = truncateText(
+        task.title || 'Untitled',
+        typography.titleLarge,  // Font size
+        500,  // Font weight (Medium)
+        titleMaxWidth
+      );
 
       // Build category badge if category exists and not 'general'
       const categoryBadge = task.category && task.category !== 'general' ? {
@@ -302,7 +372,7 @@ async function renderTextToSvg(layout, tasks, colors, doneForToday, intelligentM
                       }
                     }
 
-                    const countdown = getLiveCountdown(fullDueDate);
+                    const countdown = getLiveCountdown(fullDueDate, timezone);
                     console.log(`[COUNTDOWN DEBUG] countdown result:`, countdown);
                     if (!countdown) return null;
 
@@ -343,11 +413,12 @@ async function renderTextToSvg(layout, tasks, colors, doneForToday, intelligentM
       };
     });
 
-    // Current time
+    // Current time - use user's timezone
     const currentTime = new Date().toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
-      hour12: true
+      hour12: true,
+      timeZone: timezone
     });
 
     // Build intelligent message element if provided
@@ -379,6 +450,7 @@ async function renderTextToSvg(layout, tasks, colors, doneForToday, intelligentM
       },
     } : null;
 
+    // Simple layout - no time display (device lock screen shows time)
     element = {
       type: 'div',
       props: {
@@ -421,28 +493,6 @@ async function renderTextToSvg(layout, tasks, colors, doneForToday, intelligentM
               children: `+ ${remainingCount} more`,
             },
           } : null,
-          // Spacer
-          {
-            type: 'div',
-            props: {
-              style: { flex: 1 },
-            },
-          },
-          // Time at bottom
-          {
-            type: 'div',
-            props: {
-              style: {
-                color: colors.textSecondary,
-                fontSize: typography.displayLarge,
-                fontWeight: 300,
-                textAlign: 'center',
-                opacity: 0.5,
-                marginBottom: margins.vertical,
-              },
-              children: currentTime,
-            },
-          },
         ].filter(Boolean),
       },
     };
@@ -515,12 +565,14 @@ function formatEstimate(minutes) {
 /**
  * Get live countdown for tasks due within 24 hours
  * @param {Date} dueDate - Task due date
+ * @param {string} timezone - User's timezone for accurate comparison
  * @returns {object|null} Countdown object or null
  */
-function getLiveCountdown(dueDate) {
+function getLiveCountdown(dueDate, timezone = 'UTC') {
   if (!dueDate) return null;
 
-  const now = new Date();
+  // Get current time in user's timezone
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: timezone }));
   const due = new Date(dueDate);
   const diffMs = due - now;
   const diffMinutes = Math.floor(diffMs / (1000 * 60));
