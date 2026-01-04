@@ -28,8 +28,10 @@ let model = null;
 function initializeGemini() {
   if (!genAI && process.env.GEMINI_API_KEY) {
     genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    // Use configurable model name, default to gemini-2.0-flash-lite
+    const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite';
     model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
+      model: modelName,
       generationConfig: {
         temperature: 0, // Deterministic parsing
         responseMimeType: 'application/json'

@@ -417,8 +417,10 @@ async function generateMessagesLLM(userId, context) {
     const prompt = buildMessagePrompt(context, voice, intent, recentMessages);
 
     // Call Gemini
+    // Use configurable model name, default to gemini-2.0-flash-lite
+    const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite';
     const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
+      model: modelName,
       generationConfig: {
         temperature: 0.9,  // Higher creativity for variety
         maxOutputTokens: 150,

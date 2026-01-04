@@ -4,12 +4,15 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.Log
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.cosmicocean.model.EchoInterval
 import com.cosmicocean.model.ParseRequest
 import com.cosmicocean.model.ParsedTaskResult
 import com.cosmicocean.model.Star
 import com.cosmicocean.model.TaskResponse
 import com.cosmicocean.network.ApiService
+import com.cosmicocean.worker.WallpaperUpdateWorker
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -20,6 +23,20 @@ class TaskRepository(
 ) {
     companion object {
         private const val TAG = "TaskRepository"
+    }
+
+    /**
+     * Trigger immediate wallpaper update after task changes
+     * This ensures lock screen reflects the latest task list without waiting for scheduled update
+     */
+    private fun triggerImmediateWallpaperUpdate() {
+        try {
+            val updateRequest = OneTimeWorkRequestBuilder<WallpaperUpdateWorker>().build()
+            WorkManager.getInstance(context).enqueue(updateRequest)
+            Log.d(TAG, "Triggered immediate wallpaper update")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to trigger wallpaper update: ${e.message}")
+        }
     }
     fun getAllActiveStars(): Flow<List<Star>> {
         return starDao.getAllActiveStars().map { entities ->
@@ -189,6 +206,9 @@ class TaskRepository(
             // Log error but don't fail - offline mode
             Log.e(TAG, "Failed to sync new star $oldId to backend: ${e.message}", e)
         }
+
+        // Trigger immediate wallpaper update to reflect new task
+        triggerImmediateWallpaperUpdate()
     }
 
     suspend fun updateStar(star: Star) {
@@ -235,6 +255,9 @@ class TaskRepository(
             android.util.Log.e("TaskRepository", "Failed to sync star ${star.id} to backend: ${e.message}", e)
             println("Failed to sync star ${star.id} to backend: ${e.message}")
         }
+
+        // Trigger immediate wallpaper update to reflect task changes
+        triggerImmediateWallpaperUpdate()
     }
 
     suspend fun deleteStar(star: Star) {
@@ -248,6 +271,9 @@ class TaskRepository(
             // Log error but don't fail - offline mode
             println("Failed to sync deletion of star ${star.id} to backend: ${e.message}")
         }
+
+        // Trigger immediate wallpaper update to reflect task deletion
+        triggerImmediateWallpaperUpdate()
     }
 
     private fun StarEntity.toDomain(): Star {
