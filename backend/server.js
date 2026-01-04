@@ -272,6 +272,7 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
     // CRITICAL: Use query params directly to match cache key
     // Using database values causes cache inconsistency when settings change
     const user = {
+      id: userId,  // CRITICAL: Required for LLM message generation
       theme: theme,  // Use query param (matches cache key)
       resolution: resolution,  // Use query param (matches cache key)
       done_for_today: userObj?.done_for_today || false
