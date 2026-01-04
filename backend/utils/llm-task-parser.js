@@ -224,7 +224,7 @@ async function parseLLM(input) {
     const prompt = buildPrompt(input, context);
 
     // Call Claude with timeout
-    const timeoutMs = 5000; // 5 second timeout
+    const timeoutMs = 8000; // 8 second timeout (increased from 5s for reliability)
     const modelName = process.env.CLAUDE_MODEL || 'claude-3-haiku-20240307';
 
     const parsePromise = anthropic.messages.create({

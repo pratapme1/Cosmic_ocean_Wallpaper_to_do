@@ -423,7 +423,7 @@ async function generateMessagesLLM(userId, context) {
     const modelName = process.env.CLAUDE_MODEL || 'claude-3-haiku-20240307';
 
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Claude timeout (10s)')), 10000);
+      setTimeout(() => reject(new Error('Claude timeout (15s)')), 15000);
     });
 
     const generatePromise = anthropic.messages.create({

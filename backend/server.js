@@ -493,12 +493,15 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
     const userId = getUserId(req);
     const { rawTitle, title: directTitle, priority, context_location, context_time, x, y, is_subtask, is_recurring, echo_interval } = req.body;
 
-    // Parse with comprehensive NLP (Epic 7: NLP Integration)
+    // Parse with comprehensive NLP (Epic 7: NLP Integration) + LLM (Epic 8)
     let title, dueDate, estimateMinutes, category, contextTags, energy, recurring, timeContext, calculatedPriority;
     const inputText = rawTitle || directTitle;
 
     try {
-      const parsed = parseTask(inputText);
+      // Use LLM parsing if enabled, otherwise use local NLP
+      const shouldUseLLM = process.env.ENABLE_LLM_PARSING === 'true' && process.env.ANTHROPIC_API_KEY;
+      const parsed = shouldUseLLM ? await parseLLM(inputText) : parseTask(inputText);
+
       title = parsed.title;
       dueDate = parsed.dueDate;
       estimateMinutes = parsed.estimateMinutes;
@@ -513,7 +516,7 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
       // Use explicit priority if provided, otherwise use NLP-inferred priority
       calculatedPriority = priority !== undefined ? priority : (parsed.priority || 2);
 
-      console.log('[NLP] Parsed task:', {
+      console.log(`[${shouldUseLLM ? 'LLM' : 'NLP'}] Parsed task:`, {
         input: inputText,
         title,
         category,
@@ -521,10 +524,11 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
         priority: calculatedPriority,
         energy,
         recurring: recurring ? recurring.interval : null,
-        confidence: parsed.confidence
+        confidence: parsed.confidence,
+        source: parsed.source || 'local'
       });
     } catch (parseErr) {
-      console.error('Failed to parse task with NLP:', parseErr);
+      console.error('Failed to parse task:', parseErr);
       // Fallback to basic parsing
       title = inputText || 'New Task';
       dueDate = null;
