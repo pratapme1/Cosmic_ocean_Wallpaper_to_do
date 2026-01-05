@@ -49,6 +49,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Files modified: `message-generator-llm.js`, `llm-task-parser.js`
 - Documentation: `LLM_CHANGES_2026-01-05.md`
 
+### Known Issues (Post-Deployment)
+- ⚠️ **Message generation timeout** (discovered 2026-01-05 19:08 UTC)
+  - Root cause: 30-day task query + StatsAggregator computation exceeds 15s timeout
+  - Impact: System falls back to template messages (graceful degradation)
+  - User impact: MEDIUM - users get functional but not personalized messages
+  - Status: OPEN - fix scheduled for 2026-01-06
+  - Planned fixes:
+    1. Increase timeout from 15s → 25s
+    2. Optimize 30-day query (add LIMIT 500)
+    3. Long-term: implement stats caching
+  - Details: `backend/PRODUCTION_ISSUE_v1.4.0_TIMEOUT.md`
+
 ---
 
 ## [1.3.2] - 2026-01-05
