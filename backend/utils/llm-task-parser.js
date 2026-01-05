@@ -250,13 +250,17 @@ async function parseLLM(input) {
       // Remove markdown code blocks if present
       let cleanJson = responseText.replace(/```json\n?|\n?```/g, '').trim();
 
+      console.log('[LLM Parser] Response preview:', responseText.substring(0, 100));
+
       // If response starts with text (not JSON), try to extract JSON object
       if (!cleanJson.startsWith('{')) {
-        const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
+        // Use non-greedy match to find first complete JSON object
+        const jsonMatch = cleanJson.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/);
         if (jsonMatch) {
           cleanJson = jsonMatch[0];
-          console.log('[LLM Parser] Extracted JSON from text response');
+          console.log('[LLM Parser] Extracted JSON:', cleanJson.substring(0, 100));
         } else {
+          console.error('[LLM Parser] No JSON found in:', cleanJson.substring(0, 200));
           throw new Error('No JSON object found in response');
         }
       }
@@ -264,7 +268,7 @@ async function parseLLM(input) {
       llmResponse = JSON.parse(cleanJson);
     } catch (parseError) {
       console.error('[LLM Parser] JSON parse error:', parseError.message);
-      console.error('[LLM Parser] Raw response:', responseText.substring(0, 200));
+      console.error('[LLM Parser] Raw response:', responseText.substring(0, 300));
       throw new Error('Invalid LLM response format');
     }
 
