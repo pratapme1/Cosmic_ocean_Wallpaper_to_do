@@ -12,6 +12,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const pool = require('../db/pool');
+const { StatsAggregator } = require('./stats-aggregator');
 
 // Initialize Claude
 let anthropic = null;
@@ -80,12 +81,13 @@ const INTENTS = {
 
 /**
  * Build narrative context from user data
+ * Enhanced with StatsAggregator for historical context and patterns
  */
 async function buildMessageContext(userId) {
   const client = await pool.connect();
 
   try {
-    // Get tasks summary
+    // Get tasks summary (basic counts)
     const tasksQuery = `
       SELECT
         COUNT(*) FILTER (WHERE completed = false AND archived = false) as pending_count,
@@ -110,6 +112,21 @@ async function buildMessageContext(userId) {
     const urgentResult = await client.query(urgentQuery, [userId]);
     const urgentTask = urgentResult.rows[0] || null;
 
+    // ENHANCEMENT: Get ALL tasks (including completed) for StatsAggregator
+    const allTasksQuery = `
+      SELECT *
+      FROM tasks
+      WHERE user_id = $1
+      AND (archived = false OR archived IS NULL)
+      AND (created_at > NOW() - INTERVAL '30 days' OR completed_at > NOW() - INTERVAL '30 days')
+    `;
+    const allTasksResult = await client.query(allTasksQuery, [userId]);
+    const allTasks = allTasksResult.rows;
+
+    // ENHANCEMENT: Calculate stats using StatsAggregator
+    const statsAggregator = new StatsAggregator();
+    const stats = statsAggregator.computeStats(allTasks);
+
     // Calculate time of day
     const hour = new Date().getHours();
     let timeOfDay;
@@ -124,15 +141,28 @@ async function buildMessageContext(userId) {
     const dayOfWeek = dayNames[new Date().getDay()];
 
     return {
+      // Basic task counts
       pendingCount: parseInt(tasks.pending_count) || 0,
       completedToday: parseInt(tasks.completed_today) || 0,
       dueToday: parseInt(tasks.due_today) || 0,
       overdue: parseInt(tasks.overdue) || 0,
       nextDueDate: tasks.next_due_date,
       urgentTask,
+
+      // Time context
       timeOfDay,
       dayOfWeek,
-      hour
+      hour,
+
+      // ENHANCEMENT: Historical stats and patterns
+      stats: {
+        completedThisWeek: stats.completedThisWeek,
+        totalCompleted: stats.totalCompleted,
+        streakDays: stats.streakDays,
+        longestStreak: stats.longestStreak,
+        averagePerDay: stats.averagePerDay,
+        patterns: stats.patterns  // peakPeriod, topCategory, mostProductiveDay
+      }
     };
   } finally {
     client.release();
@@ -308,6 +338,49 @@ function buildMessagePrompt(context, voice, intent, recentMessages) {
   }
 
   narrative += `\n\nTime context: ${context.dayOfWeek} ${context.timeOfDay.toLowerCase()}.`;
+
+  // ENHANCEMENT: Add historical stats and patterns
+  if (context.stats) {
+    narrative += `\n\nHistorical context:`;
+
+    // Streak information (only if significant)
+    if (context.stats.streakDays >= 2) {
+      narrative += `\n- Current streak: ${context.stats.streakDays} days`;
+      if (context.stats.longestStreak > context.stats.streakDays) {
+        narrative += ` (longest: ${context.stats.longestStreak} days)`;
+      }
+    }
+
+    // Weekly completions (only if data exists)
+    if (context.stats.completedThisWeek > 0) {
+      narrative += `\n- Completed this week: ${context.stats.completedThisWeek} tasks`;
+    }
+
+    // All-time completions (only if significant)
+    if (context.stats.totalCompleted >= 10) {
+      narrative += `\n- Total completed: ${context.stats.totalCompleted} tasks`;
+    }
+
+    // Average (only if data exists)
+    if (context.stats.averagePerDay > 0) {
+      narrative += `\n- Average: ${context.stats.averagePerDay} tasks/day`;
+    }
+
+    // Pattern insights (only if enough data)
+    if (context.stats.patterns) {
+      const { peakPeriod, topCategory, mostProductiveDay } = context.stats.patterns;
+
+      if (peakPeriod) {
+        narrative += `\n- Peak productivity: ${peakPeriod}`;
+      }
+      if (topCategory && topCategory !== 'general') {
+        narrative += `\n- Strength: ${topCategory} tasks`;
+      }
+      if (mostProductiveDay) {
+        narrative += `\n- Most productive: ${mostProductiveDay}s`;
+      }
+    }
+  }
 
   const freshnessConstraints = buildFreshnessConstraints(recentMessages);
 

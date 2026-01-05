@@ -57,31 +57,108 @@ STRICT RULES (CRITICAL - DO NOT HALLUCINATE):
    - Remove trailing: "by", "at", "in", "on", "for"
 
 2. dueDate: ONLY if EXPLICITLY mentioned. Otherwise null.
-   - "tomorrow", "Monday", "Jan 5", "next Friday" → YYYY-MM-DD
+   - "tomorrow"/"tmrw", "today"/"tday" → calculate from ${today}
+   - Day of week: "monday", "tuesday", "friday", "on monday", "on friday", "next friday" → calculate YYYY-MM-DD
+     * If day is ${dayOfWeek} and input says "monday", find next Monday's date
+     * "party on friday" → find next Friday's date → YYYY-MM-DD
+     * "call on monday" → find next Monday's date → YYYY-MM-DD
+   - Date phrases: "end of day"/"eod", "end of week"/"eow", "this weekend", "next week", "next month" → calculate date
+   - Explicit dates: "Jan 5", "1/15", "2026-01-20" → YYYY-MM-DD
    - NO date words in input → null (DO NOT INVENT)
    - "today" → ${today}
-   - "tomorrow" → calculate from ${today}
 
 3. dueTime: ONLY if EXPLICITLY mentioned. Otherwise null.
    - "at 3pm", "by 5:00", "noon" → HH:MM (24-hour)
-   - "in X minutes/hours" → calculate from ${currentTime}
-   - "morning" → 09:00, "afternoon" → 14:00, "evening" → 18:00
+   - "in X minutes/hours" OR abbreviations "in 10m", "in 1h", "in 30min" → calculate from ${currentTime}
+   - Time-of-day words (when used as timing, not just description):
+     "morning task", "task in the morning" → 09:00
+     "afternoon meeting", "task in afternoon" → 14:00
+     "evening call", "task in evening" → 18:00
    - NO time words → null (DO NOT INVENT)
+   - CRITICAL: "in 10m" means "due in 10 minutes" → set dueTime, NOT estimateMinutes
 
 4. estimateMinutes: ONLY from explicit duration mentions.
    - "30 minute call" → 30
    - "quick task" → 15, "1 hour meeting" → 60
    - NO duration mentioned → null
 
-5. priority: Based on EXPLICIT urgency keywords ONLY.
-   - Keywords: "urgent", "asap", "critical", "important", "!!!" → 1 (high)
-   - Keywords: "important" → 2 (medium)
-   - Keywords: "someday", "maybe", "eventually" → 3 (low)
-   - NO keywords → 2 (default)
+5. priority: Infer from BOTH urgency keywords AND time pressure (semantic understanding).
 
-6. category: Infer from keywords, use "other" if uncertain.
-   - Options: work, personal, health, finance, learning, social, errands, other
-   - "email manager" → work, "call mom" → personal, "gym" → health
+   CRITICAL: This determines star size and color in the app:
+   - Priority 1 (HIGH) → 52px RED star (always urgent)
+   - Priority 2 (MEDIUM) → 36px ORANGE/BLUE star (time-based)
+   - Priority 3 (LOW) → 24px BLUE star (future/someday)
+
+   Priority 1 (HIGH) - Use when ANY of these apply:
+   - Explicit urgency: "urgent", "asap", "critical", "now", "immediately", "!!!"
+   - Time pressure: due within 2 hours (CHECK THIS CAREFULLY!)
+     * "in 10 minutes", "in 10m" → Priority 1 (urgent)
+     * "in 1 hour", "in 1h", "in 30m", "in 45min" → Priority 1 (urgent)
+     * "by 3pm today" (if current time is after 1pm) → Priority 1
+     * ANY "in X minutes/hours" where X ≤ 2 hours → Priority 1
+   - Semantic urgency: "emergency", "hurry", "quick"
+
+   Priority 3 (LOW) - ONLY use when EXPLICITLY applies. Otherwise default to Priority 2!
+
+   CRITICAL: Today is ${dayOfWeek}, ${today}. Calculate time distance carefully!
+
+   TWO CRITERIA ONLY (must meet one):
+
+   A) Due date >24 hours away (calculate from today!):
+      * "by friday" when today is ${dayOfWeek} → if friday is >1 day away → Priority 3
+      * "next week", "next monday", "next month" → >1 day away → Priority 3
+      * "physical therapy session friday" → if friday >1 day away → Priority 3
+      * "code review by friday" → if friday >1 day away → Priority 3
+      * "dinner friday 7pm" → if friday >1 day away → Priority 3
+
+   B) Explicit low-priority keywords (ALWAYS Priority 3):
+      * "maybe", "someday", "eventually", "when free", "if time", "could", "might want to"
+      * "maybe clean garage", "someday learn piano" → Priority 3
+
+   DO NOT use Priority 3 for:
+   - Regular tasks without distant dates ("journal", "study", "workout")
+   - Tasks due today, tomorrow, or within 24 hours
+   - Work/health/learning tasks without explicit low-priority keywords
+
+   Priority 2 (MEDIUM) - THIS IS THE DEFAULT! Use when NOT Priority 1 or 3:
+   - Due in 2-24 hours ("tomorrow morning", "today evening", "by 5pm tomorrow")
+   - Regular tasks: "journal", "study", "workout", "call", "email", "meeting"
+   - Work/health/finance/learning tasks without urgency or distant future dates
+   - No deadline specified: "buy groceries", "finish homework", "drink water"
+   - Keywords: "important", "soon", "today" (without distant date)
+
+   DECISION FLOW (FOLLOW THIS ORDER):
+   1. Check Priority 1 criteria first (urgent/within 2hrs) → if yes, Priority 1
+   2. Check Priority 3 criteria second (>24hrs OR low-priority keywords) → if yes, Priority 3
+   3. DEFAULT to Priority 2 if neither 1 nor 3 apply → Priority 2
+
+6. category: Infer from keywords and context. Be specific - only use "other" as last resort.
+
+   Options: work, personal, health, finance, learning, social, errands, other
+
+   PRIORITY ORDER (action keywords override relationship keywords):
+   1. Check ACTION keywords first (buy, study, workout, pay, etc.)
+   2. Then check CONTEXT keywords (family, work, social, etc.)
+
+   Category Keywords:
+   - errands: buy, groceries, shopping, pick up, drop off, mail, post office, pharmacy, return, store, purchase, get
+   - work: email, meeting, presentation, manager, client, project, code, deploy, standup, review, deadline, report
+   - health: workout, gym, exercise, doctor, appointment, yoga, run, meditate, vitamins, therapy, prescription, sleep
+   - finance: pay, rent, bill, budget, money, bank, credit card, taxes, subscription, savings, expense, cancel subscription
+   - learning: study, read, homework, course, tutorial, learn, practice, review, flashcards, chapter, exam, certification
+   - social: coffee, dinner, party, friends, RSVP, wedding, visit, volunteer, game night, hangout
+   - personal: mom, dad, family, call, message, organize, clean, plan, home, journal, personal care
+
+   EXAMPLES:
+   - "buy gift for nephew" → errands (action "buy" takes priority over relationship "nephew")
+   - "call mom" → personal (family relationship)
+   - "meditate for 10 minutes" → health (meditation is wellness)
+   - "finish homework" → learning (homework is education)
+   - "cancel subscriptions" → finance (subscriptions are recurring payments)
+   - "study for certification exam" → learning (studying is education)
+   - "buy groceries" → errands (shopping task)
+   - "team meeting" → work (workplace)
+   - "journal before sleep" → personal (personal care activity)
 
 7. energyLevel: From explicit energy mentions ONLY.
    - Keywords: "high energy", "intense" → "high"
@@ -130,7 +207,17 @@ function validateAndClean(llmResponse, input) {
   const inputLower = input.toLowerCase();
 
   // Date validation - strip if not mentioned
-  const dateWords = ['tomorrow', 'today', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'next week', 'next month', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec', /\d{1,2}\/\d{1,2}/, /\d{4}-\d{2}-\d{2}/];
+  const dateWords = [
+    'tomorrow', 'today', 'tmrw', 'tday', // Common and abbreviations
+    'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+    'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun', // Day abbreviations
+    'next week', 'next month', 'this week', 'this weekend', 'weekend',
+    'end of day', 'eod', 'end of week', 'eow', 'end of month', 'eom',
+    'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
+    /\d{1,2}\/\d{1,2}/, /\d{4}-\d{2}-\d{2}/,
+    /\bon (monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i, // "on friday", "on monday"
+    /\bfinish (this|next) week/i, // "finish this week", "finish next week"
+  ];
   const hasDateMention = dateWords.some(word => {
     if (word instanceof RegExp) {
       return word.test(inputLower);
@@ -167,6 +254,34 @@ function validateAndClean(llmResponse, input) {
   // Validate priority range
   if (![1, 2, 3].includes(llmResponse.priority)) {
     llmResponse.priority = 2;
+  }
+
+  // SEMANTIC TIME-BASED PRIORITY UPGRADE
+  // If LLM set a due_time, check if it's within 2 hours → auto-upgrade to Priority 1
+  // This fixes the issue where LLM parses the time correctly but doesn't infer urgency from it
+  if (llmResponse.dueTime && llmResponse.priority !== 1) {
+    try {
+      const now = new Date();
+      const [hours, minutes] = llmResponse.dueTime.split(':').map(Number);
+      const dueDateTime = new Date();
+      dueDateTime.setHours(hours, minutes, 0, 0);
+
+      // Handle case where due time is tomorrow (e.g., "in 10 minutes" at 23:55 → 00:05)
+      if (dueDateTime < now) {
+        dueDateTime.setDate(dueDateTime.getDate() + 1);
+      }
+
+      const diffMinutes = (dueDateTime - now) / 60000;
+
+      // If due within 2 hours (120 minutes), upgrade to HIGH priority
+      if (diffMinutes > 0 && diffMinutes <= 120) {
+        console.log(`[LLM Parser] Auto-upgrading priority: due in ${Math.round(diffMinutes)}min → Priority 1 (HIGH)`);
+        llmResponse.priority = 1;
+      }
+    } catch (e) {
+      // If time parsing fails, keep original priority
+      console.warn(`[LLM Parser] Could not parse due_time for priority upgrade: ${llmResponse.dueTime}`);
+    }
   }
 
   // Validate category
