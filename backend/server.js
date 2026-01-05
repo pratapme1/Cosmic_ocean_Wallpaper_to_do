@@ -819,7 +819,7 @@ app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
-    version: '1.3.1', // Epic 8: LLM fixes + Vercel Cron support
+    version: '1.3.2', // Epic 8: LLM fixes + Vercel Cron support + auto-deploy test
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {
