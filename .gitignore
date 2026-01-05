@@ -127,3 +127,11 @@ backend/verify-*.js
 .vercel
 .env*.local
 android/app/keystore/
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.webp

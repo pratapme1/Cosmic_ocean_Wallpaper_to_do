@@ -101,6 +101,11 @@ STRICT RULES (CRITICAL - DO NOT HALLUCINATE):
     - "daily standup" → "daily"
     - Not recurring → null
 
+OUTPUT RULES (CRITICAL):
+- Respond with ONLY a valid JSON object.
+- No preamble, no explanations, no markdown, no code fences.
+- The first character must be "{" and the last character must be "}".
+
 RESPONSE FORMAT (JSON):
 {
   "task": "Clean task name",
@@ -249,7 +254,15 @@ async function parseLLM(input) {
     try {
       // Remove markdown code blocks if present
       const cleanJson = responseText.replace(/```json\n?|\n?```/g, '').trim();
-      llmResponse = JSON.parse(cleanJson);
+      let jsonText = cleanJson;
+      if (!jsonText.startsWith('{')) {
+        const firstBrace = jsonText.indexOf('{');
+        const lastBrace = jsonText.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          jsonText = jsonText.slice(firstBrace, lastBrace + 1).trim();
+        }
+      }
+      llmResponse = JSON.parse(jsonText);
     } catch (parseError) {
       console.error('[LLM Parser] JSON parse error:', parseError.message);
       throw new Error('Invalid LLM response format');
