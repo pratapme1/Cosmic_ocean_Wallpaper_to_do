@@ -2,6 +2,31 @@
 
 All notable changes to the Cosmic Ocean backend will be documented in this file.
 
+## [1.3.2] - 2026-01-05
+
+### Fixed
+- **LLM JSON Parsing**: Improved JSON extraction regex to handle Claude's explanatory text
+  - Handles responses like "Here is the parsed task: {...}"
+  - Strips markdown code blocks (```json```)
+  - Better error logging with response preview
+  - Graceful fallback to local parser on JSON errors
+
+- **LLM Integration in POST /api/tasks**:
+  - Now automatically uses Claude LLM when `ENABLE_LLM_PARSING=true`
+  - Previously was hardcoded to local NLP parser only
+  - Added `shouldUseLLM` detection logic
+
+- **Claude Timeout Handling**:
+  - Increased message generation timeout: 10s → 15s
+  - Increased task parsing timeout: 5s → 8s
+  - Reduced timeout errors under production load
+
+### Technical
+- Updated llm-task-parser.js with nested JSON extraction regex
+- Updated server.js POST /api/tasks to use parseLLM() when enabled
+- Updated message-generator-llm.js timeout configuration
+- Added debug logging for LLM response preview
+
 ## [1.2.2] - 2026-01-05
 
 ### Added

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.2] - 2026-01-05
+
+### Fixed - Claude API Integration
+- **LLM JSON Parsing**: Fixed "Unexpected token 'H'" errors from Claude responses
+  - Improved regex to extract JSON from text like "Here is the parsed task: {...}"
+  - Strips markdown code blocks (```json```)
+  - Better error logging and graceful fallback
+
+- **LLM Task Parsing**: POST /api/tasks now uses Claude when enabled
+  - Auto-detects ENABLE_LLM_PARSING flag
+  - Logs show [LLM] vs [NLP] to indicate parser used
+
+- **Timeout Reliability**: Reduced Claude timeout errors
+  - Message generation: 10s → 15s
+  - Task parsing: 5s → 8s
+
+### Deployment
+- Backend v1.3.2 live at https://cosmic-ocean-api.vercel.app
+- Android APK v1.3.2 (versionCode 7)
+
+---
+
 ## [1.3.0-dev] - 2026-01-04
 
 ### Epic 8: LLM Intelligence Enhancement - Week 1 Complete ✅
