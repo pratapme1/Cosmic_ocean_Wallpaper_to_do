@@ -303,6 +303,8 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
       const topTasks = prioritized.slice(0, 3);
       const count = Math.max(0, prioritized.length - 3);
 
+      console.log(`[Wallpaper] userId=${userId}, activeTasks=${prioritized.length}, topTask="${topTasks[0]?.title || 'none'}"`);
+
       if (useEnhanced) {
         // Fetch all tasks (including completed) for intelligence layer stats
         const allTasksResult = await queryWithRetry(client, `
@@ -603,7 +605,8 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
     await req.dbClient.query("UPDATE users SET done_for_today = FALSE WHERE id = $1", [userId]);
 
     // Invalidate wallpaper cache
-    await cacheService.invalidateUserWallpapers(userId);
+    const cacheInvalidated = await cacheService.invalidateUserWallpapers(userId);
+    console.log(`[Task Created] userId=${userId}, title="${title}", cacheInvalidated=${cacheInvalidated}`);
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
