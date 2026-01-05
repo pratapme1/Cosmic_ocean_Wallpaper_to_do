@@ -364,7 +364,12 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now(), tim
         urgencyScore: atmosphere.urgencyScore
       };
 
-      const llmMessage = await getCurrentMessage(user.id, messageContext);
+      // Add timeout to prevent blocking wallpaper generation (5 second max)
+      const messagePromise = getCurrentMessage(user.id, messageContext);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Message fetch timeout (5s)')), 5000)
+      );
+      const llmMessage = await Promise.race([messagePromise, timeoutPromise]);
 
       if (llmMessage && llmMessage.message) {
         intelligentMessage = {
