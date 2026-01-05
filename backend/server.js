@@ -792,11 +792,34 @@ app.delete('/api/tasks/:id', optionalAuth, async (req, res) => {
   }
 });
 
+// Vercel Cron Job: Generate messages for active users
+// Runs every 2 hours via Vercel Cron (see vercel.json)
+app.get('/api/cron/messages', async (req, res) => {
+  // Verify request is from Vercel Cron
+  const authHeader = req.headers.authorization;
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    // Allow without secret in development or if CRON_SECRET not set
+    if (process.env.NODE_ENV === 'production' && process.env.CRON_SECRET) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+  }
+
+  try {
+    console.log('[Cron] Message generation job triggered');
+    const { runWorkerJob } = require('./services/message-worker');
+    const result = await runWorkerJob();
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('[Cron] Message generation failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
-    version: '1.3.0', // Epic 8 Week 4: LLM Message Intelligence + v1.2.2 bug fixes
+    version: '1.3.1', // Epic 8: LLM fixes + Vercel Cron support
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {
@@ -824,9 +847,13 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`Backend running on http://localhost:${port}`);
 
     // Start message generation worker (Epic 8)
-    if (process.env.ENABLE_LLM_MESSAGES === 'true') {
+    // NOTE: On Vercel, use cron job instead (/api/cron/messages)
+    // In-process worker only works on traditional servers
+    if (process.env.ENABLE_LLM_MESSAGES === 'true' && !process.env.VERCEL) {
       messageWorkerInterval = startWorker();
-      console.log('[Epic8] Message generation worker started');
+      console.log('[Epic8] Message generation worker started (in-process)');
+    } else if (process.env.VERCEL) {
+      console.log('[Epic8] On Vercel - using cron job for message generation');
     } else {
       console.log('[Epic8] Message generation worker disabled (ENABLE_LLM_MESSAGES not set)');
     }
