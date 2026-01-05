@@ -494,7 +494,7 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
     const { rawTitle, title: directTitle, priority, context_location, context_time, x, y, is_subtask, is_recurring, echo_interval } = req.body;
 
     // Parse with comprehensive NLP (Epic 7: NLP Integration) + LLM (Epic 8)
-    let title, dueDate, estimateMinutes, category, contextTags, energy, recurring, timeContext, calculatedPriority;
+    let title, dueDate, estimateMinutes, category, contextTags, energy, recurring, timeContext, calculatedPriority, llmDueTime;
     const inputText = rawTitle || directTitle;
 
     try {
@@ -503,15 +503,18 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
       const parsed = shouldUseLLM ? await parseLLM(inputText) : parseTask(inputText);
 
       title = parsed.title;
-      dueDate = parsed.dueDate;
-      estimateMinutes = parsed.estimateMinutes;
+      // LLM parser returns snake_case, local parser returns camelCase - handle both
+      dueDate = parsed.dueDate || parsed.due_date;
+      estimateMinutes = parsed.estimateMinutes || parsed.estimate_minutes;
+      // LLM parser returns due_time as separate string (e.g., "17:00")
+      llmDueTime = parsed.dueTime || parsed.due_time;
 
-      // NEW: Extract NLP metadata
+      // NEW: Extract NLP metadata (handle both naming conventions)
       category = parsed.category || 'general';
-      contextTags = parsed.context || [];
-      energy = parsed.energy || 'medium';
+      contextTags = parsed.context || parsed.context_tags || [];
+      energy = parsed.energy || parsed.energy_level || 'medium';
       recurring = parsed.recurring;
-      timeContext = parsed.timeContext;
+      timeContext = parsed.timeContext || parsed.time_context;
 
       // Use explicit priority if provided, otherwise use NLP-inferred priority
       calculatedPriority = priority !== undefined ? priority : (parsed.priority || 2);
@@ -533,6 +536,7 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
       title = inputText || 'New Task';
       dueDate = null;
       estimateMinutes = null;
+      llmDueTime = null;
       category = 'general';
       contextTags = [];
       energy = 'medium';
@@ -548,7 +552,16 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
       const parsed = parseDateTimeForDB(dueDate);
       dueDateForDB = parsed.date;
       dueTimeForDB = parsed.time;
-      console.log(`[NLP] Parsed due: ${dueDate.toISOString()} -> date=${dueDateForDB}, time=${dueTimeForDB}`);
+      const dueDateStr = dueDate instanceof Date ? dueDate.toISOString() : dueDate;
+      console.log(`[NLP] Parsed due: ${dueDateStr} -> date=${dueDateForDB}, time=${dueTimeForDB}`);
+    }
+    // LLM parser returns due_time as separate string - use it if not already extracted
+    if (!dueTimeForDB && llmDueTime) {
+      // Format: "HH:MM" -> "HH:MM:00" for database
+      dueTimeForDB = llmDueTime.includes(':') && llmDueTime.length === 5
+        ? `${llmDueTime}:00`
+        : llmDueTime;
+      console.log(`[LLM] Using separate due_time: ${dueTimeForDB}`);
     }
 
     const query = `
