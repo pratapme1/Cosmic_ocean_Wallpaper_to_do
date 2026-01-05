@@ -439,8 +439,21 @@ async function generateMessagesLLM(userId, context) {
     const result = await Promise.race([generatePromise, timeoutPromise]);
     const text = result.content[0].text;
 
-    // Parse JSON response
-    const parsed = JSON.parse(text);
+    // Parse JSON response (clean markdown code blocks if present)
+    let cleanJson = text.replace(/```json\n?|\n?```/g, '').trim();
+
+    // If response starts with text (not JSON), try to extract JSON object
+    if (!cleanJson.startsWith('{')) {
+      const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanJson = jsonMatch[0];
+        console.log('[MessageGen] Extracted JSON from text response');
+      } else {
+        throw new Error('No JSON object found in response');
+      }
+    }
+
+    const parsed = JSON.parse(cleanJson);
 
     if (!parsed.messages || !Array.isArray(parsed.messages)) {
       throw new Error('Invalid response format from Claude');
