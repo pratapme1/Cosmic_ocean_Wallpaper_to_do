@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.5] - 2026-01-06
+
+### Fixed - Critical Security Hotfix 🚨
+
+**Problem:** Anthropic API key was being logged in plain text in Vercel production logs
+
+**Severity:** CRITICAL - API key exposed in logs
+
+**Root Cause:**
+```javascript
+// BUGGY CODE (line 537):
+const shouldUseLLM = process.env.ENABLE_LLM_PARSING === 'true' && process.env.ANTHROPIC_API_KEY;
+console.log(`[Task Creation] LLM enabled: ${shouldUseLLM}, ...`);
+```
+
+When both conditions are truthy, JavaScript's `&&` operator returns the **last truthy value** (the API key string), not `true`.
+
+**Example:**
+```javascript
+// WRONG:
+'true' && 'sk-ant-api03-xxx' → 'sk-ant-api03-xxx' (API key string!)
+
+// CORRECT:
+'true' && !!'sk-ant-api03-xxx' → true (boolean)
+```
+
+**Solution:**
+```javascript
+// FIXED CODE (line 537):
+const shouldUseLLM = process.env.ENABLE_LLM_PARSING === 'true' && !!process.env.ANTHROPIC_API_KEY;
+// Now logs: "LLM enabled: true" instead of "LLM enabled: sk-ant-api03-xxx"
+```
+
+**Action Required:**
+- **Rotate Anthropic API key immediately** (exposed key is in production logs)
+- Update Vercel environment variable with new key
+
+**Files Changed:**
+- `backend/server.js` (line 537) - Added `!!` to convert API key to boolean
+
+---
+
+## [1.4.4] - 2026-01-06
+
+### Added - Enhanced Debug Logging
+
+Added extensive logging to diagnose why parsing logs weren't visible in production:
+- `[Task Creation] START - Input: "..."`
+- `[Task Creation] User timezone: ...`
+- `[Task Creation] LLM enabled: true/false`
+- Enhanced `[Task Created]` log with priority and category
+
+**Files Changed:**
+- `backend/server.js` (lines 522, 528, 538, 644)
+
+---
+
 ## [1.4.3] - 2026-01-06
 
 ### Fixed - LLM Priority Detection for Urgent Keywords

@@ -534,7 +534,7 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
 
     try {
       // Use LLM parsing if enabled, otherwise use local NLP
-      const shouldUseLLM = process.env.ENABLE_LLM_PARSING === 'true' && process.env.ANTHROPIC_API_KEY;
+      const shouldUseLLM = process.env.ENABLE_LLM_PARSING === 'true' && !!process.env.ANTHROPIC_API_KEY;
       console.log(`[Task Creation] LLM enabled: ${shouldUseLLM}, Parsing: "${inputText}"`);
 
       const parsed = shouldUseLLM ? await parseLLM(inputText, userTimezone) : parseTask(inputText);
