@@ -256,6 +256,18 @@ function validateAndClean(llmResponse, input) {
     llmResponse.priority = 2;
   }
 
+  // FIX 2026-01-06: URGENT KEYWORD PRIORITY UPGRADE
+  // If input contains urgent keywords like "now", "asap", "urgent", force Priority 1
+  // This fixes cases where LLM doesn't detect urgency correctly
+  const urgentKeywords = ['now', 'asap', 'urgent', 'immediately', 'critical', 'emergency'];
+  const hasUrgentKeyword = urgentKeywords.some(keyword => inputLower.includes(keyword));
+
+  if (hasUrgentKeyword && llmResponse.priority !== 1) {
+    const foundKeyword = urgentKeywords.find(keyword => inputLower.includes(keyword));
+    console.log(`[LLM Parser] Urgency keyword "${foundKeyword}" detected → Upgrading to Priority 1`);
+    llmResponse.priority = 1;
+  }
+
   // SEMANTIC TIME-BASED PRIORITY UPGRADE
   // If LLM set a due_time, check if it's within 2 hours → auto-upgrade to Priority 1
   // This fixes the issue where LLM parses the time correctly but doesn't infer urgency from it

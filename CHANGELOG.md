@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.3] - 2026-01-06
+
+### Fixed - LLM Priority Detection for Urgent Keywords
+
+**Problem:** Tasks with urgent keywords like "now", "asap", "urgent" were not being assigned Priority 1
+
+**Example:**
+- User types: "call mom now"
+- ❌ **v1.4.2**: LLM returned Priority 2 (incorrect)
+- ✅ **v1.4.3**: Now returns Priority 1 (correct)
+
+**Root Cause:**
+- LLM prompt instructs to detect "now", "asap", "urgent" as Priority 1
+- But LLM sometimes doesn't follow this instruction correctly
+- The semantic time-based upgrade only works when `due_time` is set
+- "call mom now" has no `due_time` (no specific time), so upgrade didn't trigger
+
+**Solution:**
+Added fallback urgency keyword detection in `validateAndClean()`:
+- Checks if input contains: "now", "asap", "urgent", "immediately", "critical", "emergency"
+- If found and priority ≠ 1, forces upgrade to Priority 1
+- Logs which keyword triggered the upgrade
+
+#### Code Changes
+
+**backend/utils/llm-task-parser.js (lines 259-269):**
+```javascript
+// FIX 2026-01-06: URGENT KEYWORD PRIORITY UPGRADE
+const urgentKeywords = ['now', 'asap', 'urgent', 'immediately', 'critical', 'emergency'];
+const hasUrgentKeyword = urgentKeywords.some(keyword => inputLower.includes(keyword));
+
+if (hasUrgentKeyword && llmResponse.priority !== 1) {
+  const foundKeyword = urgentKeywords.find(keyword => inputLower.includes(keyword));
+  console.log(`[LLM Parser] Urgency keyword "${foundKeyword}" detected → Upgrading to Priority 1`);
+  llmResponse.priority = 1;
+}
+```
+
+#### Verification
+- **Tested locally:** `parseLLM('call mom now')` → Priority 1 ✅
+- **Production test pending:** Will verify after deployment
+
+#### Files Modified
+- `backend/utils/llm-task-parser.js` - Added urgency keyword detection
+- `backend/package.json` - Version bump to 1.4.3
+- `backend/server.js` - Health endpoint version update
+- `CHANGELOG.md` - This entry
+
+#### Impact
+- ✅ "call mom now" → Priority 1 (correct)
+- ✅ "email manager asap" → Priority 1 (correct)
+- ✅ "urgent meeting" → Priority 1 (correct)
+- ✅ Works for both LLM parser and fallback parser
+
+### Deployment
+- Backend v1.4.3 will deploy to https://cosmic-ocean-api.vercel.app
+- No database migration needed
+- Zero downtime deployment
+
+---
+
 ## [1.4.2] - 2026-01-06
 
 ### Fixed - Critical Timezone Bug 🌍 ⏰

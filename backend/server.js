@@ -851,7 +851,7 @@ app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
-    version: '1.4.2', // Epic 8: Critical timezone fix - "in 10 minutes" now uses user's local time
+    version: '1.4.3', // Epic 8: Fixed LLM priority detection - "now", "asap", "urgent" now trigger Priority 1
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {
