@@ -1009,7 +1009,7 @@ app.get('/api/health', async (req, res) => {
 
   res.json({
     status: 'ok',
-    version: '1.5.5', // Debug: Add timezone debug endpoint
+    version: '1.5.6', // Fix: Add 'yesterday' to LLM parsing
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     debug: {

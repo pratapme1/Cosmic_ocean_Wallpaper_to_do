@@ -57,12 +57,14 @@ STRICT RULES (CRITICAL - DO NOT HALLUCINATE):
    - Remove trailing: "by", "at", "in", "on", "for"
 
 2. dueDate: ONLY if EXPLICITLY mentioned. Otherwise null.
-   - "tomorrow"/"tmrw", "today"/"tday" → calculate from ${today}
+   - "tomorrow"/"tmrw", "today"/"tday", "yesterday"/"ystrdy" → calculate from ${today}
+     * "yesterday" → date one day before ${today}
    - Day of week: "monday", "tuesday", "friday", "on monday", "on friday", "next friday" → calculate YYYY-MM-DD
      * If day is ${dayOfWeek} and input says "monday", find next Monday's date
      * "party on friday" → find next Friday's date → YYYY-MM-DD
      * "call on monday" → find next Monday's date → YYYY-MM-DD
    - Date phrases: "end of day"/"eod", "end of week"/"eow", "this weekend", "next week", "next month" → calculate date
+   - Past phrases: "last week", "last month" → calculate appropriate past date
    - Explicit dates: "Jan 5", "1/15", "2026-01-20" → YYYY-MM-DD
    - NO date words in input → null (DO NOT INVENT)
    - "today" → ${today}
@@ -208,10 +210,11 @@ function validateAndClean(llmResponse, input) {
 
   // Date validation - strip if not mentioned
   const dateWords = [
-    'tomorrow', 'today', 'tmrw', 'tday', // Common and abbreviations
+    'tomorrow', 'today', 'yesterday', 'tmrw', 'tday', 'ystrdy', // Common and abbreviations
     'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
     'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun', // Day abbreviations
     'next week', 'next month', 'this week', 'this weekend', 'weekend',
+    'last week', 'last month', // Past references
     'end of day', 'eod', 'end of week', 'eow', 'end of month', 'eom',
     'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
     /\d{1,2}\/\d{1,2}/, /\d{4}-\d{2}-\d{2}/,
