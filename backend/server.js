@@ -971,11 +971,28 @@ app.get('/api/cron/messages', async (req, res) => {
 
 app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
+  const now = new Date();
+
+  // Debug: Test timezone conversion (for v1.5.3 debugging)
+  const istTime = now.toLocaleTimeString('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+
   res.json({
     status: 'ok',
-    version: '1.5.2', // Fix: Timezone offset in countdown - due_time was treated as UTC instead of user's local timezone
+    version: '1.5.3', // Debug: Adding timezone info to health
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
+    debug: {
+      serverUtcTime: now.toISOString(),
+      serverLocalTime: now.toString(),
+      istTimeViaLocale: istTime,
+      llmEnabled: process.env.ENABLE_LLM_PARSING === 'true'
+    },
     env: {
       hasDbUrl: !!process.env.DATABASE_URL,
       hasPostgresUrl: !!process.env.POSTGRES_URL,
