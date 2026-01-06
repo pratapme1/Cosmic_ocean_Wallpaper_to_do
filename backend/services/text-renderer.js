@@ -368,10 +368,24 @@ async function renderTextToSvg(layout, tasks, colors, doneForToday, intelligentM
                           ? task.due_date.toISOString().split('T')[0]
                           : String(task.due_date).split('T')[0];
 
-                        fullDueDate = new Date(`${dateStr}T${task.due_time}Z`);
+                        // FIX v1.5.1: due_time is stored in user's LOCAL timezone, not UTC
+                        // The 'Z' suffix was treating it as UTC, causing 5.5h offset for IST users
+                        // Solution: Calculate timezone offset and adjust
+                        const tempUtc = new Date(`${dateStr}T${task.due_time}Z`);
+
+                        // Get timezone offset (IST = UTC+5:30 = -330 minutes offset)
+                        const now = new Date();
+                        const utcStr = now.toLocaleString('en-US', { timeZone: 'UTC' });
+                        const localStr = now.toLocaleString('en-US', { timeZone: timezone || 'UTC' });
+                        const offsetMs = new Date(utcStr) - new Date(localStr);
+
+                        // Adjust: stored time is in local timezone, convert to UTC
+                        fullDueDate = new Date(tempUtc.getTime() + offsetMs);
+
                         console.log(`[COUNTDOWN DEBUG] Task: ${task.title}`);
-                        console.log(`[COUNTDOWN DEBUG] due_date: ${dateStr}, due_time: ${task.due_time}`);
-                        console.log(`[COUNTDOWN DEBUG] fullDueDate: ${fullDueDate.toISOString()}`);
+                        console.log(`[COUNTDOWN DEBUG] due_date: ${dateStr}, due_time: ${task.due_time}, timezone: ${timezone}`);
+                        console.log(`[COUNTDOWN DEBUG] offset: ${offsetMs / (1000*60)} minutes`);
+                        console.log(`[COUNTDOWN DEBUG] fullDueDate (UTC): ${fullDueDate.toISOString()}`);
                       } else {
                         // FIX 2026-01-06: No time specified, use Date object directly
                         // Bug: Template literal ${dateObject} converts to locale string, creating invalid format

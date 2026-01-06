@@ -950,7 +950,7 @@ app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
-    version: '1.5.0', // Fix: Set due_date to TODAY when due_time exists but due_date is NULL
+    version: '1.5.1', // Fix: Timezone offset in countdown - due_time was treated as UTC instead of user's local timezone
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {
