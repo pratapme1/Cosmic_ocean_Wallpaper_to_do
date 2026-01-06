@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.7] - 2026-01-06 (Backend)
+
+### Fixed - Wallpaper Countdown Display Bug 🔢
+
+**Problem:** Wallpaper showed incorrect countdown times (e.g., "DUE IN 2D" instead of "DUE IN 8H 25M")
+
+**Example:**
+- User says: "Call mom tomorrow" on Jan 6, 10:09 AM IST
+- Task due: Jan 7, 12:00 AM IST (midnight tomorrow)
+- Wallpaper at 3:34 PM IST: Should show "DUE IN 8H 25M"
+- ❌ **BUGGY**: Showed "DUE IN 2D" or "DUE TOMORROW"
+- ✅ **FIXED**: Shows "DUE IN 8H 25M" correctly
+
+**Root Cause - TWO bugs in text-renderer.js:**
+
+1. **Bug #1: Invalid Date creation (line 371)**
+   ```javascript
+   // BUGGY CODE:
+   fullDueDate = new Date(`${task.due_date}T23:59:59`);
+   // ${task.due_date} converts Date object to locale string:
+   // "Wed Jan 07 2026 00:00:00 GMT+0530 (India Standard Time)"
+   // Adding "T23:59:59" creates INVALID date format!
+   ```
+
+2. **Bug #2: Wrong "now" calculation (line 575)**
+   ```javascript
+   // BUGGY CODE:
+   const now = new Date(new Date().toLocaleString('en-US', { timeZone: timezone }));
+   // This interprets IST time as UTC, creating 5.5h offset!
+   // Example: 3:34 PM IST parsed as 3:34 PM UTC (WRONG)
+   ```
+
+**Solution:**
+
+1. **Fix #1: Use Date object directly (lines 363-382)**
+   ```javascript
+   // FIXED CODE:
+   // Don't convert Date to string - use it directly
+   fullDueDate = task.due_date instanceof Date ? task.due_date : new Date(task.due_date);
+   ```
+
+2. **Fix #2: Use UTC time directly (line 586)**
+   ```javascript
+   // FIXED CODE:
+   const now = new Date(); // Simple! Both dates in UTC, calculation is correct
+   ```
+
+**Testing (NO-GO Compliance):**
+- ✅ Created test demonstrating BOTH bugs (tests/test-countdown-bug.js)
+- ✅ Fixed both bugs in text-renderer.js
+- ✅ Verified fix with 4 test cases (tests/verify-countdown-fix.js)
+- ✅ All tests pass: 8h countdown, 2d countdown, 1h countdown, 10h overdue
+
+**Files Changed:**
+- `backend/services/text-renderer.js` (lines 363-382, 586) - Fixed Date parsing and "now" calculation
+
+**Files Created (Tests):**
+- `backend/tests/test-countdown-bug.js` - Demonstrates both bugs
+- `backend/tests/verify-countdown-fix.js` - Verifies fix works correctly
+
+**Impact:**
+- ✅ Wallpaper countdown now accurately reflects time remaining
+- ✅ Works correctly across all timezones (UTC, IST, etc.)
+- ✅ No more confusing "DUE IN 2D" when task is due in hours
+
+**Related:**
+- This fixes the countdown DISPLAY bug
+- v1.4.6 fixed the date STORAGE bug
+- Together they ensure end-to-end correctness
+
+---
+
 ## [1.4.6] - 2026-01-06 (Backend)
 
 ### Fixed - "Tomorrow" Tasks Stored with Wrong Date 📅

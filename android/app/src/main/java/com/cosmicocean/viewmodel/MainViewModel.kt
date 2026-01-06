@@ -26,12 +26,33 @@ class MainViewModel(
     init {
         viewModelScope.launch {
             repository.getAllActiveStars().collectLatest { loadedStars ->
-                // Sync stars list with repository
-                // In a real app, we would handle merges more carefully
-                stars.clear()
-                loadedStars.forEach { star ->
-                    stars.add(star)
-                    engine.addParticle(star.particle)
+                // EPIC 9 FIX: Smart merge to preserve existing star positions
+                // Don't clear and recreate - update existing stars instead
+
+                val loadedIds = loadedStars.map { it.id }.toSet()
+                val existingIds = stars.map { it.id }.toSet()
+
+                // Remove stars that no longer exist in DB
+                stars.removeAll { !loadedIds.contains(it.id) }
+
+                // Update existing stars and add new ones
+                loadedStars.forEach { loadedStar ->
+                    val existingStar = stars.find { it.id == loadedStar.id }
+                    if (existingStar != null) {
+                        // EPIC 9: Update properties but KEEP current position
+                        existingStar.title = loadedStar.title
+                        existingStar.urgency = loadedStar.urgency
+                        existingStar.dueDate = loadedStar.dueDate
+                        existingStar.isCompleted = loadedStar.isCompleted
+                        existingStar.completedAt = loadedStar.completedAt
+                        existingStar.isArchived = loadedStar.isArchived
+                        existingStar.archivedAt = loadedStar.archivedAt
+                        existingStar.updateDueIn() // Update color based on new priority
+                    } else {
+                        // New star - add it
+                        stars.add(loadedStar)
+                        engine.addParticle(loadedStar.particle)
+                    }
                 }
             }
         }
@@ -75,6 +96,13 @@ class MainViewModel(
             // Delete from Room DB and backend API
             repository.deleteStar(star)
             android.util.Log.d("MainViewModel", "deleteStar completed")
+        }
+    }
+
+    fun updateStar(star: Star) {
+        // EPIC 9: Save star properties (including position) to DB and backend
+        viewModelScope.launch {
+            repository.updateStar(star)
         }
     }
 }

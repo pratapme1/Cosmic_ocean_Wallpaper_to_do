@@ -15,7 +15,9 @@ class VerletEngine {
     // Mobile screens are smaller, so we need proportionally less spacing
     private var targetSpacing = 60f  // REDUCED from 80 for small screens (393px width)
     private var targetSpacingSq = 3600f
-    private val REPULSION_FORCE_COEFF = 0.5f  // REDUCED from 1.2 to prevent aggressive bouncing
+    // FIX 2026-01-05: Increased from 0.5 to 0.7 to prevent star clustering
+    // Old: 190 px/sec separation | New: 267 px/sec separation (40% faster anti-clustering)
+    private val REPULSION_FORCE_COEFF = 0.7f  // Was 0.5, increased to prevent clustering
 
     // Velocity cap to prevent explosive movements
     private val MAX_VELOCITY = 15f
@@ -151,12 +153,13 @@ class VerletEngine {
 
                 // FIX: Greatly reduced gravitational clustering (was causing piling)
                 // Only apply very weak attraction to prevent complete scattering
+                // FIX 2026-01-05: Further reduced 50% to minimize downward clustering bias
                 val maxGravityDist = 200f  // Reduced from 300
                 val maxGravityDistSq = maxGravityDist * maxGravityDist
 
                 if (distSq < maxGravityDistSq && distSq > minDistSq) {
                     val dist = sqrt(distSq)
-                    val gravityStrength = 0.00002f * (1f - dist / maxGravityDist)  // REDUCED from 0.0001
+                    val gravityStrength = 0.00001f * (1f - dist / maxGravityDist)  // Was 0.00002, reduced 50%
                     val fx = (dx / dist) * gravityStrength
                     val fy = (dy / dist) * gravityStrength
 

@@ -73,6 +73,7 @@ fun CosmicCanvas(
     onInteraction: () -> Unit,
     onStarFinalized: (Star, String) -> Unit,  // "complete", "archive", or "delete"
     onStarSnooze: (Star, Int) -> Unit = { _, _ -> },
+    onStarDragEnd: (Star) -> Unit = { _ -> },  // EPIC 9: Save position after drag
     audioEngine: com.cosmicocean.audio.AudioEngine? = null
 ) {
     var lastFrameTime by remember { mutableLongStateOf(System.nanoTime()) }
@@ -103,6 +104,7 @@ fun CosmicCanvas(
             val delta = (currentTime - lastFrameTime) / 1_000_000_000f
             lastFrameTime = currentTime
 
+            // EPIC 9: ZoneManager simplified to edge clamping only (no zone forces)
             zoneManager.update(stars, delta)
             engine.update(delta)
             constellationSystem.update(stars, delta)
@@ -339,6 +341,9 @@ fun CosmicCanvas(
                                         )
 
                                         onStarFinalized(star, "archive")
+                                    } else {
+                                        // EPIC 9 FIX: Save position after normal drag (not completion/archive)
+                                        onStarDragEnd(star)
                                     }
                                 }
                             }
@@ -456,9 +461,41 @@ fun CosmicCanvas(
             }
 
             // Draw labels on top of everything
-            stars.forEach { star ->
-                if (!star.isCompleted && !star.isArchived) {
-                    drawStarLabel(star, textMeasurer, size.width, size.height)
+            // EPIC 9.1: Calculate collision-free label positions ONCE
+            val activeStars = stars.filter { !it.isCompleted && !it.isArchived }
+            val labelSizes = activeStars.associate { star ->
+                // Truncate long task names (max 25 chars)
+                val displayText = if (star.title.length > 25) {
+                    "${star.title.take(22)}..."
+                } else {
+                    star.title
+                }
+
+                val measuredText = textMeasurer.measure(
+                    text = displayText,
+                    style = TextStyle(fontSize = 14.sp),
+                    constraints = androidx.compose.ui.unit.Constraints(
+                        maxWidth = (size.width * 0.3f).toInt()
+                    )
+                )
+                star.id to androidx.compose.ui.geometry.Size(
+                    measuredText.size.width.toFloat() + 12f,  // Add padding
+                    measuredText.size.height.toFloat() + 6f
+                )
+            }
+
+            val labelPositions = com.cosmicocean.utils.LabelCollisionDetector.calculateSafePositions(
+                stars = activeStars,
+                labelSizes = labelSizes,
+                screenWidth = size.width,
+                screenHeight = size.height
+            )
+
+            // Draw labels with collision-free positions
+            activeStars.forEach { star ->
+                val labelPos = labelPositions[star.id]
+                if (labelPos != null) {
+                    drawStarLabel(star, textMeasurer, labelPos, size.width, size.height)
                 }
             }
 
@@ -665,46 +702,47 @@ fun DrawScope.drawStar(star: Star, tick: Int) {
 }
 
 /**
- * Draw star label with smart auto-positioning
- * PWA-accurate label rendering with edge avoidance
+ * Draw star label with smart collision-free positioning
+ * EPIC 9.1: Collision-aware label rendering with reduced opacity
  */
 fun DrawScope.drawStarLabel(
     star: Star,
     textMeasurer: TextMeasurer,
+    labelPos: Offset,  // EPIC 9.1: Pre-calculated collision-free position
     screenWidth: Float,
     screenHeight: Float
 ) {
-    val p = star.particle
-
     // Style for the label text
     val textStyle = TextStyle(
         color = Color.White,
         fontSize = 14.sp
     )
 
-    // Measure text to get dimensions
+    // EPIC 9.1: Truncate long task names (max 25 chars)
+    val displayText = if (star.title.length > 25) {
+        "${star.title.take(22)}..."
+    } else {
+        star.title
+    }
+
+    // EPIC 9.1: Limit label width to 30% of screen (reduced from 40%)
+    val maxLabelWidth = (screenWidth * 0.3f).toInt()
+
+    // Measure text to get dimensions with width constraint
     val measuredText = textMeasurer.measure(
-        text = star.title,
-        style = textStyle
+        text = displayText,
+        style = textStyle,
+        constraints = androidx.compose.ui.unit.Constraints(maxWidth = maxLabelWidth),
+        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
     )
 
     val labelWidth = measuredText.size.width.toFloat()
     val labelHeight = measuredText.size.height.toFloat()
 
-    // Calculate smart position avoiding edges
-    val labelPos = LabelPositioning.calculateLabelPosition(
-        starX = p.x,
-        starY = p.y,
-        labelWidth = labelWidth,
-        labelHeight = labelHeight,
-        screenWidth = screenWidth,
-        screenHeight = screenHeight,
-        starRadius = p.radius
-    )
-
-    // Semi-transparent background for readability
+    // EPIC 9.1: Semi-transparent background (30% opacity - reduced from 60%)
+    // Stars are now visible through labels
     drawRect(
-        color = Color.Black.copy(alpha = 0.6f),
+        color = Color.Black.copy(alpha = 0.3f),  // ✅ 50% reduction in opacity
         topLeft = labelPos,
         size = androidx.compose.ui.geometry.Size(
             labelWidth + 12f,
@@ -721,7 +759,7 @@ fun DrawScope.drawStarLabel(
     // Optional: Draw connection line from star to label
     // drawLine(
     //     color = Color.White.copy(alpha = 0.3f),
-    //     start = Offset(p.x, p.y),
+    //     start = Offset(star.particle.x, star.particle.y),
     //     end = Offset(labelPos.x, labelPos.y + labelHeight / 2),
     //     strokeWidth = 1f
     // )

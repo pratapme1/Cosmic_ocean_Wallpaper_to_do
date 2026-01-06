@@ -56,15 +56,13 @@ class Star(
             val diffMs = it - System.currentTimeMillis()
             dueIn = diffMs / 60000f
         }
-        // HYBRID COLOR LOGIC: Priority + Time based
-        // P1 = ALWAYS urgent (user explicitly said "urgently", "asap", "critical", etc.)
-        // Otherwise fall back to time-based logic
-        temperature = when {
-            urgency == 1 -> Temperature.RED      // P1 = ALWAYS urgent (user said so!)
-            dueDate == null -> Temperature.BLUE  // No urgency keyword, no date = calm
-            dueIn < 0 -> Temperature.RED         // Overdue
-            dueIn < 120 -> Temperature.ORANGE    // Due within 2 hours
-            else -> Temperature.BLUE             // Future
+        // EPIC 9: SIMPLIFIED COLOR LOGIC - Priority-based only
+        // P1 = RED (urgent), P2 = ORANGE (normal), P3 = BLUE (future)
+        temperature = when (urgency) {
+            1 -> Temperature.RED      // P1 = urgent
+            2 -> Temperature.ORANGE   // P2 = normal
+            3 -> Temperature.BLUE     // P3 = future
+            else -> Temperature.ORANGE // Default to P2
         }
     }
 

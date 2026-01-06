@@ -361,14 +361,24 @@ async function renderTextToSvg(layout, tasks, colors, doneForToday, intelligentM
                     let fullDueDate = null;
                     if (task.due_date) {
                       if (task.due_time) {
-                        // Combine date and time: "2026-01-03" + "20:27:49"
-                        fullDueDate = new Date(`${task.due_date}T${task.due_time}`);
+                        // FIX 2026-01-06: Combine date + time properly
+                        // PostgreSQL returns DATE as Date object (midnight UTC of that date)
+                        // Extract just the date part and combine with TIME
+                        const dateStr = task.due_date instanceof Date
+                          ? task.due_date.toISOString().split('T')[0]
+                          : String(task.due_date).split('T')[0];
+
+                        fullDueDate = new Date(`${dateStr}T${task.due_time}Z`);
                         console.log(`[COUNTDOWN DEBUG] Task: ${task.title}`);
-                        console.log(`[COUNTDOWN DEBUG] due_date: ${task.due_date}, due_time: ${task.due_time}`);
-                        console.log(`[COUNTDOWN DEBUG] fullDueDate: ${fullDueDate}`);
+                        console.log(`[COUNTDOWN DEBUG] due_date: ${dateStr}, due_time: ${task.due_time}`);
+                        console.log(`[COUNTDOWN DEBUG] fullDueDate: ${fullDueDate.toISOString()}`);
                       } else {
-                        // Just date, use end of day
-                        fullDueDate = new Date(`${task.due_date}T23:59:59`);
+                        // FIX 2026-01-06: No time specified, use Date object directly
+                        // Bug: Template literal ${dateObject} converts to locale string, creating invalid format
+                        // Fix: Use the Date object as-is from PostgreSQL
+                        // Note: parseDateTimeForDB stores dates using local date (not UTC), so
+                        // the Date object from pg already represents the correct day in user's timezone
+                        fullDueDate = task.due_date instanceof Date ? task.due_date : new Date(task.due_date);
                       }
                     }
 
@@ -564,15 +574,19 @@ function formatEstimate(minutes) {
 
 /**
  * Get live countdown for tasks due within 24 hours
- * @param {Date} dueDate - Task due date
- * @param {string} timezone - User's timezone for accurate comparison
+ * @param {Date} dueDate - Task due date (in UTC)
+ * @param {string} timezone - User's timezone (currently unused, for future formatting)
  * @returns {object|null} Countdown object or null
  */
 function getLiveCountdown(dueDate, timezone = 'UTC') {
   if (!dueDate) return null;
 
-  // Get current time in user's timezone
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: timezone }));
+  // FIX 2026-01-06: Just use current UTC time directly
+  // Bug: Converting to locale string and parsing creates wrong Date object
+  // Old: new Date(new Date().toLocaleString('en-US', { timeZone: timezone }))
+  //      This interprets IST time as UTC, causing 5.5h offset
+  // Fix: Use new Date() directly - both dueDate and now are in UTC
+  const now = new Date();
   const due = new Date(dueDate);
   const diffMs = due - now;
   const diffMinutes = Math.floor(diffMs / (1000 * 60));

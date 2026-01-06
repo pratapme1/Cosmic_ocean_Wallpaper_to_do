@@ -212,10 +212,10 @@ class TaskRepository(
     }
 
     suspend fun updateStar(star: Star) {
-        // Update local database
+        // EPIC 9 FIX: Update local database with current positions
         starDao.insertStar(star.toEntity())
 
-        // CRITICAL FIX: Sync to backend API
+        // CRITICAL FIX: Sync to backend API (including positions)
         try {
             // If star is completed, call the complete endpoint
             if (star.isCompleted && star.completedAt != null) {
@@ -223,8 +223,10 @@ class TaskRepository(
                 val response = apiService.updateTask(
                     star.id,
                     mapOf(
-                        "completed" to true,  // CRITICAL FIX: Boolean, not string!
-                        "completed_at" to star.completedAt.toString()
+                        "completed" to true,
+                        "completed_at" to star.completedAt.toString(),
+                        "x" to star.particle.x.toString(),  // EPIC 9: Save positions
+                        "y" to star.particle.y.toString()
                     )
                 )
                 android.util.Log.d("TaskRepository", "PATCH response: ${response.code()}")
@@ -234,8 +236,10 @@ class TaskRepository(
                 apiService.updateTask(
                     star.id,
                     mapOf(
-                        "archived" to true,  // CRITICAL FIX: Boolean, not string!
-                        "archived_at" to star.archivedAt.toString()
+                        "archived" to true,
+                        "archived_at" to star.archivedAt.toString(),
+                        "x" to star.particle.x.toString(),  // EPIC 9: Save positions
+                        "y" to star.particle.y.toString()
                     )
                 )
             }
@@ -246,7 +250,9 @@ class TaskRepository(
                     mapOf(
                         "title" to star.title,
                         "priority" to star.urgency.toString(),
-                        "due_date" to (star.dueDate?.toString() ?: "")
+                        "due_date" to (star.dueDate?.toString() ?: ""),
+                        "x" to star.particle.x.toString(),  // EPIC 9: Save positions
+                        "y" to star.particle.y.toString()
                     )
                 )
             }

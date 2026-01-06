@@ -859,7 +859,7 @@ app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
-    version: '1.4.6', // Fixed "tomorrow" tasks stored with wrong date
+    version: '1.4.7', // Fixed wallpaper countdown calculation (Invalid Date + timezone bugs)
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {

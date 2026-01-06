@@ -135,6 +135,7 @@ class MainActivity : ComponentActivity() {
                             onInteraction = { isInteracting = true },
                             onStarFinalized = { star, action -> handleStarAction(star, action) },
                             onStarSnooze = { star, duration -> snoozeStar(star, duration) },
+                            onStarDragEnd = { star -> saveStarPosition(star) },  // EPIC 9: Save position after drag
                             audioEngine = audioEngine
                         )
 
@@ -281,6 +282,11 @@ class MainActivity : ComponentActivity() {
         triggerImmediateUpdate()
     }
 
+    private fun saveStarPosition(star: Star) {
+        // EPIC 9 FIX: Save star position after dragging
+        viewModel.updateStar(star)
+    }
+
     private fun updateStar(star: Star, title: String, urgency: Int, dueInMinutes: Float) {
         star.title = title
         star.urgency = urgency
@@ -334,19 +340,18 @@ class MainActivity : ComponentActivity() {
         val screenWidth = displayMetrics.widthPixels.toFloat()
         val screenHeight = displayMetrics.heightPixels.toFloat()
 
-        // FIX: Smart initial placement - distribute stars across screen
-        // Use larger padding to avoid edges (15% on each side)
+        // EPIC 9: Random placement across full screen (15% padding to avoid edges)
+        // Stars stay where created - no zone forces, color shows urgency instead
         val horizontalPadding = screenWidth * 0.15f
         val verticalPadding = screenHeight * 0.1f
 
-        // If user tapped, use that position; otherwise, random in center zone
-        // Center zone = middle 70% of screen (default for new tasks with no due date)
+        // If user tapped, use that position; otherwise, random placement
         val x = offset?.x ?: (horizontalPadding + random.nextFloat() * (screenWidth - 2 * horizontalPadding))
-        val y = offset?.y ?: (verticalPadding + screenHeight * 0.3f + random.nextFloat() * (screenHeight * 0.4f))
+        val y = offset?.y ?: (verticalPadding + random.nextFloat() * (screenHeight - 2 * verticalPadding))
 
-        // Create star with default P3 (will be updated from backend)
+        // Create star with default P2 (will be updated from backend after NLP parsing)
         // TaskRepository.addStar() handles both local DB insert AND backend sync
-        val star = Star(x, y, title, 3, null)
+        val star = Star(x, y, title, 2, null)
         viewModel.addStar(star)
 
         // Trigger wallpaper update after a short delay to allow backend sync
