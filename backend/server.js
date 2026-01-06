@@ -519,10 +519,14 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
       );
       if (tzResult.rows.length > 0 && tzResult.rows[0].timezone) {
         userTimezone = tzResult.rows[0].timezone;
+        console.log(`[Task Creation] User timezone: ${userTimezone}`);
       }
     } catch (tzErr) {
       console.warn('[Task Creation] Failed to fetch timezone, using UTC:', tzErr.message);
     }
+
+    console.log(`[Task Creation] START - Input: "${rawTitle || directTitle}"`);
+
 
     // Parse with comprehensive NLP (Epic 7: NLP Integration) + LLM (Epic 8)
     let title, dueDate, estimateMinutes, category, contextTags, energy, recurring, timeContext, calculatedPriority, llmDueTime;
@@ -531,6 +535,8 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
     try {
       // Use LLM parsing if enabled, otherwise use local NLP
       const shouldUseLLM = process.env.ENABLE_LLM_PARSING === 'true' && process.env.ANTHROPIC_API_KEY;
+      console.log(`[Task Creation] LLM enabled: ${shouldUseLLM}, Parsing: "${inputText}"`);
+
       const parsed = shouldUseLLM ? await parseLLM(inputText, userTimezone) : parseTask(inputText);
 
       title = parsed.title;
@@ -635,7 +641,7 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
 
     // Invalidate wallpaper cache
     const cacheInvalidated = await cacheService.invalidateUserWallpapers(userId);
-    console.log(`[Task Created] userId=${userId}, title="${title}", cacheInvalidated=${cacheInvalidated}`);
+    console.log(`[Task Created] userId=${userId}, title="${title}", priority=${calculatedPriority}, category=${category}, cacheInvalidated=${cacheInvalidated}`);
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -851,7 +857,7 @@ app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
-    version: '1.4.3', // Epic 8: Fixed LLM priority detection - "now", "asap", "urgent" now trigger Priority 1
+    version: '1.4.4', // Epic 8: Added detailed parsing logs for debugging
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {
