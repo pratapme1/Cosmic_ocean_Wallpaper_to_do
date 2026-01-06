@@ -610,6 +610,14 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
       console.log(`[LLM] Using separate due_time: ${dueTimeForDB}`);
     }
 
+    // FIX v1.5.0: If we have due_time but no due_date, set due_date to TODAY
+    // This fixes "in 30 minutes" storing only time without date
+    if (dueTimeForDB && !dueDateForDB) {
+      const now = new Date();
+      dueDateForDB = parseDateForDB(now);
+      console.log(`[FIX] due_time without due_date - setting to today: ${dueDateForDB}`);
+    }
+
     const query = `
       INSERT INTO tasks (
         user_id, title, raw_title, estimate_minutes, priority, due_date, due_time,
@@ -707,6 +715,23 @@ app.patch('/api/tasks/:id', optionalAuth, async (req, res) => {
           updates.due_date = date;
           if (time) updates.due_time = time;
         }
+
+        // Handle LLM returning due_time separately
+        const llmDueTime = parsed.dueTime || parsed.due_time;
+        if (!updates.due_time && llmDueTime) {
+          updates.due_time = llmDueTime.includes(':') && llmDueTime.length === 5
+            ? `${llmDueTime}:00`
+            : llmDueTime;
+          console.log(`[PATCH LLM] Using separate due_time: ${updates.due_time}`);
+        }
+
+        // FIX v1.5.0: If we have due_time but no due_date, set due_date to TODAY
+        if (updates.due_time && !updates.due_date) {
+          const now = new Date();
+          updates.due_date = parseDateForDB(now);
+          console.log(`[PATCH FIX] due_time without due_date - setting to today: ${updates.due_date}`);
+        }
+
         if (parsed.estimateMinutes || parsed.estimate_minutes) {
           updates.estimate_minutes = parsed.estimateMinutes || parsed.estimate_minutes;
         }
@@ -925,7 +950,7 @@ app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
-    version: '1.4.9', // Handle "now" keyword by setting due_date to current time
+    version: '1.5.0', // Fix: Set due_date to TODAY when due_time exists but due_date is NULL
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {
