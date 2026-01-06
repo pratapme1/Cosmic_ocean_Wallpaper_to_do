@@ -548,11 +548,22 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
       // LLM parser returns due_time as separate string (e.g., "17:00")
       llmDueTime = parsed.dueTime || parsed.due_time;
 
-      // FIX v1.4.9: Handle "now" keyword - set due_date to current time if not already set
+      // FIX v1.5.2: Handle "now" keyword - set due_date/time in USER'S timezone (not UTC!)
+      // Bug: new Date() on Vercel returns UTC, but we need to store in user's local timezone
+      // to be consistent with LLM-parsed times
       if (!dueDate && /\bnow\b/i.test(inputText)) {
-        console.log('[Task Creation] Detected "now" keyword - setting due_date to current time');
-        dueDate = new Date();
-        llmDueTime = null; // Will use current time from dueDate
+        console.log('[Task Creation] Detected "now" keyword - setting due_date to current time in user timezone');
+        const now = new Date();
+        dueDate = now; // For the date part
+        // Set llmDueTime to current time in user's timezone (HH:MM:SS format)
+        llmDueTime = now.toLocaleTimeString('en-GB', {
+          timeZone: userTimezone,
+          hour12: false,
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+        console.log(`[Task Creation] "now" in ${userTimezone}: ${llmDueTime}`);
       }
 
       // NEW: Extract NLP metadata (handle both naming conventions)
@@ -701,11 +712,22 @@ app.patch('/api/tasks/:id', optionalAuth, async (req, res) => {
         const shouldUseLLM = process.env.ENABLE_LLM_PARSING === 'true' && !!process.env.ANTHROPIC_API_KEY;
         const parsed = shouldUseLLM ? await parseLLM(updates.rawTitle, userTimezone) : parseTask(updates.rawTitle);
 
-        // FIX v1.4.9: Handle "now" keyword - set due_date to current time if not already set
+        // FIX v1.5.2: Handle "now" keyword - set due_date/time in USER'S timezone (not UTC!)
         let parsedDueDate = parsed.dueDate || parsed.due_date;
+        let parsedDueTime = parsed.dueTime || parsed.due_time;
         if (!parsedDueDate && /\bnow\b/i.test(updates.rawTitle)) {
-          console.log('[PATCH] Detected "now" keyword - setting due_date to current time');
-          parsedDueDate = new Date();
+          console.log('[PATCH] Detected "now" keyword - setting due_date to current time in user timezone');
+          const now = new Date();
+          parsedDueDate = now;
+          // Set time in user's timezone
+          parsedDueTime = now.toLocaleTimeString('en-GB', {
+            timeZone: userTimezone,
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          });
+          console.log(`[PATCH] "now" in ${userTimezone}: ${parsedDueTime}`);
         }
 
         // Replace updates with parsed values
@@ -713,16 +735,17 @@ app.patch('/api/tasks/:id', optionalAuth, async (req, res) => {
         if (parsedDueDate) {
           const { date, time } = parseDateTimeForDB(parsedDueDate);
           updates.due_date = date;
-          if (time) updates.due_time = time;
+          // Only use extracted time if we don't have parsedDueTime from "now" fix
+          if (time && !parsedDueTime) updates.due_time = time;
         }
 
-        // Handle LLM returning due_time separately
-        const llmDueTime = parsed.dueTime || parsed.due_time;
+        // Handle due_time: prefer parsedDueTime (from "now"), then LLM separate due_time
+        const llmDueTime = parsedDueTime || parsed.dueTime || parsed.due_time;
         if (!updates.due_time && llmDueTime) {
           updates.due_time = llmDueTime.includes(':') && llmDueTime.length === 5
             ? `${llmDueTime}:00`
             : llmDueTime;
-          console.log(`[PATCH LLM] Using separate due_time: ${updates.due_time}`);
+          console.log(`[PATCH] Using due_time: ${updates.due_time}`);
         }
 
         // FIX v1.5.0: If we have due_time but no due_date, set due_date to TODAY
@@ -950,7 +973,7 @@ app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
-    version: '1.5.1', // Fix: Timezone offset in countdown - due_time was treated as UTC instead of user's local timezone
+    version: '1.5.2', // Fix: Timezone offset in countdown - due_time was treated as UTC instead of user's local timezone
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {
