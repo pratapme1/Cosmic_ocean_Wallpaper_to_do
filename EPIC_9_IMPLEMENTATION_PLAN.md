@@ -1,3 +1,5 @@
+
+
 # Epic 9: Physics Simplification & CRUD Stability
 
 > **Created:** 2026-01-06
