@@ -548,17 +548,15 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
       // LLM parser returns due_time as separate string (e.g., "17:00")
       llmDueTime = parsed.dueTime || parsed.due_time;
 
-      // DEBUG v1.5.4: Log what the parser returned
-      console.log(`[DEBUG v1.5.4] Parser returned: dueDate=${dueDate}, llmDueTime=${llmDueTime}, inputText="${inputText}"`);
-      console.log(`[DEBUG v1.5.4] userTimezone=${userTimezone}, hasNowKeyword=${/\bnow\b/i.test(inputText)}`);
-
-      // FIX v1.5.2: Handle "now" keyword - set due_date/time in USER'S timezone (not UTC!)
-      // Bug: new Date() on Vercel returns UTC, but we need to store in user's local timezone
-      // to be consistent with LLM-parsed times
+      // FIX v1.5.5: Handle "now" keyword - set due_date/time in USER'S timezone
+      // CRITICAL: DO NOT set dueDate to a Date object! parseDateTimeForDB would extract UTC time.
+      // Instead, only set llmDueTime to the user's local time. The v1.5.0 fix will add today's date.
       if (/\bnow\b/i.test(inputText)) {
-        console.log('[Task Creation] Detected "now" keyword - OVERRIDING with current time in user timezone');
+        console.log('[Task Creation] Detected "now" keyword - setting time in user timezone');
         const now = new Date();
-        dueDate = now; // For the date part
+        // DON'T set dueDate here! Let the v1.5.0 fix handle it.
+        // But we need to signal that we have a time, so clear any dueDate that was set
+        dueDate = null;
         // Set llmDueTime to current time in user's timezone (HH:MM:SS format)
         llmDueTime = now.toLocaleTimeString('en-GB', {
           timeZone: userTimezone,
@@ -973,6 +971,29 @@ app.get('/api/cron/messages', async (req, res) => {
   }
 });
 
+// Debug endpoint to test timezone handling
+app.get('/api/debug/timezone', async (req, res) => {
+  const timezone = req.query.tz || 'Asia/Kolkata';
+  const now = new Date();
+
+  const istTime = now.toLocaleTimeString('en-GB', {
+    timeZone: timezone,
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+
+  res.json({
+    inputTimezone: timezone,
+    serverUtcTime: now.toISOString(),
+    serverLocalTime: now.toString(),
+    toLocaleTimeStringResult: istTime,
+    typeofResult: typeof istTime,
+    resultLength: istTime.length
+  });
+});
+
 app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   const now = new Date();
@@ -988,7 +1009,7 @@ app.get('/api/health', async (req, res) => {
 
   res.json({
     status: 'ok',
-    version: '1.5.4', // Fix: Always override time for "now" keyword
+    version: '1.5.5', // Debug: Add timezone debug endpoint
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     debug: {
