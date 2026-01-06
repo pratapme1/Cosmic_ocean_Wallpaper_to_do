@@ -663,6 +663,57 @@ app.patch('/api/tasks/:id', optionalAuth, async (req, res) => {
     console.log(`[PATCH DEBUG] Task: ${id}`);
     console.log(`[PATCH DEBUG] Body:`, JSON.stringify(updates));
 
+    // FIX v1.4.8: Support rawTitle for NLP re-parsing on edit
+    if (updates.rawTitle) {
+      console.log(`[PATCH] Re-parsing with NLP: "${updates.rawTitle}"`);
+
+      // Get user timezone for accurate parsing
+      let userTimezone = 'UTC';
+      try {
+        const tzResult = await req.dbClient.query(
+          'SELECT timezone FROM users WHERE id = $1',
+          [userId]
+        );
+        if (tzResult.rows.length > 0 && tzResult.rows[0].timezone) {
+          userTimezone = tzResult.rows[0].timezone;
+        }
+      } catch (tzErr) {
+        console.warn('[PATCH] Failed to fetch timezone, using UTC:', tzErr.message);
+      }
+
+      try {
+        // Parse with LLM or local NLP
+        const shouldUseLLM = process.env.ENABLE_LLM_PARSING === 'true' && !!process.env.ANTHROPIC_API_KEY;
+        const parsed = shouldUseLLM ? await parseLLM(updates.rawTitle, userTimezone) : parseTask(updates.rawTitle);
+
+        // Replace updates with parsed values
+        updates.title = parsed.title;
+        if (parsed.dueDate || parsed.due_date) {
+          const { date, time } = parseDateTimeForDB(parsed.dueDate || parsed.due_date);
+          updates.due_date = date;
+          if (time) updates.due_time = time;
+        }
+        if (parsed.estimateMinutes || parsed.estimate_minutes) {
+          updates.estimate_minutes = parsed.estimateMinutes || parsed.estimate_minutes;
+        }
+        if (parsed.priority !== undefined) {
+          updates.priority = parsed.priority;
+        }
+        if (parsed.category) {
+          updates.category = parsed.category;
+        }
+
+        // Remove rawTitle from updates so it doesn't get processed as a field
+        delete updates.rawTitle;
+
+        console.log(`[PATCH] Parsed result: title="${updates.title}", due_date=${updates.due_date}, due_time=${updates.due_time}, priority=${updates.priority}`);
+      } catch (parseErr) {
+        console.error('[PATCH] Failed to parse rawTitle:', parseErr.message);
+        // Continue with original updates if parsing fails
+        delete updates.rawTitle;
+      }
+    }
+
     const fields = [];
     const values = [userId, id];
     let i = 3;
@@ -671,7 +722,8 @@ app.patch('/api/tasks/:id', optionalAuth, async (req, res) => {
       'title', 'priority', 'estimate_minutes', 'due_date', 'due_time',
       'completed', 'completed_at', 'snoozed_until', 'context_location',
       'context_time', 'energy_required', 'x', 'y', 'is_subtask',
-      'is_recurring', 'echo_interval', 'archived', 'archived_at'
+      'is_recurring', 'echo_interval', 'archived', 'archived_at',
+      'category'  // v1.4.8: Allow category from rawTitle parsing
     ];
 
     for (const [key, value] of Object.entries(updates)) {
@@ -859,7 +911,7 @@ app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
-    version: '1.4.7', // Fixed wallpaper countdown calculation (Invalid Date + timezone bugs)
+    version: '1.4.8', // Support rawTitle in PATCH for NLP re-parsing on task edit
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {

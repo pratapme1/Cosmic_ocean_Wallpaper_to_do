@@ -248,9 +248,8 @@ class TaskRepository(
                 apiService.updateTask(
                     star.id,
                     mapOf(
-                        "title" to star.title,
+                        "rawTitle" to star.title,  // FIX: Use rawTitle to trigger NLP re-parsing
                         "priority" to star.urgency.toString(),
-                        "due_date" to (star.dueDate?.toString() ?: ""),
                         "x" to star.particle.x.toString(),  // EPIC 9: Save positions
                         "y" to star.particle.y.toString()
                     )
