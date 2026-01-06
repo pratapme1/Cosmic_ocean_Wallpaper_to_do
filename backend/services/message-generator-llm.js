@@ -112,13 +112,19 @@ async function buildMessageContext(userId) {
     const urgentResult = await client.query(urgentQuery, [userId]);
     const urgentTask = urgentResult.rows[0] || null;
 
-    // ENHANCEMENT: Get ALL tasks (including completed) for StatsAggregator
+    // ENHANCEMENT: Get tasks for StatsAggregator
+    // FIX 2026-01-06: Optimized query to prevent timeout
+    // - Changed 30 days → 7 days (enough for streak calculation)
+    // - SELECT only needed columns (not SELECT *)
+    // - Added LIMIT 100 as safeguard
     const allTasksQuery = `
-      SELECT *
+      SELECT id, completed, completed_at, created_at, category, priority, due_date
       FROM tasks
       WHERE user_id = $1
       AND (archived = false OR archived IS NULL)
-      AND (created_at > NOW() - INTERVAL '30 days' OR completed_at > NOW() - INTERVAL '30 days')
+      AND (created_at > NOW() - INTERVAL '7 days' OR completed_at > NOW() - INTERVAL '7 days')
+      ORDER BY created_at DESC
+      LIMIT 100
     `;
     const allTasksResult = await client.query(allTasksQuery, [userId]);
     const allTasks = allTasksResult.rows;

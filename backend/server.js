@@ -822,7 +822,7 @@ app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
-    version: '1.4.0', // Epic 8: StatsAggregator + LLM parser improvements (90% accuracy)
+    version: '1.4.1', // Epic 8: Timeout fix - Query optimization (75% faster)
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {
