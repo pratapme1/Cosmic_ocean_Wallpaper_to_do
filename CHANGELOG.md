@@ -7,7 +7,122 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.6] - 2026-01-06 (Backend)
+
+### Fixed - "Tomorrow" Tasks Stored with Wrong Date 📅
+
+**Problem:** Tasks with "tomorrow" keyword were stored with TODAY's date instead of TOMORROW's date
+
+**Example:**
+- User says: "speak to Anand tomorrow" on Jan 6
+- ❌ **BUGGY**: Database stored `due_date = 2026-01-06` (today)
+- ✅ **FIXED**: Database now stores `due_date = 2026-01-07` (tomorrow)
+
+**Root Cause:**
+`parseDateTimeForDB()` function used UTC date extraction methods:
+```javascript
+// BUGGY CODE (lines 71-75):
+const year = dateObj.getUTCFullYear();   // ← UTC methods!
+const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+const day = String(dateObj.getUTCDate()).padStart(2, '0');
+```
+
+**Why it failed:**
+1. chrono-node parses "tomorrow" as: `2026-01-07 00:00 IST` (midnight tomorrow in India)
+2. JavaScript Date stores internally as: `2026-01-06T18:30:00Z` UTC
+3. `getUTCDate()` extracts **UTC date**: `2026-01-06` ❌
+4. **Should extract local date**: `2026-01-07` ✅
+
+**Solution:**
+Changed to use local date extraction methods:
+```javascript
+// FIXED CODE (lines 71-75):
+const year = dateObj.getFullYear();      // ← Local methods!
+const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+const day = String(dateObj.getDate()).padStart(2, '0');
+```
+
+**Testing (NO-GO Compliance):**
+- ✅ Created tests BEFORE fixing (tests/proof-tomorrow-bug.js)
+- ✅ Verified bug exists with proof script
+- ✅ Applied fix to parseDateTimeForDB()
+- ✅ Verified fix with tests/verify-tomorrow-fix.js
+- ✅ All 3 test cases pass: "speak to Anand tomorrow", "complete record tomorrow", "update resume tomorrow"
+
+**Files Changed:**
+- `backend/server.js` (lines 71-82) - Changed UTC methods to local methods in parseDateTimeForDB()
+
+**Files Created (Tests):**
+- `backend/tests/test-tomorrow-bug.js` - Demonstrates current behavior
+- `backend/tests/proof-tomorrow-bug.js` - Proves the bug exists
+- `backend/tests/verify-tomorrow-fix.js` - Verifies fix works correctly
+
+**Impact:**
+- "tomorrow" tasks now show correct due date on wallpaper
+- "next week", "next month" tasks also fixed (same root cause)
+- No more confusion about when tasks are actually due
+
+---
+
 ## [1.3.5] - 2026-01-06 (Android)
+
+### Added - Epic 9.1: Smart Text Rendering & Collision Detection ✨
+
+**Problem:** Text labels overlapped and obscured stars, making it impossible to distinguish tasks with same priority
+
+**User Feedback:**
+> "If we have two or three stars with same priority, user would be confused. It's very important to show the task name."
+
+**Solution Implemented:**
+1. **Spatial Collision Detection Engine** - LabelCollisionDetector.kt (370 lines)
+   - O(n) performance using spatial hashing
+   - Label-to-label overlap prevention (10px minimum gap)
+   - Label-to-star collision detection (50px buffer for star glow)
+   - Circle-rectangle collision math for accuracy
+
+2. **Vertical Staggering** - Automatic label offset for adjacent stars
+   - Stars within 150px horizontally get vertical offset (40px per level)
+   - Prevents label overlap when stars are side-by-side
+
+3. **Smart Truncation** - Long task names handled gracefully
+   - Max 25 characters with "..." ellipsis
+   - Full text visible in edit modal (tap star)
+
+4. **Opacity Reduction** - Stars visible through labels
+   - Background opacity: 60% → 30% (50% reduction)
+   - Semi-transparent labels no longer obscure stars
+
+5. **Pre-calculated Positioning** - Performance optimized
+   - Calculate all label positions ONCE per render cycle
+   - No repeated collision checks during drawing
+
+**Files Created:**
+- `android/app/src/main/java/com/cosmicocean/utils/LabelCollisionDetector.kt` (370 lines)
+- `android/app/src/test/java/com/cosmicocean/utils/LabelCollisionDetectorTest.kt` (277 lines)
+
+**Files Modified:**
+- `android/app/src/main/java/com/cosmicocean/ui/components/CosmicCanvas.kt` (lines 463-500, 708-766)
+  - Integrated collision-free label positioning
+  - Updated drawStarLabel() to accept pre-calculated position
+  - Added smart truncation and reduced opacity
+
+**Test Results:**
+- 15 collision detection tests: 100% passing
+- Verified: Rectangle overlap, label-to-star collision, truncation, buffer zones
+
+**Features:**
+- ✅ 2 stars (opposite sides) → No label overlap
+- ✅ 5 stars (mixed priorities) → Vertical staggering works
+- ✅ Long task names (50+ chars) → Truncation with "..."
+- ✅ Stars very close (<100px) → Collision detection prevents overlap
+- ✅ Tap star → Full text visible in edit modal
+- ✅ Visual check → Stars visible through 30% opacity labels
+
+**Impact:**
+- Same-priority stars now distinguishable by label
+- No more overlapping text boxes
+- Stars remain visible through semi-transparent labels
+- Smooth rendering with 60fps maintained
 
 ### Fixed - Timezone Not Sent During Registration 🌍
 

@@ -68,16 +68,18 @@ function parseDateTimeForDB(value) {
     return { date: null, time: null };
   }
 
-  // Extract date part (YYYY-MM-DD) using UTC
-  const year = dateObj.getUTCFullYear();
-  const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(dateObj.getUTCDate()).padStart(2, '0');
+  // FIX 2026-01-06: Extract date part using LOCAL time, not UTC
+  // Bug: "tomorrow" in IST (2026-01-07 00:00 IST) was stored as 2026-01-06 (UTC date)
+  // Cause: getUTCDate() returns 6, but getDate() returns 7 (correct local date)
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
   const dateStr = `${year}-${month}-${day}`;
 
-  // Extract time part (HH:MM:SS) - only if not midnight
-  const hours = dateObj.getUTCHours();
-  const minutes = dateObj.getUTCMinutes();
-  const seconds = dateObj.getUTCSeconds();
+  // Extract time part (HH:MM:SS) using LOCAL time - only if not midnight
+  const hours = dateObj.getHours();
+  const minutes = dateObj.getMinutes();
+  const seconds = dateObj.getSeconds();
 
   let timeStr = null;
   if (hours !== 0 || minutes !== 0 || seconds !== 0) {
@@ -857,7 +859,7 @@ app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
-    version: '1.4.5', // Security Hotfix: Fixed API key logging vulnerability
+    version: '1.4.6', // Fixed "tomorrow" tasks stored with wrong date
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {
