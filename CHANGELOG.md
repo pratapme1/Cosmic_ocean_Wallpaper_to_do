@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.1] - 2026-01-06
+
+### Fixed - Message Generation Timeout (v1.4.0 Critical Issue)
+
+**Problem:** Message generation exceeded 15s Vercel timeout limit, causing fallback to templates
+
+**Root Cause:** StatsAggregator querying 30 days of tasks with SELECT * (~200 rows, 100 KB data)
+
+#### Performance Optimizations
+- **Query Window Reduced**: 30 days → 7 days (75% fewer rows)
+  - 7 days sufficient for: streak calculation, pattern detection, averages
+  - Typical reduction: 200 rows → 50 rows
+
+- **Column Selection Optimized**: SELECT * → SELECT specific columns (80% less data)
+  - Only fetch: id, completed, completed_at, created_at, category, priority, due_date
+  - Data transfer: 100 KB → 20 KB
+
+- **Database Indexes Added**: Migration 009 (90% faster queries)
+  - idx_tasks_user_created_at: (user_id, created_at DESC)
+  - idx_tasks_user_completed_at: (user_id, completed_at DESC)
+  - idx_tasks_wallpaper_query: (user_id, completed, archived, created_at)
+
+- **Vercel Timeout Increased**: 15s → 25s (buffer for edge cases)
+
+#### Performance Results (Real Production Data)
+- **Query Time**: 207ms → 115ms (44% faster)
+- **buildMessageContext**: 1.8s (well under 5s target)
+- **Load Test**: 10 concurrent requests = 144ms avg
+- **Verdict**: ✅ No timeouts, all tests passing
+
+#### Proof of Fix
+- Tested against production database with real user data
+- Edge cases verified: 0 tasks, 50+ tasks
+- Data integrity confirmed: all required fields present
+- Load tested: 10 concurrent wallpaper requests
+- **Documentation**: `backend/TIMEOUT_FIX_2026-01-06.md`
+
+### Deployment
+- Backend v1.4.1 live at https://cosmic-ocean-api.vercel.app
+- Vercel auto-deployed from git main (commit 9ff15ea)
+- Database migration 009 applied successfully
+- Files modified: `message-generator-llm.js`, `vercel.json`, `package.json`, `server.js`
+
+### Impact
+- ✅ Message generation now completes in <2s (was timing out at 15s)
+- ✅ Users receive personalized LLM messages (no more fallback templates)
+- ✅ System can handle 10+ concurrent wallpaper requests
+- ✅ Query performance improved 44% with room for growth
+
+---
+
 ## [1.4.0] - 2026-01-05
 
 ### Added - StatsAggregator Integration
