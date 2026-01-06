@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.2] - 2026-01-06
+
+### Fixed - Critical Timezone Bug 🌍 ⏰
+
+**Problem:** Tasks created with relative time ("in 10 minutes") showed WRONG time on wallpapers for all non-UTC users
+
+**Example:**
+- User in India (IST = UTC+5:30) at 2:00 PM local time
+- User types: "Email manager in 10 minutes"
+- ❌ **BUGGY**: Wallpaper showed 08:40 AM (server UTC time)
+- ✅ **FIXED**: Wallpaper now shows 2:10 PM (user's local time)
+
+**Root Cause:**
+- JWT token doesn't contain timezone (only userId, email)
+- POST /api/tasks didn't query user's timezone from database
+- parseLLM() used `new Date()` which is server UTC time
+- LLM prompt received UTC currentTime, calculated "in 10 min" from UTC
+
+**Impact:** ALL users outside UTC timezone saw incorrect times (8-14 hours off!)
+
+#### Code Changes
+
+**backend/utils/llm-task-parser.js:**
+- ✅ parseLLM() now accepts `userTimezone` parameter (default: 'UTC')
+- ✅ Converts server UTC to user's local time before building LLM context
+- ✅ LLM prompt receives user's currentTime, not server UTC time
+
+**backend/server.js:**
+- ✅ POST /api/tasks queries `SELECT timezone FROM users WHERE id = $userId`
+- ✅ Passes timezone to parseLLM(input, userTimezone)
+- ✅ POST /api/tasks/parse-llm also queries and passes timezone
+
+#### Verification
+- **Tests Created:**
+  - `backend/tests/proof-timezone-bug.js` - Demonstrates bug with real scenarios
+  - `backend/tests/verify-timezone-fix.js` - Verifies fix works correctly
+- **Impact Analysis:** Tested with India, New York, Tokyo, Sydney, London timezones
+- **Code Coverage:** Both task creation endpoints updated
+
+#### Files Modified
+- `backend/utils/llm-task-parser.js` - Accept timezone, use user local time
+- `backend/server.js` - Query timezone from DB, pass to parseLLM
+- `backend/package.json` - Version bump to 1.4.2
+- `CHANGELOG.md` - This entry
+
+#### Notes
+- Timezone field already existed in users table (migration 003)
+- Android already sends timezone during registration
+- This fix ensures timezone is actually USED in time calculations
+- **Documentation**: `backend/tests/proof-timezone-bug.js` (detailed investigation)
+
+### Deployment
+- Backend v1.4.2 deployed to https://cosmic-ocean-api.vercel.app
+- No database migration needed (timezone field already exists)
+- Zero downtime deployment via Vercel
+
+---
+
 ## [1.4.1] - 2026-01-06
 
 ### Fixed - Message Generation Timeout (v1.4.0 Critical Issue)

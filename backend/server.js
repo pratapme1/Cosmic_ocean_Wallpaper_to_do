@@ -450,6 +450,7 @@ app.get('/api/tasks/:id', optionalAuth, async (req, res) => {
 // Parses user input using Gemini LLM with graceful fallback
 app.post('/api/tasks/parse-llm', llmRateLimiter, verifyToken, async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { title } = req.body;
 
     if (!title || typeof title !== 'string') {
@@ -459,8 +460,22 @@ app.post('/api/tasks/parse-llm', llmRateLimiter, verifyToken, async (req, res) =
       });
     }
 
+    // FIX 2026-01-06: Query user timezone for accurate time calculations
+    let userTimezone = 'UTC'; // default
+    try {
+      const tzResult = await req.dbClient.query(
+        'SELECT timezone FROM users WHERE id = $1',
+        [userId]
+      );
+      if (tzResult.rows.length > 0 && tzResult.rows[0].timezone) {
+        userTimezone = tzResult.rows[0].timezone;
+      }
+    } catch (tzErr) {
+      console.warn('[Parse LLM] Failed to fetch timezone, using UTC:', tzErr.message);
+    }
+
     // Parse using LLM (automatically falls back to local parser on error)
-    const parsedData = await parseLLM(title);
+    const parsedData = await parseLLM(title, userTimezone);
 
     // Return parsed result
     res.json({
@@ -495,6 +510,20 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
     const userId = getUserId(req);
     const { rawTitle, title: directTitle, priority, context_location, context_time, x, y, is_subtask, is_recurring, echo_interval } = req.body;
 
+    // FIX 2026-01-06: Query user timezone for accurate time calculations
+    let userTimezone = 'UTC'; // default
+    try {
+      const tzResult = await req.dbClient.query(
+        'SELECT timezone FROM users WHERE id = $1',
+        [userId]
+      );
+      if (tzResult.rows.length > 0 && tzResult.rows[0].timezone) {
+        userTimezone = tzResult.rows[0].timezone;
+      }
+    } catch (tzErr) {
+      console.warn('[Task Creation] Failed to fetch timezone, using UTC:', tzErr.message);
+    }
+
     // Parse with comprehensive NLP (Epic 7: NLP Integration) + LLM (Epic 8)
     let title, dueDate, estimateMinutes, category, contextTags, energy, recurring, timeContext, calculatedPriority, llmDueTime;
     const inputText = rawTitle || directTitle;
@@ -502,7 +531,7 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
     try {
       // Use LLM parsing if enabled, otherwise use local NLP
       const shouldUseLLM = process.env.ENABLE_LLM_PARSING === 'true' && process.env.ANTHROPIC_API_KEY;
-      const parsed = shouldUseLLM ? await parseLLM(inputText) : parseTask(inputText);
+      const parsed = shouldUseLLM ? await parseLLM(inputText, userTimezone) : parseTask(inputText);
 
       title = parsed.title;
       // LLM parser returns snake_case, local parser returns camelCase - handle both
@@ -822,7 +851,7 @@ app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
-    version: '1.4.1', // Epic 8: Timeout fix - Query optimization (75% faster)
+    version: '1.4.2', // Epic 8: Critical timezone fix - "in 10 minutes" now uses user's local time
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {

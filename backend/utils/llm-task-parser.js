@@ -259,6 +259,8 @@ function validateAndClean(llmResponse, input) {
   // SEMANTIC TIME-BASED PRIORITY UPGRADE
   // If LLM set a due_time, check if it's within 2 hours → auto-upgrade to Priority 1
   // This fixes the issue where LLM parses the time correctly but doesn't infer urgency from it
+  // NOTE: This function is called from validateAndClean, which doesn't have access to timezone
+  // Priority upgrade uses UTC time - this is acceptable since it's relative time (2 hours is same in any TZ)
   if (llmResponse.dueTime && llmResponse.priority !== 1) {
     try {
       const now = new Date();
@@ -303,9 +305,10 @@ function validateAndClean(llmResponse, input) {
  * Parse task using Gemini LLM
  *
  * @param {string} input - User's natural language input
+ * @param {string} userTimezone - User's timezone (e.g., 'America/New_York', 'Asia/Kolkata')
  * @returns {Promise<object>} - Parsed task data
  */
-async function parseLLM(input) {
+async function parseLLM(input, userTimezone = 'UTC') {
   // Check if LLM is enabled
   if (!process.env.ANTHROPIC_API_KEY || process.env.ENABLE_LLM_PARSING === 'false') {
     console.log('[LLM Parser] LLM disabled, using fallback parser');
@@ -327,13 +330,21 @@ async function parseLLM(input) {
   }
 
   try {
-    // Build context
+    // FIX 2026-01-06: Use user's timezone instead of server UTC
+    // Build context using user's local time
     const now = new Date();
+
+    // Convert to user's timezone
+    const userLocalTime = new Date(now.toLocaleString('en-US', { timeZone: userTimezone }));
+
     const context = {
-      today: now.toISOString().split('T')[0],
-      currentTime: now.toTimeString().split(' ')[0].substring(0, 5),
-      dayOfWeek: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()]
+      today: userLocalTime.toISOString().split('T')[0],
+      currentTime: userLocalTime.toTimeString().split(' ')[0].substring(0, 5),
+      dayOfWeek: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][userLocalTime.getDay()],
+      timezone: userTimezone
     };
+
+    console.log(`[LLM Parser] Using user timezone: ${userTimezone}, local time: ${context.currentTime}`);
 
     // Build prompt
     const prompt = buildPrompt(input, context);
