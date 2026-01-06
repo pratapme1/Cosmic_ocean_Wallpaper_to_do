@@ -73,17 +73,21 @@ STRICT RULES (CRITICAL - DO NOT HALLUCINATE):
 
 3. dueTime: ONLY if EXPLICITLY mentioned. Otherwise null.
    - "at 3pm", "by 5:00", "noon" → HH:MM (24-hour)
-   - "in X minutes/hours" OR abbreviations "in 10m", "in 1h", "in 30min" → calculate from ${currentTime}
+   - "in X minutes/hours" → ADD X to ${currentTime} and return result as HH:MM
+     * EXAMPLE: If currentTime is 23:21 and input is "in 39 minutes" → 23:21 + 39min = 00:00 (next day)
+     * EXAMPLE: If currentTime is 14:30 and input is "in 1 hour" → 14:30 + 60min = 15:30
+     * IMPORTANT: Handle midnight rollover correctly!
    - Time-of-day words (when used as timing, not just description):
      "morning task", "task in the morning" → 09:00
      "afternoon meeting", "task in afternoon" → 14:00
      "evening call", "task in evening" → 18:00
    - NO time words → null (DO NOT INVENT)
-   - CRITICAL: "in 10m" means "due in 10 minutes" → set dueTime, NOT estimateMinutes
+   - CRITICAL: "in 39 minutes" means DUE TIME, NOT duration. Set dueTime, NOT estimateMinutes!
 
-4. estimateMinutes: ONLY from explicit duration mentions.
-   - "30 minute call" → 30
+4. estimateMinutes: ONLY from explicit TASK DURATION mentions. NOT "in X minutes".
+   - "30 minute call" → 30 (how long the call takes)
    - "quick task" → 15, "1 hour meeting" → 60
+   - "record in 39 minutes" → estimateMinutes: null (39 is DUE TIME, not duration!)
    - NO duration mentioned → null
 
 5. priority: Infer from BOTH urgency keywords AND time pressure (semantic understanding).
@@ -395,16 +399,25 @@ async function parseLLM(input, userTimezone = 'UTC') {
 
       console.log('[LLM Parser] Response preview:', responseText.substring(0, 100));
 
-      // If response starts with text (not JSON), try to extract JSON object
-      if (!cleanJson.startsWith('{')) {
-        // Use non-greedy match to find first complete JSON object
-        const jsonMatch = cleanJson.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/);
-        if (jsonMatch) {
-          cleanJson = jsonMatch[0];
+      // Extract just the JSON object, ignoring any text before or after
+      // This handles cases where LLM adds explanations after the JSON
+      const jsonMatch = cleanJson.match(/\{[\s\S]*?\}(?=\s*(\n\n|$|[^{}\[\]]))/);
+      if (jsonMatch) {
+        // Find the complete JSON by tracking brace balance
+        let braceCount = 0;
+        let jsonEnd = -1;
+        const startIdx = cleanJson.indexOf('{');
+        for (let i = startIdx; i < cleanJson.length; i++) {
+          if (cleanJson[i] === '{') braceCount++;
+          if (cleanJson[i] === '}') braceCount--;
+          if (braceCount === 0) {
+            jsonEnd = i + 1;
+            break;
+          }
+        }
+        if (jsonEnd > startIdx) {
+          cleanJson = cleanJson.substring(startIdx, jsonEnd);
           console.log('[LLM Parser] Extracted JSON:', cleanJson.substring(0, 100));
-        } else {
-          console.error('[LLM Parser] No JSON found in:', cleanJson.substring(0, 200));
-          throw new Error('No JSON object found in response');
         }
       }
 

@@ -1009,7 +1009,7 @@ app.get('/api/health', async (req, res) => {
 
   res.json({
     status: 'ok',
-    version: '1.5.7', // Fix: Add explicit 'yesterday' example to LLM prompt
+    version: '1.5.8', // Fix: 'in X minutes' parsing and JSON extraction
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     debug: {
