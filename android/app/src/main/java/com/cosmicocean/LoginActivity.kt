@@ -13,6 +13,7 @@ import com.cosmicocean.network.NetworkModule
 import com.cosmicocean.ui.components.AuthScreen
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
+import java.util.TimeZone
 
 class LoginActivity : ComponentActivity() {
     private lateinit var tokenManager: TokenManager
@@ -116,10 +117,14 @@ class LoginActivity : ComponentActivity() {
                     return@launch
                 }
 
+                // Get device timezone (e.g., "America/New_York", "Asia/Kolkata")
+                val deviceTimezone = TimeZone.getDefault().id
+
                 val response = NetworkModule.getApi(this@LoginActivity).register(
                     mapOf(
                         "email" to email,
-                        "password" to password
+                        "password" to password,
+                        "timezone" to deviceTimezone
                     )
                 )
 

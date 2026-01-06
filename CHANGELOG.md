@@ -7,7 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.4.5] - 2026-01-06
+## [1.3.5] - 2026-01-06 (Android)
+
+### Fixed - Timezone Not Sent During Registration 🌍
+
+**Problem:** All Android users were stored with `timezone = 'UTC'` in database regardless of their actual device timezone
+
+**Example:**
+- User in India (IST = UTC+5:30) registers account
+- ❌ **BUGGY**: Database stored `timezone = 'UTC'`
+- ✅ **FIXED**: Database now stores `timezone = 'Asia/Kolkata'`
+
+**Root Cause:**
+1. Backend accepts optional `timezone` parameter during registration (defaults to 'UTC')
+2. Android app only sent `email` and `password` (didn't send timezone)
+3. Result: All users defaulted to UTC timezone
+4. Impact: LLM parsing "in 10 minutes" used UTC time instead of user's local time
+
+**Solution:**
+Android now detects device timezone and sends it during registration:
+```kotlin
+// Get device timezone (e.g., "America/New_York", "Asia/Kolkata")
+val deviceTimezone = TimeZone.getDefault().id
+
+val response = NetworkModule.getApi(this@LoginActivity).register(
+    mapOf(
+        "email" to email,
+        "password" to password,
+        "timezone" to deviceTimezone  // ← NEW: Send device timezone
+    )
+)
+```
+
+**Files Changed:**
+- `android/app/src/main/java/com/cosmicocean/LoginActivity.kt` (lines 16, 120-128) - Added timezone detection and sending
+- `android/app/build.gradle` (lines 22-23) - Version bump to 1.3.5 (versionCode 9)
+
+**Note:** Existing users with `timezone = 'UTC'` need to update their timezone in user preferences or re-register.
+
+---
+
+## [1.4.5] - 2026-01-06 (Backend)
 
 ### Fixed - Critical Security Hotfix 🚨
 
