@@ -623,12 +623,35 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
       console.log(`[LLM] Using separate due_time: ${dueTimeForDB}`);
     }
 
-    // FIX v1.5.0: If we have due_time but no due_date, set due_date to TODAY
-    // This fixes "in 30 minutes" storing only time without date
+    // FIX v1.5.0 + v1.5.9: If we have due_time but no due_date, set due_date to TODAY or TOMORROW
+    // Handle midnight rollover: if due_time < current_time, it's for tomorrow
     if (dueTimeForDB && !dueDateForDB) {
       const now = new Date();
-      dueDateForDB = parseDateForDB(now);
-      console.log(`[FIX] due_time without due_date - setting to today: ${dueDateForDB}`);
+      // Get current time in user's timezone
+      const currentTimeStr = now.toLocaleTimeString('en-GB', {
+        timeZone: userTimezone,
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+
+      // Compare times to detect midnight rollover
+      // If due_time is earlier than current time, it's for tomorrow
+      const dueTimeParts = dueTimeForDB.split(':').map(Number);
+      const currentParts = currentTimeStr.split(':').map(Number);
+      const dueMinutes = dueTimeParts[0] * 60 + dueTimeParts[1];
+      const currentMinutes = currentParts[0] * 60 + currentParts[1];
+
+      if (dueMinutes < currentMinutes) {
+        // Midnight rollover - set to tomorrow
+        const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        dueDateForDB = parseDateForDB(tomorrow);
+        console.log(`[FIX] due_time ${dueTimeForDB} < current ${currentTimeStr} - setting to tomorrow: ${dueDateForDB}`);
+      } else {
+        dueDateForDB = parseDateForDB(now);
+        console.log(`[FIX] due_time without due_date - setting to today: ${dueDateForDB}`);
+      }
     }
 
     const query = `
@@ -1009,7 +1032,7 @@ app.get('/api/health', async (req, res) => {
 
   res.json({
     status: 'ok',
-    version: '1.5.8', // Fix: 'in X minutes' parsing and JSON extraction
+    version: '1.5.9', // Fix: Midnight rollover for 'in X minutes'
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     debug: {
