@@ -548,6 +548,13 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
       // LLM parser returns due_time as separate string (e.g., "17:00")
       llmDueTime = parsed.dueTime || parsed.due_time;
 
+      // FIX v1.4.9: Handle "now" keyword - set due_date to current time if not already set
+      if (!dueDate && /\bnow\b/i.test(inputText)) {
+        console.log('[Task Creation] Detected "now" keyword - setting due_date to current time');
+        dueDate = new Date();
+        llmDueTime = null; // Will use current time from dueDate
+      }
+
       // NEW: Extract NLP metadata (handle both naming conventions)
       category = parsed.category || 'general';
       contextTags = parsed.context || parsed.context_tags || [];
@@ -686,10 +693,17 @@ app.patch('/api/tasks/:id', optionalAuth, async (req, res) => {
         const shouldUseLLM = process.env.ENABLE_LLM_PARSING === 'true' && !!process.env.ANTHROPIC_API_KEY;
         const parsed = shouldUseLLM ? await parseLLM(updates.rawTitle, userTimezone) : parseTask(updates.rawTitle);
 
+        // FIX v1.4.9: Handle "now" keyword - set due_date to current time if not already set
+        let parsedDueDate = parsed.dueDate || parsed.due_date;
+        if (!parsedDueDate && /\bnow\b/i.test(updates.rawTitle)) {
+          console.log('[PATCH] Detected "now" keyword - setting due_date to current time');
+          parsedDueDate = new Date();
+        }
+
         // Replace updates with parsed values
         updates.title = parsed.title;
-        if (parsed.dueDate || parsed.due_date) {
-          const { date, time } = parseDateTimeForDB(parsed.dueDate || parsed.due_date);
+        if (parsedDueDate) {
+          const { date, time } = parseDateTimeForDB(parsedDueDate);
           updates.due_date = date;
           if (time) updates.due_time = time;
         }
@@ -911,7 +925,7 @@ app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
-    version: '1.4.8', // Support rawTitle in PATCH for NLP re-parsing on task edit
+    version: '1.4.9', // Handle "now" keyword by setting due_date to current time
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {
