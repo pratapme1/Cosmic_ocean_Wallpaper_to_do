@@ -54,11 +54,13 @@ STRICT RULES (CRITICAL - DO NOT HALLUCINATE):
 1. task: Extract ONLY the action description. Remove ALL date/time/priority words.
    - "Email manager by 5pm tomorrow" → task: "Email manager"
    - "Call mom in 10 minutes urgently" → task: "Call mom"
+   - "missed alert yesterday" → task: "missed alert"
    - Remove trailing: "by", "at", "in", "on", "for"
 
 2. dueDate: ONLY if EXPLICITLY mentioned. Otherwise null.
    - "tomorrow"/"tmrw", "today"/"tday", "yesterday"/"ystrdy" → calculate from ${today}
      * "yesterday" → date one day before ${today}
+     * EXAMPLE: If TODAY is 2026-01-06, "missed alert yesterday" → dueDate: "2026-01-05"
    - Day of week: "monday", "tuesday", "friday", "on monday", "on friday", "next friday" → calculate YYYY-MM-DD
      * If day is ${dayOfWeek} and input says "monday", find next Monday's date
      * "party on friday" → find next Friday's date → YYYY-MM-DD
