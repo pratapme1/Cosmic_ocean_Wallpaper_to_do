@@ -857,7 +857,7 @@ app.get('/api/health', async (req, res) => {
   const dbClient = req.dbClient || await getDbClient();
   res.json({
     status: 'ok',
-    version: '1.4.4', // Epic 8: Added detailed parsing logs for debugging
+    version: '1.4.5', // Security Hotfix: Fixed API key logging vulnerability
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     env: {
