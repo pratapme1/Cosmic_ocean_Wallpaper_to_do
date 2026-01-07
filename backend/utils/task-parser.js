@@ -267,12 +267,17 @@ function extractDateTime(text, suggestedHour = null) {
       matchedText.startsWith('on ') ||           // "on monday"
       matchedText.startsWith('before ') ||       // "before noon"
       matchedText.startsWith('after ') ||        // "after lunch"
+      matchedText.startsWith('due ') ||          // "due friday"
+      matchedText.startsWith('deadline ') ||     // "deadline friday"
+      matchedText.startsWith('until ') ||        // "until friday"
       matchedText.includes('tomorrow') ||        // "tomorrow"
       matchedText.includes('today') ||           // "today"
       matchedText.includes('tonight') ||         // "tonight"
+      matchedText.includes('yesterday') ||       // "yesterday"
       matchedText.match(/\b(mon|tue|wed|thu|fri|sat|sun)/i) ||  // weekdays
       matchedText.includes('next ') ||           // "next week"
       matchedText.includes('this ') ||           // "this evening"
+      matchedText.includes('last ') ||           // "last week"
       /\d{1,2}[:\s]?\d{2}\s*(am|pm)/i.test(matchedText) ||  // "3:30pm"
       /\d{1,2}\s*(am|pm)/i.test(matchedText) ||  // "3pm"
       /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(matchedText) ||  // month names

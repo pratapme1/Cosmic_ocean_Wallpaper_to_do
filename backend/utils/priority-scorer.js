@@ -74,8 +74,17 @@ function calculateTaskScore(task, context = {}) {
     score += 200;
   }
 
-  // 2. User Priority (0=None, 1=Medium, 2=High)
-  score += (task.priority || 0) * 100;
+  // 2. User Priority (1=High, 2=Medium, 3=Low)
+  // Convert to score: Higher priority (lower number) = higher score
+  // Priority 1 (High) -> 300 points
+  // Priority 2 (Medium) -> 200 points
+  // Priority 3 (Low) -> 100 points
+  const priorityScore = {
+    1: 300,  // High
+    2: 200,  // Medium
+    3: 100   // Low
+  };
+  score += priorityScore[task.priority] || 200; // Default to Medium if not set
 
   // 3. Task Age
   score += Math.min(daysSince(task.created_at), 14);

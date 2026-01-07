@@ -216,16 +216,37 @@ function validateAndClean(llmResponse, input) {
 
   // Date validation - strip if not mentioned
   const dateWords = [
-    'tomorrow', 'today', 'yesterday', 'tmrw', 'tday', 'ystrdy', // Common and abbreviations
+    // Common dates and abbreviations
+    'tomorrow', 'today', 'yesterday', 'tmrw', 'tday', 'ystrdy',
+    'tmw', 'tmr', 'tmrw', // More abbreviations for tomorrow
+    'nxt', 'next', // "nxt week", "next week"
+
+    // Weekday names
     'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
-    'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun', // Day abbreviations
+    'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun',
+
+    // Relative time references
     'next week', 'next month', 'this week', 'this weekend', 'weekend',
-    'last week', 'last month', // Past references
+    'last week', 'last month',
+
+    // End of period references
     'end of day', 'eod', 'end of week', 'eow', 'end of month', 'eom',
+    'by end of', // "by end of day", "by end of week"
+
+    // Due/deadline keywords
+    'due', 'deadline', 'before', 'until',
+
+    // Month names
     'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
-    /\d{1,2}\/\d{1,2}/, /\d{4}-\d{2}-\d{2}/,
-    /\bon (monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i, // "on friday", "on monday"
-    /\bfinish (this|next) week/i, // "finish this week", "finish next week"
+
+    // Regex patterns
+    /\d{1,2}\/\d{1,2}/, // "12/25"
+    /\d{4}-\d{2}-\d{2}/, // "2026-01-15"
+    /\bon (monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i, // "on friday"
+    /\b(due|deadline|by)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i, // "due friday"
+    /\bfinish (this|next) week/i, // "finish this week"
+    /\bin\s+\d+\s*days?\b/i, // "in 3 days", "in 1 day"
+    /\b\d+\s*days?\s*(from now|away)\b/i, // "3 days from now", "5 days away"
   ];
   const hasDateMention = dateWords.some(word => {
     if (word instanceof RegExp) {

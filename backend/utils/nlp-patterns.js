@@ -92,6 +92,7 @@ const CATEGORY_PATTERNS = {
     'meeting', 'email', 'report', 'presentation', 'project',
     'deadline', 'client', 'team', 'review', 'submit',
     'proposal', 'budget', 'invoice', 'contract', 'colleague',
+    'standup', 'scrum', 'sprint', 'deploy', 'code',
     '@work', '@office'
   ],
   personal: [
