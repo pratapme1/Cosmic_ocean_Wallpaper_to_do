@@ -25,6 +25,8 @@ const { getCurrentMessage } = require('./wallpaper-message-provider');
 const { filterTasksForWallpaper, getPrivacyStats } = require('./privacy-filter');
 const { AchievementService } = require('./achievement-service');
 const { renderAchievementsToSvg, generateStreakDisplay } = require('./achievement-renderer');
+const { getEnvironment } = require('./environment-system');
+const { getWeatherOverlay, blendWithEnvironment } = require('./weather-overlay');
 
 // Initialize intelligence layer components
 const messageEngine = new MessageEngine();
@@ -426,6 +428,27 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now(), tim
 
     // Get color palette (use urgency from atmosphere)
     const colors = getColorPalette(theme, urgency);
+
+    // =====================================
+    // ENVIRONMENT & WEATHER SYSTEM (Epic 10 Phase 3)
+    // =====================================
+
+    // Get time-of-day environment
+    const environment = getEnvironment({
+      timezone: timezone,
+      theme: theme,
+      enableTransitions: true,
+    });
+
+    // Get weather/mood overlay based on task state
+    const weather = getWeatherOverlay(tasks, {});
+
+    // Log environment state
+    console.log(`[Environment] Period: ${environment.metadata.period}, Weather: ${weather.state}`);
+
+    // =====================================
+    // END ENVIRONMENT & WEATHER
+    // =====================================
 
     // Get animation state (enhanced with visual params)
     const animState = getAnimationState(timestamp, urgency);
