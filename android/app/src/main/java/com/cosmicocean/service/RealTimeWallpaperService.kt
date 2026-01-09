@@ -189,9 +189,10 @@ class RealTimeWallpaperService : Service() {
                     if (bitmap != null) {
                         val wallpaperManager = WallpaperManager.getInstance(applicationContext)
 
-                        // Clear and set for reliable update
+                        // Clear and set for reliable update on BOTH screens
+                        val wallpaperFlags = WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
                         try {
-                            wallpaperManager.clear(WallpaperManager.FLAG_LOCK)
+                            wallpaperManager.clear(wallpaperFlags)
                             Thread.sleep(50)
                         } catch (e: Exception) {
                             // Ignore clear errors
@@ -201,7 +202,7 @@ class RealTimeWallpaperService : Service() {
                             bitmap,
                             null,
                             true,
-                            WallpaperManager.FLAG_LOCK
+                            wallpaperFlags  // Update BOTH home and lock screen
                         )
 
                         Log.d(TAG, "Wallpaper updated successfully: ${bitmap.width}x${bitmap.height}")

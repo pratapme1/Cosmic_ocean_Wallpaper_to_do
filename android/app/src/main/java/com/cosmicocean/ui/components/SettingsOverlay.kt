@@ -1,8 +1,11 @@
 package com.cosmicocean.ui.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -31,7 +34,17 @@ fun SettingsOverlay(
                 .padding(24.dp)
                 .padding(bottom = 32.dp)
         ) {
-            Text("Settings & Guide", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF3AA0FF))
+            // Header with title and close button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Settings & Guide", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF3AA0FF))
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                }
+            }
 
             // User Info
             if (userEmail != null) {
@@ -116,7 +129,7 @@ fun SettingsOverlay(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Privacy Settings
             if (onOpenPrivacySettings != null) {

@@ -98,9 +98,11 @@ class WallpaperUpdateWorker(
                     Log.e(TAG, "Setting wallpaper for LOCK screen using original bitmap (no scaling)...")
 
                     // CRITICAL FIX: Clear any existing wallpaper first to force Android to update
+                    // Update BOTH home and lock screen for reliable visual feedback
+                    val wallpaperFlags = WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
                     try {
-                        Log.e(TAG, "Clearing existing wallpaper to force update...")
-                        wallpaperManager.clear(WallpaperManager.FLAG_LOCK)
+                        Log.e(TAG, "Clearing existing wallpaper (both screens) to force update...")
+                        wallpaperManager.clear(wallpaperFlags)
                         // Small delay to ensure clear completes
                         Thread.sleep(100)
                     } catch (e: Exception) {
@@ -113,7 +115,7 @@ class WallpaperUpdateWorker(
                         bitmap,
                         null,
                         true,
-                        WallpaperManager.FLAG_LOCK
+                        wallpaperFlags  // Update BOTH home and lock screen
                     )
 
                     Log.e(TAG, "✅ Wallpaper set successfully! Theme: $theme, Size: ${bitmap.width}x${bitmap.height}, Timestamp: $timestamp")

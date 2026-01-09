@@ -8,7 +8,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -163,6 +165,17 @@ class MainActivity : ComponentActivity() {
                                 .align(Alignment.TopEnd)
                                 .padding(16.dp)
                         ) {
+                            // Refresh Wallpaper Button
+                            IconButton(
+                                onClick = {
+                                    android.widget.Toast.makeText(this@MainActivity, "Refreshing wallpaper...", android.widget.Toast.LENGTH_SHORT).show()
+                                    triggerImmediateUpdate()
+                                },
+                                modifier = Modifier.background(Color.Black.copy(0.4f), shape = MaterialTheme.shapes.small)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Refresh Wallpaper", tint = Color.White)
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
                             IconButton(
                                 onClick = { showSearch = true },
                                 modifier = Modifier.background(Color.Black.copy(0.4f), shape = MaterialTheme.shapes.small)
@@ -174,7 +187,7 @@ class MainActivity : ComponentActivity() {
                                 onClick = { showSettings = true },
                                 modifier = Modifier.background(Color.Black.copy(0.4f), shape = MaterialTheme.shapes.small)
                             ) {
-                                Text("⚙", color = Color.White)
+                                Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White)
                             }
                         }
 
