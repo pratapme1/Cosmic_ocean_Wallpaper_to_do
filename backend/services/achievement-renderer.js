@@ -666,7 +666,13 @@ function generateAchievementBar(achievements, inProgress, layout, colors, totalP
 
 /**
  * Render achievements layer to SVG
- * @param {Object} layout - Layout configuration
+ *
+ * PLACEMENT: Task Zone Header (Option A from ANDROID_UI_UX_DESIGN_SYSTEM.md)
+ * - Positioned at the START of the Task Zone (after Scene + Transition zones)
+ * - This creates a natural flow: "Here's what you've earned → Here's what to do next"
+ * - Respects safe zones: Below clock, above nav bar
+ *
+ * @param {Object} layout - Layout configuration (includes layoutZones)
  * @param {Array} achievements - Array of earned achievements
  * @param {Array} inProgress - Achievements in progress
  * @param {Object} colors - Color palette
@@ -674,7 +680,7 @@ function generateAchievementBar(achievements, inProgress, layout, colors, totalP
  * @returns {Promise<string>} SVG string
  */
 async function renderAchievementsToSvg(layout, achievements, inProgress, colors, options = {}) {
-  const { width, height, density, margins, typography } = layout;
+  const { width, height, density, margins, typography, layoutZones } = layout;
   const { maxBadges = 3, showProgress = true, totalPoints = 0 } = options;
 
   // Take only the top achievements to display (most recent first)
@@ -700,7 +706,24 @@ async function renderAchievementsToSvg(layout, achievements, inProgress, colors,
     totalPoints
   );
 
-  // Position at top of screen (after status bar safe zone)
+  // Calculate Task Zone Header position
+  // Position: Start of Task Zone (after System + Clock + Scene + Transition zones)
+  // This is approximately 65% down from top based on zone percentages:
+  // - System: 8%, Clock: 12%, Scene: 40%, Transition: 5% = 65%
+  let taskZoneY;
+  if (layoutZones && layoutZones.task) {
+    // Use exact task zone Y position from layout system
+    taskZoneY = layoutZones.task.y;
+  } else {
+    // Fallback calculation if layoutZones not available
+    // System(8%) + Clock(12%) + Scene(40%) + Transition(5%) = 65%
+    taskZoneY = Math.floor(height * 0.57); // Slightly lower to account for fixed zones
+  }
+
+  // Add small offset to position just inside task zone (as header)
+  const achievementBarY = taskZoneY - dp(8, density);
+
+  // Position at Task Zone Header (not top of screen)
   const element = {
     type: 'div',
     props: {
@@ -710,7 +733,9 @@ async function renderAchievementsToSvg(layout, achievements, inProgress, colors,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        paddingTop: dp(60, density), // Safe zone for status bar
+        paddingTop: achievementBarY,
+        paddingLeft: dp(16, density),
+        paddingRight: dp(16, density),
       },
       children: achievementBar,
     },

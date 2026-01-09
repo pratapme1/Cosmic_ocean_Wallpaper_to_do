@@ -298,10 +298,27 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
 
     let imageBuffer;
 
+    // FIX: Always fetch allTasks for achievement calculation (even when done_for_today)
+    // This ensures achievements are shown correctly after task completion
+    let allTasksForAchievements = [];
+    if (useEnhanced) {
+      const allTasksResult = await queryWithRetry(client, `
+        SELECT * FROM tasks
+        WHERE user_id = $1
+        AND (archived = false OR archived IS NULL)
+        AND (created_at > NOW() - INTERVAL '30 days' OR completed_at > NOW() - INTERVAL '30 days')
+      `, [userId]);
+      allTasksForAchievements = allTasksResult.rows;
+      console.log(`[Wallpaper] Fetched ${allTasksForAchievements.length} tasks for achievement calculation`);
+    }
+
     if (userObj && userObj.done_for_today) {
-      // Done for today - celebration wallpaper
+      // Done for today - celebration wallpaper (but still show achievements!)
       if (useEnhanced) {
-        imageBuffer = await generateEnhancedWallpaper(user, { tasks: [] }, timestamp, timezone);
+        imageBuffer = await generateEnhancedWallpaper(user, {
+          tasks: [],
+          allTasks: allTasksForAchievements  // FIX: Pass allTasks for achievements
+        }, timestamp, timezone);
       } else {
         imageBuffer = await generateWallpaper(user, { topTask: null, count: 0 });
       }
@@ -322,17 +339,9 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
       console.log(`[Wallpaper] userId=${userId}, activeTasks=${prioritized.length}, topTask="${topTasks[0]?.title || 'none'}"`);
 
       if (useEnhanced) {
-        // Fetch all tasks (including completed) for intelligence layer stats
-        const allTasksResult = await queryWithRetry(client, `
-          SELECT * FROM tasks
-          WHERE user_id = $1
-          AND (archived = false OR archived IS NULL)
-          AND (created_at > NOW() - INTERVAL '30 days' OR completed_at > NOW() - INTERVAL '30 days')
-        `, [userId]);
-
         imageBuffer = await generateEnhancedWallpaper(user, {
           tasks: prioritized,
-          allTasks: allTasksResult.rows
+          allTasks: allTasksForAchievements  // Use pre-fetched allTasks
         }, timestamp, timezone);
       } else {
         imageBuffer = await generateWallpaper(user, { tasks: topTasks, count });
