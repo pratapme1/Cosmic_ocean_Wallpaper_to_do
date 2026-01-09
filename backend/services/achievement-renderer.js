@@ -215,44 +215,31 @@ function generateBadgeElement(achievement, size, density) {
 }
 
 /**
- * Get icon symbol for achievement (Satori-compatible)
- * Since Satori doesn't support embedded SVG, we use Unicode symbols
+ * Get icon character for achievement (Satori/Vercel compatible)
+ * Use simple ASCII characters that render reliably in all fonts
+ * These are styled with CSS to look like icons
  */
 function getIconSymbol(iconName) {
-  const symbols = {
-    flame: '🔥',       // Will render as text
-    fire: '🔥',
-    lightning: '⚡',
-    sun: '☀',
-    moon: '🌙',
-    'check-circle': '✓',
-    trophy: '🏆',
-    medal: '🎖',
-    star: '★',
-    crown: '👑',
-    rocket: '🚀',
+  // Simple ASCII characters that work in Inter font on Vercel
+  const iconChars = {
+    flame: 'F',        // Will be styled as a badge
+    fire: 'F',
+    lightning: 'L',
+    sun: 'S',
+    moon: 'M',
+    'check-circle': 'C',  // Clear/Check
+    trophy: 'T',
+    medal: 'M',
+    star: 'S',
+    crown: 'K',        // King's crown
+    rocket: 'R',
   };
 
-  // Fallback symbols that work better in Inter font
-  const interSymbols = {
-    flame: '▲',       // Triangle up (fire-like)
-    fire: '▲',
-    lightning: '⚡',   // Lightning symbol exists
-    sun: '●',         // Circle for sun
-    moon: '◐',        // Half moon
-    'check-circle': '✓',
-    trophy: '★',      // Star for trophy
-    medal: '◆',       // Diamond for medal
-    star: '★',
-    crown: '♛',       // Crown symbol
-    rocket: '▲',      // Upward triangle
-  };
-
-  return interSymbols[iconName] || '●';
+  return iconChars[iconName] || '?';
 }
 
 /**
- * Get shortened name for badge display
+ * Get shortened name for badge display (used in compact mode)
  */
 function getShortName(name) {
   const shortNames = {
@@ -274,6 +261,30 @@ function getShortName(name) {
   };
 
   return shortNames[name] || name.substring(0, 8);
+}
+
+/**
+ * Get friendly description for achievements
+ */
+function getAchievementDescription(achievement) {
+  const descriptions = {
+    'Zero Inbox': 'All tasks complete',
+    'First Step': 'Started your journey',
+    '3-Day Streak': '3 days in a row',
+    'Week Warrior': '7 day streak',
+    'Fortnight Force': '14 day streak',
+    'Monthly Master': '30 day streak',
+    'Centurion': '100 day streak',
+    'Speed Demon': 'Quick completion',
+    'Early Bird': 'Morning warrior',
+    'Night Owl': 'Night productivity',
+    'Half Century': '50 tasks done',
+    'Century Club': '100 tasks done',
+    'Task Master': '500 tasks done',
+    'Legendary': '1000 tasks done',
+    'Cosmic Legend': '5000 tasks done',
+  };
+  return descriptions[achievement.name] || achievement.name;
 }
 
 /**
@@ -351,46 +362,304 @@ function generateProgressRing(inProgress, size, density, colors) {
 }
 
 /**
- * Generate achievement bar element for wallpaper
- * @param {Array} achievements - Array of achievements to display (max 3)
+ * Generate modern glassmorphism achievement card for wallpaper
+ * Shows: Total Points | Recent Achievement | Progress toward next
+ *
+ * @param {Array} achievements - Array of achievements to display
  * @param {Object} inProgress - Next achievement in progress
  * @param {Object} layout - Layout configuration
  * @param {Object} colors - Color palette
+ * @param {number} totalPoints - Total achievement points earned
  * @returns {Object} Satori element or null
  */
-function generateAchievementBar(achievements, inProgress, layout, colors) {
+function generateAchievementBar(achievements, inProgress, layout, colors, totalPoints = 0) {
   const { density, margins, typography } = layout;
 
-  if ((!achievements || achievements.length === 0) && !inProgress) {
+  if ((!achievements || achievements.length === 0) && !inProgress && totalPoints === 0) {
     return null;
   }
 
-  const badgeElements = (achievements || []).map(a =>
-    generateBadgeElement(a, 36, density)
-  );
+  const cardPadding = dp(12, density);
+  const recentAchievement = achievements && achievements.length > 0 ? achievements[0] : null;
 
-  const progressElement = inProgress
-    ? generateProgressRing(inProgress, 36, density, colors)
-    : null;
+  // Build card children
+  const cardChildren = [];
 
-  return {
+  // Left section: Total Points (prominent)
+  cardChildren.push({
+    type: 'div',
+    props: {
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingRight: dp(16, density),
+        borderRight: '1px solid rgba(255, 255, 255, 0.15)',
+        marginRight: dp(16, density),
+        minWidth: dp(60, density),
+      },
+      children: [
+        {
+          type: 'div',
+          props: {
+            style: {
+              display: 'flex',
+              color: '#FFD700',
+              fontSize: dp(24, density),
+              fontWeight: 700,
+              lineHeight: 1,
+            },
+            children: `${totalPoints}`,
+          },
+        },
+        {
+          type: 'div',
+          props: {
+            style: {
+              display: 'flex',
+              color: 'rgba(255, 255, 255, 0.7)',
+              fontSize: dp(10, density),
+              fontWeight: 500,
+              marginTop: dp(2, density),
+              textTransform: 'uppercase',
+              letterSpacing: '1px',
+            },
+            children: 'pts',
+          },
+        },
+      ],
+    },
+  });
+
+  // Middle section: Recent Achievement (if any)
+  if (recentAchievement) {
+    const badgeSize = dp(32, density);
+    const iconSize = dp(14, density);
+
+    cardChildren.push({
+      type: 'div',
+      props: {
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          flex: 1,
+          minWidth: dp(120, density), // Ensure enough space for name
+        },
+        children: [
+          // Badge circle
+          {
+            type: 'div',
+            props: {
+              style: {
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: badgeSize,
+                height: badgeSize,
+                borderRadius: '50%',
+                backgroundColor: recentAchievement.color || '#FFD700',
+                boxShadow: `0 0 ${dp(12, density)}px ${recentAchievement.color || '#FFD700'}50`,
+                marginRight: dp(10, density),
+                flexShrink: 0,
+              },
+              children: {
+                type: 'div',
+                props: {
+                  style: {
+                    display: 'flex',
+                    color: '#FFFFFF',
+                    fontSize: iconSize,
+                    fontWeight: 700,
+                    textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                  },
+                  children: getIconSymbol(recentAchievement.icon),
+                },
+              },
+            },
+          },
+          // Achievement name and description
+          {
+            type: 'div',
+            props: {
+              style: {
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+              },
+              children: [
+                {
+                  type: 'div',
+                  props: {
+                    style: {
+                      display: 'flex',
+                      color: 'rgba(255, 255, 255, 0.95)',
+                      fontSize: dp(13, density),
+                      fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    },
+                    children: recentAchievement.name,
+                  },
+                },
+                {
+                  type: 'div',
+                  props: {
+                    style: {
+                      display: 'flex',
+                      color: 'rgba(255, 255, 255, 0.6)',
+                      fontSize: dp(10, density),
+                      fontWeight: 400,
+                      marginTop: dp(1, density),
+                    },
+                    children: getAchievementDescription(recentAchievement),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+  }
+
+  // Right section: Progress toward next achievement (if any)
+  if (inProgress) {
+    const progress = Math.min(inProgress.progress || 0, 100);
+    const progressBarWidth = dp(50, density);
+    const progressBarHeight = dp(4, density);
+    const filledWidth = Math.floor(progressBarWidth * (progress / 100));
+
+    cardChildren.push({
+      type: 'div',
+      props: {
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-end',
+          marginLeft: dp(12, density),
+          paddingLeft: dp(12, density),
+          borderLeft: '1px solid rgba(255, 255, 255, 0.15)',
+        },
+        children: [
+          // Next achievement label
+          {
+            type: 'div',
+            props: {
+              style: {
+                display: 'flex',
+                color: 'rgba(255, 255, 255, 0.7)',
+                fontSize: dp(9, density),
+                fontWeight: 500,
+                marginBottom: dp(3, density),
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              },
+              children: 'Next',
+            },
+          },
+          // Achievement short name
+          {
+            type: 'div',
+            props: {
+              style: {
+                display: 'flex',
+                color: 'rgba(255, 255, 255, 0.9)',
+                fontSize: dp(11, density),
+                fontWeight: 600,
+                marginBottom: dp(4, density),
+              },
+              children: getShortName(inProgress.name),
+            },
+          },
+          // Progress bar row
+          {
+            type: 'div',
+            props: {
+              style: {
+                display: 'flex',
+                alignItems: 'center',
+              },
+              children: [
+                // Progress bar background
+                {
+                  type: 'div',
+                  props: {
+                    style: {
+                      display: 'flex',
+                      width: progressBarWidth,
+                      height: progressBarHeight,
+                      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                      borderRadius: progressBarHeight / 2,
+                      overflow: 'hidden',
+                      marginRight: dp(6, density),
+                    },
+                    children: {
+                      type: 'div',
+                      props: {
+                        style: {
+                          display: 'flex',
+                          width: filledWidth,
+                          height: '100%',
+                          backgroundColor: inProgress.color || '#4ADE80',
+                          borderRadius: progressBarHeight / 2,
+                        },
+                      },
+                    },
+                  },
+                },
+                // Progress text
+                {
+                  type: 'div',
+                  props: {
+                    style: {
+                      display: 'flex',
+                      color: 'rgba(255, 255, 255, 0.7)',
+                      fontSize: dp(9, density),
+                      fontWeight: 500,
+                      minWidth: dp(24, density),
+                      textAlign: 'right',
+                    },
+                    children: `${inProgress.current}/${inProgress.target}`,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+  }
+
+  // Build card content row (wrap children in a flex container)
+  const cardRow = {
     type: 'div',
     props: {
       style: {
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'flex-start',
-        padding: `${dp(8, density)}px ${margins.horizontal}px`,
-        backgroundColor: 'rgba(0, 0, 0, 0.2)',
-        borderRadius: dp(12, density),
+        width: '100%',
+      },
+      children: cardChildren,
+    },
+  };
+
+  // Glassmorphism card container
+  return {
+    type: 'div',
+    props: {
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        padding: `${cardPadding}px ${dp(16, density)}px`,
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+        borderRadius: dp(16, density),
+        border: '1px solid rgba(255, 255, 255, 0.12)',
+        boxShadow: `0 ${dp(4, density)}px ${dp(24, density)}px rgba(0, 0, 0, 0.15)`,
         marginBottom: dp(12, density),
       },
-      children: [
-        // Achievement badges
-        ...badgeElements,
-        // Progress ring for next achievement
-        progressElement,
-      ].filter(Boolean),
+      children: cardRow,
     },
   };
 }
@@ -401,14 +670,14 @@ function generateAchievementBar(achievements, inProgress, layout, colors) {
  * @param {Array} achievements - Array of earned achievements
  * @param {Array} inProgress - Achievements in progress
  * @param {Object} colors - Color palette
- * @param {Object} options - Rendering options
+ * @param {Object} options - Rendering options (totalPoints, maxBadges, showProgress)
  * @returns {Promise<string>} SVG string
  */
 async function renderAchievementsToSvg(layout, achievements, inProgress, colors, options = {}) {
   const { width, height, density, margins, typography } = layout;
-  const { maxBadges = 3, showProgress = true } = options;
+  const { maxBadges = 3, showProgress = true, totalPoints = 0 } = options;
 
-  // Take only the top achievements to display
+  // Take only the top achievements to display (most recent first)
   const displayAchievements = (achievements || []).slice(0, maxBadges);
 
   // Get the most relevant in-progress achievement
@@ -416,17 +685,19 @@ async function renderAchievementsToSvg(layout, achievements, inProgress, colors,
     ? inProgress[0]
     : null;
 
-  if (displayAchievements.length === 0 && !nextAchievement) {
+  // Show card if we have points, achievements, or progress
+  if (displayAchievements.length === 0 && !nextAchievement && totalPoints === 0) {
     // Return empty SVG if nothing to display
     return `<svg width="${width}" height="${height}"></svg>`;
   }
 
-  // Generate achievement bar element
+  // Generate achievement bar element with total points
   const achievementBar = generateAchievementBar(
     displayAchievements,
     nextAchievement,
     layout,
-    colors
+    colors,
+    totalPoints
   );
 
   // Position at top of screen (after status bar safe zone)
@@ -581,5 +852,6 @@ module.exports = {
   generateInlineAchievements,
   generateStreakDisplay,
   getIconSymbol,
+  getAchievementDescription,
   ACHIEVEMENT_ICONS,
 };

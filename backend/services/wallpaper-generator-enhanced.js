@@ -30,7 +30,9 @@ const { renderAchievementsToSvg, generateStreakDisplay } = require('./achievemen
 const messageEngine = new MessageEngine();
 const atmosphereController = new AtmosphereController();
 const statsAggregator = new StatsAggregator();
-const achievementService = new AchievementService();
+// Disable caching for wallpaper generation - we want fresh achievement detection each time
+// since task state can change between wallpaper requests
+const achievementService = new AchievementService({ cacheEnabled: false });
 
 /**
  * Determine urgency level from tasks
@@ -472,16 +474,18 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now(), tim
         // Get next achievement in progress
         const inProgress = achievementResult.inProgress?.slice(0, 1) || [];
 
-        if (wallpaperAchievements.length > 0 || inProgress.length > 0) {
-          console.log(`[Achievements] Rendering ${wallpaperAchievements.length} badges, ${inProgress.length} in-progress`);
+        const totalPoints = achievementResult.totalPoints || 0;
 
-          // Layer 3.5: Achievements bar (rendered at top of screen)
+        if (wallpaperAchievements.length > 0 || inProgress.length > 0 || totalPoints > 0) {
+          console.log(`[Achievements] Rendering ${wallpaperAchievements.length} badges, ${inProgress.length} in-progress, ${totalPoints} total pts`);
+
+          // Layer 3.5: Achievements card (rendered at top of screen)
           const achievementSvg = await renderAchievementsToSvg(
             layout,
             wallpaperAchievements,
             inProgress,
             colors,
-            { maxBadges: 3, showProgress: true }
+            { maxBadges: 3, showProgress: true, totalPoints: totalPoints }
           );
           layers.push({ input: Buffer.from(achievementSvg), blend: 'over' });
         } else {
@@ -489,7 +493,7 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now(), tim
         }
 
         // Log achievement stats
-        console.log(`[Intelligence] Achievements: earned=${achievementResult.earned.length}, points=${achievementResult.totalPoints}`);
+        console.log(`[Intelligence] Achievements: earned=${achievementResult.earned.length}, points=${totalPoints}`);
       } catch (err) {
         console.error('[Achievements] Failed to render achievements:', err.message);
         // Continue without achievements layer - don't break wallpaper generation
