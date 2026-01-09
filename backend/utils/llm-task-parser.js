@@ -52,8 +52,9 @@ CURRENT TIME: ${currentTime}
 Extract these fields:
 
 1. task: The action/task description (remove date/time/priority words)
-2. dueDate: YYYY-MM-DD format. Calculate relative dates from TODAY.
+2. dueDate: YYYY-MM-DD format. Calculate relative dates from TODAY (${today}).
    - Only set if a date is mentioned (today, tomorrow, yesterday, weekday, "next week", explicit date, etc.)
+   - Weekday: TODAY is ${dayOfWeek}. If input mentions ${dayOfWeek}, use ${today}. Otherwise find next occurrence.
    - "in X minutes/hours" → set to today (or tomorrow if crosses midnight)
    - If no date mentioned → null
 3. dueTime: HH:MM 24-hour format
