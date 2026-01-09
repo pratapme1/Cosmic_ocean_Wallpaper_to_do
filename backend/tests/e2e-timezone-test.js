@@ -14,7 +14,8 @@ require('dotenv').config({ path: require('path').join(__dirname, '../../.env') }
 const fs = require('fs');
 const path = require('path');
 
-const API_BASE = process.env.API_BASE_URL || 'http://localhost:3000';
+// Use command line arg or env var for API base
+const API_BASE = process.argv[2] || process.env.API_BASE_URL || 'http://localhost:3000';
 const TEST_TIMEZONE = 'Asia/Kolkata';
 const SCREENSHOT_DIR = path.join(__dirname, '../../test-screenshots');
 
