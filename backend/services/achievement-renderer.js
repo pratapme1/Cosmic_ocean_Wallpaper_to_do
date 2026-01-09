@@ -362,7 +362,233 @@ function generateProgressRing(inProgress, size, density, colors) {
 }
 
 /**
- * Generate modern glassmorphism achievement card for wallpaper
+ * Generate VERTICAL achievement panel for RIGHT SIDE of wallpaper
+ * Compact vertical layout: Points → Recent Badge → Next Progress
+ * Positioned on right edge to avoid overlapping centered messages
+ *
+ * @param {Array} achievements - Array of achievements to display
+ * @param {Object} inProgress - Next achievement in progress
+ * @param {Object} layout - Layout configuration
+ * @param {Object} colors - Color palette
+ * @param {number} totalPoints - Total achievement points earned
+ * @returns {Object} Satori element or null
+ */
+function generateVerticalAchievementPanel(achievements, inProgress, layout, colors, totalPoints = 0) {
+  const { density, margins, typography } = layout;
+
+  if ((!achievements || achievements.length === 0) && !inProgress && totalPoints === 0) {
+    return null;
+  }
+
+  const recentAchievement = achievements && achievements.length > 0 ? achievements[0] : null;
+  const panelChildren = [];
+
+  // TOP: Total Points (compact)
+  panelChildren.push({
+    type: 'div',
+    props: {
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: dp(8, density),
+      },
+      children: [
+        {
+          type: 'div',
+          props: {
+            style: {
+              display: 'flex',
+              color: '#FFD700',
+              fontSize: dp(18, density),
+              fontWeight: 700,
+              lineHeight: 1,
+            },
+            children: `${totalPoints}`,
+          },
+        },
+        {
+          type: 'div',
+          props: {
+            style: {
+              display: 'flex',
+              color: 'rgba(255, 255, 255, 0.6)',
+              fontSize: dp(8, density),
+              fontWeight: 500,
+              marginTop: dp(2, density),
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+            },
+            children: 'PTS',
+          },
+        },
+      ],
+    },
+  });
+
+  // MIDDLE: Recent Achievement Badge (if any)
+  if (recentAchievement) {
+    const badgeSize = dp(32, density);
+    panelChildren.push({
+      type: 'div',
+      props: {
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          marginBottom: dp(8, density),
+          paddingTop: dp(8, density),
+          borderTop: '1px solid rgba(255, 255, 255, 0.15)',
+        },
+        children: [
+          // Badge circle
+          {
+            type: 'div',
+            props: {
+              style: {
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: badgeSize,
+                height: badgeSize,
+                borderRadius: '50%',
+                backgroundColor: recentAchievement.color || '#4ADE80',
+                boxShadow: `0 0 ${dp(6, density)}px ${recentAchievement.color || '#4ADE80'}40`,
+              },
+              children: {
+                type: 'div',
+                props: {
+                  style: {
+                    color: '#FFFFFF',
+                    fontSize: dp(14, density),
+                    fontWeight: 600,
+                  },
+                  children: getIconSymbol(recentAchievement.icon),
+                },
+              },
+            },
+          },
+          // Short name
+          {
+            type: 'div',
+            props: {
+              style: {
+                display: 'flex',
+                color: 'rgba(255, 255, 255, 0.9)',
+                fontSize: dp(8, density),
+                fontWeight: 500,
+                marginTop: dp(4, density),
+                textAlign: 'center',
+              },
+              children: getShortName(recentAchievement.name),
+            },
+          },
+        ],
+      },
+    });
+  }
+
+  // BOTTOM: Next Achievement Progress (if any)
+  if (inProgress) {
+    const progress = Math.min(inProgress.progress || 0, 100);
+    const progressBarWidth = dp(40, density);
+    const progressBarHeight = dp(4, density);
+    const filledWidth = Math.floor((progressBarWidth * progress) / 100);
+
+    panelChildren.push({
+      type: 'div',
+      props: {
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          paddingTop: dp(8, density),
+          borderTop: '1px solid rgba(255, 255, 255, 0.15)',
+        },
+        children: [
+          // "Next" label
+          {
+            type: 'div',
+            props: {
+              style: {
+                display: 'flex',
+                color: 'rgba(255, 255, 255, 0.6)',
+                fontSize: dp(7, density),
+                fontWeight: 500,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                marginBottom: dp(2, density),
+              },
+              children: 'Next',
+            },
+          },
+          // Progress bar
+          {
+            type: 'div',
+            props: {
+              style: {
+                display: 'flex',
+                width: progressBarWidth,
+                height: progressBarHeight,
+                backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                borderRadius: progressBarHeight / 2,
+                overflow: 'hidden',
+                marginBottom: dp(2, density),
+              },
+              children: {
+                type: 'div',
+                props: {
+                  style: {
+                    display: 'flex',
+                    width: filledWidth,
+                    height: '100%',
+                    backgroundColor: inProgress.color || '#4ADE80',
+                    borderRadius: progressBarHeight / 2,
+                  },
+                },
+              },
+            },
+          },
+          // Progress text
+          {
+            type: 'div',
+            props: {
+              style: {
+                display: 'flex',
+                color: 'rgba(255, 255, 255, 0.7)',
+                fontSize: dp(7, density),
+                fontWeight: 500,
+              },
+              children: `${inProgress.current}/${inProgress.target}`,
+            },
+          },
+        ],
+      },
+    });
+  }
+
+  // Vertical panel container (glassmorphism)
+  return {
+    type: 'div',
+    props: {
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        padding: `${dp(10, density)}px ${dp(8, density)}px`,
+        backgroundColor: 'rgba(0, 0, 0, 0.25)',
+        borderRadius: dp(12, density),
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        minWidth: dp(50, density),
+      },
+      children: panelChildren,
+    },
+  };
+}
+
+/**
+ * Generate modern glassmorphism achievement card for wallpaper (HORIZONTAL - LEGACY)
  * Shows: Total Points | Recent Achievement | Progress toward next
  *
  * @param {Array} achievements - Array of achievements to display
@@ -667,10 +893,11 @@ function generateAchievementBar(achievements, inProgress, layout, colors, totalP
 /**
  * Render achievements layer to SVG
  *
- * PLACEMENT: Task Zone Header (Option A from ANDROID_UI_UX_DESIGN_SYSTEM.md)
- * - Positioned at the START of the Task Zone (after Scene + Transition zones)
- * - This creates a natural flow: "Here's what you've earned → Here's what to do next"
- * - Respects safe zones: Below clock, above nav bar
+ * PLACEMENT: RIGHT SIDE VERTICAL PANEL
+ * - Positioned on the right edge of the screen, vertically centered
+ * - Does NOT overlap with centered messages like "All clear"
+ * - Compact vertical layout: Points → Badge → Progress
+ * - Respects safe zones: Below status bar, above nav bar
  *
  * @param {Object} layout - Layout configuration (includes layoutZones)
  * @param {Array} achievements - Array of earned achievements
@@ -691,14 +918,14 @@ async function renderAchievementsToSvg(layout, achievements, inProgress, colors,
     ? inProgress[0]
     : null;
 
-  // Show card if we have points, achievements, or progress
+  // Show panel if we have points, achievements, or progress
   if (displayAchievements.length === 0 && !nextAchievement && totalPoints === 0) {
     // Return empty SVG if nothing to display
     return `<svg width="${width}" height="${height}"></svg>`;
   }
 
-  // Generate achievement bar element with total points
-  const achievementBar = generateAchievementBar(
+  // Generate VERTICAL achievement panel (not horizontal bar)
+  const achievementPanel = generateVerticalAchievementPanel(
     displayAchievements,
     nextAchievement,
     layout,
@@ -706,24 +933,18 @@ async function renderAchievementsToSvg(layout, achievements, inProgress, colors,
     totalPoints
   );
 
-  // Calculate Task Zone Header position
-  // Position: Start of Task Zone (after System + Clock + Scene + Transition zones)
-  // This is approximately 65% down from top based on zone percentages:
-  // - System: 8%, Clock: 12%, Scene: 40%, Transition: 5% = 65%
-  let taskZoneY;
-  if (layoutZones && layoutZones.task) {
-    // Use exact task zone Y position from layout system
-    taskZoneY = layoutZones.task.y;
+  // Calculate vertical center position (Scene Zone area ~40-60% of screen)
+  // Position in the middle-right area where there's more space
+  let panelY;
+  if (layoutZones && layoutZones.scene) {
+    // Center in scene zone
+    panelY = layoutZones.scene.y + Math.floor(layoutZones.scene.height * 0.3);
   } else {
-    // Fallback calculation if layoutZones not available
-    // System(8%) + Clock(12%) + Scene(40%) + Transition(5%) = 65%
-    taskZoneY = Math.floor(height * 0.57); // Slightly lower to account for fixed zones
+    // Fallback: ~35% from top (middle of scene zone)
+    panelY = Math.floor(height * 0.35);
   }
 
-  // Add small offset to position just inside task zone (as header)
-  const achievementBarY = taskZoneY - dp(8, density);
-
-  // Position at Task Zone Header (not top of screen)
+  // Position on RIGHT SIDE, vertically in scene zone
   const element = {
     type: 'div',
     props: {
@@ -731,13 +952,13 @@ async function renderAchievementsToSvg(layout, achievements, inProgress, colors,
         width: '100%',
         height: '100%',
         display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        paddingTop: achievementBarY,
-        paddingLeft: dp(16, density),
-        paddingRight: dp(16, density),
+        flexDirection: 'row',
+        justifyContent: 'flex-end', // Align to right
+        alignItems: 'flex-start',
+        paddingTop: panelY,
+        paddingRight: dp(12, density), // Right margin from edge
       },
-      children: achievementBar,
+      children: achievementPanel,
     },
   };
 
