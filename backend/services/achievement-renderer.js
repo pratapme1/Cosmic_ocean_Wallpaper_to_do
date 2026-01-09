@@ -893,11 +893,12 @@ function generateAchievementBar(achievements, inProgress, layout, colors, totalP
 /**
  * Render achievements layer to SVG
  *
- * PLACEMENT: RIGHT SIDE VERTICAL PANEL
- * - Positioned on the right edge of the screen, vertically centered
+ * PLACEMENT: RIGHT SIDE OF TASK ZONE
+ * - Positioned in the Task Zone (same area as task list)
+ * - Creates visual consistency - achievements feel part of tasks area
  * - Does NOT overlap with centered messages like "All clear"
  * - Compact vertical layout: Points → Badge → Progress
- * - Respects safe zones: Below status bar, above nav bar
+ * - Device-responsive padding (4% of width or 24dp minimum)
  *
  * @param {Object} layout - Layout configuration (includes layoutZones)
  * @param {Array} achievements - Array of earned achievements
@@ -933,18 +934,25 @@ async function renderAchievementsToSvg(layout, achievements, inProgress, colors,
     totalPoints
   );
 
-  // Calculate vertical center position (Scene Zone area ~40-60% of screen)
-  // Position in the middle-right area where there's more space
+  // Position achievement panel in TASK ZONE (not scene zone)
+  // This creates visual consistency - achievements are part of the task area
   let panelY;
-  if (layoutZones && layoutZones.scene) {
-    // Center in scene zone
-    panelY = layoutZones.scene.y + Math.floor(layoutZones.scene.height * 0.3);
+  if (layoutZones && layoutZones.task) {
+    // Position at start of task zone + small offset
+    panelY = layoutZones.task.y + dp(16, density);
   } else {
-    // Fallback: ~35% from top (middle of scene zone)
-    panelY = Math.floor(height * 0.35);
+    // Fallback: Task zone starts at ~57-60% down
+    // System(8%) + Clock(12%) + Scene(40%) = 60%
+    panelY = Math.floor(height * 0.58) + dp(16, density);
   }
 
-  // Position on RIGHT SIDE, vertically in scene zone
+  // Calculate safe right padding based on device width
+  // Larger devices need more padding, minimum 24dp, scales with width
+  const baseRightPadding = Math.max(24, Math.floor(width * 0.04)); // 4% of width or 24dp minimum
+  const rightPadding = dp(baseRightPadding, density);
+
+  // Position on RIGHT SIDE of TASK ZONE
+  // Aligned with task list for visual consistency
   const element = {
     type: 'div',
     props: {
@@ -956,7 +964,7 @@ async function renderAchievementsToSvg(layout, achievements, inProgress, colors,
         justifyContent: 'flex-end', // Align to right
         alignItems: 'flex-start',
         paddingTop: panelY,
-        paddingRight: dp(12, density), // Right margin from edge
+        paddingRight: rightPadding, // Device-responsive right padding
       },
       children: achievementPanel,
     },
