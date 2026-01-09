@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.util.Log
 import com.cosmicocean.data.PrivacyPreferences
 import com.cosmicocean.data.PrivacyLevel
 import com.cosmicocean.network.ApiService
@@ -558,10 +559,13 @@ private fun formatTime(time: String): String {
     return String.format("%d:%02d %s", displayHour, minute, amPm)
 }
 
+private const val TAG = "PrivacySettings"
+
 /**
  * Stateful wrapper for PrivacySettingsScreen that handles state internally
  * Loads preferences from API and saves changes back to API
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PrivacySettingsWrapper(
     apiService: ApiService,
@@ -571,24 +575,47 @@ fun PrivacySettingsWrapper(
     var preferences by remember { mutableStateOf(PrivacyPreferences()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var successMessage by remember { mutableStateOf<String?>(null) }
+    var loadedFromApi by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // Load preferences from API on first composition
     LaunchedEffect(Unit) {
+        Log.d(TAG, "🔄 Loading preferences from API...")
         try {
             val response = apiService.getPreferences()
+            Log.d(TAG, "📥 API Response: ${response.code()} - isSuccessful: ${response.isSuccessful}")
+
             if (response.isSuccessful && response.body() != null) {
                 val apiPrefs = response.body()!!
+                Log.d(TAG, "✅ Loaded from API:")
+                Log.d(TAG, "   default_privacy_level: ${apiPrefs.defaultPrivacyLevel}")
+                Log.d(TAG, "   auto_hide_work_tasks: ${apiPrefs.autoHideWorkTasks}")
+                Log.d(TAG, "   hide_all_tasks_mode: ${apiPrefs.hideAllTasksMode}")
+                Log.d(TAG, "   work_hours: ${apiPrefs.workHoursStart} - ${apiPrefs.workHoursEnd}")
+
+                // Parse work hours - handle "HH:MM:SS" format from backend
+                val startTime = apiPrefs.workHoursStart?.take(5) ?: "09:00"
+                val endTime = apiPrefs.workHoursEnd?.take(5) ?: "17:00"
+
                 preferences = PrivacyPreferences(
                     defaultPrivacyLevel = PrivacyLevel.fromString(apiPrefs.defaultPrivacyLevel ?: "public"),
                     autoHideWorkTasks = apiPrefs.autoHideWorkTasks,
-                    workHoursStart = apiPrefs.workHoursStart ?: "09:00",
-                    workHoursEnd = apiPrefs.workHoursEnd ?: "17:00",
+                    workHoursStart = startTime,
+                    workHoursEnd = endTime,
                     biometricRevealEnabled = apiPrefs.biometricRevealEnabled,
                     hideAllTasksMode = apiPrefs.hideAllTasksMode
                 )
+                loadedFromApi = true
+                successMessage = "Settings loaded from server"
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "❌ API Error: ${response.code()} - $errorBody")
+                errorMessage = "Failed to load (${response.code()}): $errorBody"
             }
         } catch (e: Exception) {
-            errorMessage = "Failed to load preferences: ${e.message}"
+            Log.e(TAG, "❌ Exception loading preferences", e)
+            errorMessage = "Network error: ${e.message}"
         } finally {
             isLoading = false
         }
@@ -596,61 +623,118 @@ fun PrivacySettingsWrapper(
 
     // Helper function to save preferences to API
     fun savePreference(key: String, value: Any) {
+        Log.d(TAG, "💾 Saving to API: $key = $value")
         scope.launch {
             try {
                 val body = mapOf(key to value)
-                apiService.updatePreferences(body)
+                val response = apiService.updatePreferences(body)
+
+                if (response.isSuccessful) {
+                    Log.d(TAG, "✅ Saved successfully: $key")
+                    successMessage = "Saved: $key"
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    Log.e(TAG, "❌ Save failed: ${response.code()} - $errorBody")
+                    errorMessage = "Save failed: $errorBody"
+                }
             } catch (e: Exception) {
-                errorMessage = "Failed to save: ${e.message}"
+                Log.e(TAG, "❌ Exception saving preference", e)
+                errorMessage = "Save error: ${e.message}"
             }
         }
     }
 
-    if (isLoading) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFF0F0F1E)),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularProgressIndicator(color = Color(0xFF9C27B0))
+    // Show snackbar for messages
+    LaunchedEffect(errorMessage, successMessage) {
+        errorMessage?.let {
+            snackbarHostState.showSnackbar(it, duration = SnackbarDuration.Short)
+            errorMessage = null
         }
-    } else {
-        PrivacySettingsScreen(
-            preferences = preferences,
-            onDefaultPrivacyLevelChanged = { level ->
-                preferences = preferences.copy(defaultPrivacyLevel = level)
-                savePreference("default_privacy_level", level.name.lowercase())
-            },
-            onAutoHideWorkTasksChanged = { enabled ->
-                preferences = preferences.copy(autoHideWorkTasks = enabled)
-                savePreference("auto_hide_work_tasks", enabled)
-            },
-            onWorkHoursStartChanged = { time ->
-                preferences = preferences.copy(workHoursStart = time)
-                savePreference("work_hours_start", time)
-            },
-            onWorkHoursEndChanged = { time ->
-                preferences = preferences.copy(workHoursEnd = time)
-                savePreference("work_hours_end", time)
-            },
-            onBiometricRevealChanged = { enabled ->
-                preferences = preferences.copy(biometricRevealEnabled = enabled)
-                savePreference("biometric_reveal_enabled", enabled)
-            },
-            onHideAllTasksModeChanged = { enabled ->
-                preferences = preferences.copy(hideAllTasksMode = enabled)
-                savePreference("hide_all_tasks_mode", enabled)
-            },
-            onNavigateBack = onNavigateBack
-        )
+        successMessage?.let {
+            snackbarHostState.showSnackbar(it, duration = SnackbarDuration.Short)
+            successMessage = null
+        }
     }
 
-    // Show error snackbar if there's an error
-    errorMessage?.let { error ->
-        LaunchedEffect(error) {
-            kotlinx.coroutines.delay(3000)
-            errorMessage = null
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = Color(0xFF0F0F1E)
+    ) { scaffoldPadding ->
+        Box(modifier = Modifier.padding(scaffoldPadding)) {
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF0F0F1E)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = Color(0xFF9C27B0))
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            "Loading settings from server...",
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            } else {
+                Column {
+                    // Debug info banner (remove in production)
+                    if (loadedFromApi) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFF1B5E20).copy(alpha = 0.3f)
+                            )
+                        ) {
+                            Text(
+                                "✅ Connected to server - changes sync automatically",
+                                modifier = Modifier.padding(8.dp),
+                                color = Color(0xFF81C784),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+
+                    PrivacySettingsScreen(
+                        preferences = preferences,
+                        onDefaultPrivacyLevelChanged = { level ->
+                            Log.d(TAG, "🔄 Privacy level changed: $level")
+                            preferences = preferences.copy(defaultPrivacyLevel = level)
+                            savePreference("default_privacy_level", level.name.lowercase())
+                        },
+                        onAutoHideWorkTasksChanged = { enabled ->
+                            Log.d(TAG, "🔄 Auto-hide work tasks changed: $enabled")
+                            preferences = preferences.copy(autoHideWorkTasks = enabled)
+                            savePreference("auto_hide_work_tasks", enabled)
+                        },
+                        onWorkHoursStartChanged = { time ->
+                            Log.d(TAG, "🔄 Work hours start changed: $time")
+                            preferences = preferences.copy(workHoursStart = time)
+                            savePreference("work_hours_start", time)
+                        },
+                        onWorkHoursEndChanged = { time ->
+                            Log.d(TAG, "🔄 Work hours end changed: $time")
+                            preferences = preferences.copy(workHoursEnd = time)
+                            savePreference("work_hours_end", time)
+                        },
+                        onBiometricRevealChanged = { enabled ->
+                            Log.d(TAG, "🔄 Biometric reveal changed: $enabled")
+                            preferences = preferences.copy(biometricRevealEnabled = enabled)
+                            savePreference("biometric_reveal_enabled", enabled)
+                        },
+                        onHideAllTasksModeChanged = { enabled ->
+                            Log.d(TAG, "🔄 Hide all tasks mode changed: $enabled")
+                            preferences = preferences.copy(hideAllTasksMode = enabled)
+                            savePreference("hide_all_tasks_mode", enabled)
+                        },
+                        onNavigateBack = onNavigateBack
+                    )
+                }
+            }
         }
     }
 }
