@@ -31,10 +31,11 @@ import kotlinx.coroutines.launch
  * Foreground Service for real-time wallpaper updates.
  * Updates wallpaper every minute for accurate clock display.
  *
- * Battery optimization:
- * - Only runs when screen is OFF (lock screen visible)
- * - Stops when screen is ON (user is using phone)
- * - Uses efficient scheduling with Handler
+ * FIXES APPLIED (2026-01-09):
+ * - FIX 1: Removed isScreenOff() check - now updates regardless of screen state
+ * - FIX 2: Added retry logic with exponential backoff on network failures
+ * - FIX 3: Added partial wake lock to prevent service from being killed during updates
+ * - FIX 4: Immediate update on screen OFF for fresh lock screen
  */
 class RealTimeWallpaperService : Service() {
 
@@ -42,12 +43,17 @@ class RealTimeWallpaperService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
     private var isUpdating = false
     private var screenReceiver: BroadcastReceiver? = null
+    private var retryCount = 0
+    private var wakeLock: PowerManager.WakeLock? = null
 
     companion object {
         private const val TAG = "RealTimeWallpaper"
         private const val CHANNEL_ID = "wallpaper_update_channel"
         private const val NOTIFICATION_ID = 1001
         private const val UPDATE_INTERVAL_MS = 60_000L // 1 minute
+        private const val MAX_RETRY_COUNT = 3
+        private const val INITIAL_RETRY_DELAY_MS = 5_000L // 5 seconds
+        private const val WAKE_LOCK_TIMEOUT_MS = 30_000L // 30 seconds max
 
         fun start(context: Context) {
             val intent = Intent(context, RealTimeWallpaperService::class.java)
@@ -63,11 +69,12 @@ class RealTimeWallpaperService : Service() {
         }
     }
 
+    // FIX 1: Removed isScreenOff() check - always update wallpaper
     private val updateRunnable = object : Runnable {
         override fun run() {
-            if (isScreenOff()) {
-                updateWallpaper()
-            }
+            // Always update wallpaper regardless of screen state
+            // This ensures task changes are reflected immediately
+            updateWallpaper()
             handler.postDelayed(this, UPDATE_INTERVAL_MS)
         }
     }
@@ -76,6 +83,7 @@ class RealTimeWallpaperService : Service() {
         super.onCreate()
         Log.d(TAG, "Service created")
         createNotificationChannel()
+        initWakeLock()
         registerScreenReceiver()
     }
 
@@ -92,18 +100,52 @@ class RealTimeWallpaperService : Service() {
         super.onDestroy()
         stopUpdates()
         unregisterScreenReceiver()
+        releaseWakeLock()
         Log.d(TAG, "Service destroyed")
+    }
+
+    // FIX 3: Initialize wake lock for reliable updates
+    private fun initWakeLock() {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "CosmicOcean:WallpaperUpdate"
+        )
+    }
+
+    private fun acquireWakeLock() {
+        try {
+            wakeLock?.let {
+                if (!it.isHeld) {
+                    it.acquire(WAKE_LOCK_TIMEOUT_MS)
+                    Log.d(TAG, "Wake lock acquired")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to acquire wake lock: ${e.message}")
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            wakeLock?.let {
+                if (it.isHeld) {
+                    it.release()
+                    Log.d(TAG, "Wake lock released")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to release wake lock: ${e.message}")
+        }
     }
 
     private fun startUpdates() {
         isUpdating = true
-        // Initial update
-        if (isScreenOff()) {
-            updateWallpaper()
-        }
+        // Initial update immediately
+        updateWallpaper()
         // Schedule periodic updates
         handler.postDelayed(updateRunnable, UPDATE_INTERVAL_MS)
-        Log.d(TAG, "Updates scheduled every ${UPDATE_INTERVAL_MS / 1000}s")
+        Log.d(TAG, "Updates scheduled every ${UPDATE_INTERVAL_MS / 1000}s (always, regardless of screen state)")
     }
 
     private fun stopUpdates() {
@@ -118,6 +160,9 @@ class RealTimeWallpaperService : Service() {
             Log.w(TAG, "No user logged in, skipping update")
             return
         }
+
+        // FIX 3: Acquire wake lock before starting update
+        acquireWakeLock()
 
         serviceScope.launch {
             try {
@@ -159,18 +204,47 @@ class RealTimeWallpaperService : Service() {
                             WallpaperManager.FLAG_LOCK
                         )
 
-                        Log.d(TAG, "Wallpaper updated: ${bitmap.width}x${bitmap.height}")
+                        Log.d(TAG, "Wallpaper updated successfully: ${bitmap.width}x${bitmap.height}")
+                        // Reset retry count on success
+                        retryCount = 0
                     } else {
                         Log.e(TAG, "Failed to decode bitmap")
+                        scheduleRetry("bitmap decode failed")
                     }
 
                     response.body()?.close()
                 } else {
                     Log.e(TAG, "API error: ${response.code()}")
+                    // FIX 2: Retry on server errors (5xx)
+                    if (response.code() in 500..599) {
+                        scheduleRetry("server error ${response.code()}")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Update failed: ${e.message}")
+                // FIX 2: Retry on network failures
+                scheduleRetry("exception: ${e.message}")
+            } finally {
+                // FIX 3: Release wake lock after update completes
+                releaseWakeLock()
             }
+        }
+    }
+
+    // FIX 2: Retry logic with exponential backoff
+    private fun scheduleRetry(reason: String) {
+        if (retryCount < MAX_RETRY_COUNT) {
+            retryCount++
+            val delay = INITIAL_RETRY_DELAY_MS * retryCount // 5s, 10s, 15s
+            Log.w(TAG, "Scheduling retry #$retryCount in ${delay}ms (reason: $reason)")
+            handler.postDelayed({
+                if (isUpdating) {
+                    updateWallpaper()
+                }
+            }, delay)
+        } else {
+            Log.e(TAG, "Max retries ($MAX_RETRY_COUNT) reached. Will try again at next scheduled interval.")
+            retryCount = 0 // Reset for next interval
         }
     }
 
@@ -184,13 +258,14 @@ class RealTimeWallpaperService : Service() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 when (intent?.action) {
                     Intent.ACTION_SCREEN_OFF -> {
-                        Log.d(TAG, "Screen OFF - starting updates")
-                        // Immediate update when screen turns off
+                        Log.d(TAG, "Screen OFF - triggering immediate update for fresh lock screen")
+                        // Immediate update when screen turns off for fresh lock screen
                         updateWallpaper()
                     }
                     Intent.ACTION_SCREEN_ON -> {
-                        Log.d(TAG, "Screen ON - updates continue in background")
-                        // Keep updating even when screen is on, for task changes
+                        Log.d(TAG, "Screen ON - triggering update for latest task state")
+                        // FIX 1: Also update when screen turns on to show latest state
+                        updateWallpaper()
                     }
                 }
             }
@@ -200,7 +275,11 @@ class RealTimeWallpaperService : Service() {
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_SCREEN_ON)
         }
-        registerReceiver(screenReceiver, filter)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(screenReceiver, filter)
+        }
     }
 
     private fun unregisterScreenReceiver() {

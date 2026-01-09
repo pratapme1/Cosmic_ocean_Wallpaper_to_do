@@ -602,6 +602,14 @@ async function cacheMessages(userId, messages) {
   try {
     await client.query('BEGIN');
 
+    // FIX: Check if user still exists before caching (prevents race condition on user deletion)
+    const userCheck = await client.query('SELECT 1 FROM users WHERE id = $1', [userId]);
+    if (userCheck.rows.length === 0) {
+      console.log(`[MessageGen] User ${userId} no longer exists, skipping cache`);
+      await client.query('ROLLBACK');
+      return;
+    }
+
     // Clear old cached messages (keep only last 10 shown for history)
     await client.query(
       'DELETE FROM message_cache WHERE user_id = $1',

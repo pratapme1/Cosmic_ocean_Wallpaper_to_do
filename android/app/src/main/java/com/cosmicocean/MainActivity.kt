@@ -393,21 +393,24 @@ class MainActivity : ComponentActivity() {
             .setConstraints(
                 androidx.work.Constraints.Builder()
                     .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
-                    .setRequiresBatteryNotLow(true) // Respect battery
+                    // FIX: Removed setRequiresBatteryNotLow(true) - was blocking updates when battery <20%
                     .build()
             )
             .build()
 
-        // Use KEEP policy to avoid rescheduling on app restart
+        // FIX: Changed from KEEP to UPDATE - ensures fresh scheduling even if worker was in failed state
+        // UPDATE preserves enqueue time and doesn't cancel running workers (better than REPLACE)
         androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "wallpaper_periodic_update",
-            androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+            androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
             periodicWorkRequest
         )
     }
 
     private fun triggerImmediateUpdate() {
+        // FIX: Added setExpedited for truly immediate execution
         val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.cosmicocean.worker.WallpaperUpdateWorker>()
+            .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
             .build()
         androidx.work.WorkManager.getInstance(this).enqueue(workRequest)
