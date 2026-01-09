@@ -143,6 +143,116 @@ router.patch(
 );
 
 /**
+ * GET /api/user/preferences
+ * Get user privacy and display preferences (Epic 10)
+ */
+router.get('/preferences', async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const client = req.app.locals.dbClient;
+
+    const result = await client.query(
+      `SELECT
+         theme, resolution, display_mode, timezone,
+         default_privacy_level, auto_hide_work_tasks,
+         work_hours_start, work_hours_end,
+         biometric_reveal_enabled, hide_all_tasks_mode
+       FROM users WHERE id = $1`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Get preferences error:', err);
+    res.status(500).json({ error: 'Failed to fetch preferences' });
+  }
+});
+
+/**
+ * PATCH /api/user/preferences
+ * Update user privacy and display preferences (Epic 10)
+ */
+router.patch(
+  '/preferences',
+  [
+    body('theme').optional().isIn(['cosmic', 'ocean', 'fantasy']),
+    body('resolution').optional().matches(/^\d+x\d+$/),
+    body('display_mode').optional().isIn(['one_thing', 'all_tasks']),
+    body('timezone').optional().isString(),
+    body('default_privacy_level').optional().isIn(['public', 'category', 'initials', 'hidden', 'custom']),
+    body('auto_hide_work_tasks').optional().isBoolean(),
+    body('work_hours_start').optional().matches(/^\d{2}:\d{2}(:\d{2})?$/),
+    body('work_hours_end').optional().matches(/^\d{2}:\d{2}(:\d{2})?$/),
+    body('biometric_reveal_enabled').optional().isBoolean(),
+    body('hide_all_tasks_mode').optional().isBoolean()
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const userId = req.user.userId;
+      const client = req.app.locals.dbClient;
+
+      const updates = req.body;
+      const fields = [];
+      const values = [userId];
+      let i = 2;
+
+      const allowedFields = [
+        'theme', 'resolution', 'display_mode', 'timezone',
+        'default_privacy_level', 'auto_hide_work_tasks',
+        'work_hours_start', 'work_hours_end',
+        'biometric_reveal_enabled', 'hide_all_tasks_mode'
+      ];
+
+      for (const [key, value] of Object.entries(updates)) {
+        if (allowedFields.includes(key)) {
+          fields.push(`${key} = $${i++}`);
+          values.push(value);
+        }
+      }
+
+      if (fields.length === 0) {
+        return res.status(400).json({ error: 'No valid fields to update' });
+      }
+
+      fields.push('updated_at = NOW()');
+
+      const query = `
+        UPDATE users
+        SET ${fields.join(', ')}
+        WHERE id = $1
+        RETURNING theme, resolution, display_mode, timezone,
+                  default_privacy_level, auto_hide_work_tasks,
+                  work_hours_start, work_hours_end,
+                  biometric_reveal_enabled, hide_all_tasks_mode
+      `;
+
+      const result = await client.query(query, values);
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Invalidate wallpaper cache when preferences change
+      await cacheService.invalidateUserWallpapers(userId);
+
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error('Update preferences error:', err);
+      res.status(500).json({ error: 'Failed to update preferences' });
+    }
+  }
+);
+
+/**
  * GET /api/user/export
  * Export all user data (GDPR compliance)
  */
