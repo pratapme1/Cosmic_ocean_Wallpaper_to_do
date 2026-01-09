@@ -151,12 +151,17 @@ router.get('/preferences', async (req, res) => {
     const userId = req.user.userId;
     const client = req.app.locals.dbClient;
 
+    // Use COALESCE to provide defaults for environment columns that may not exist yet
     const result = await client.query(
       `SELECT
          theme, resolution, display_mode, timezone,
          default_privacy_level, auto_hide_work_tasks,
          work_hours_start, work_hours_end,
-         biometric_reveal_enabled, hide_all_tasks_mode
+         biometric_reveal_enabled, hide_all_tasks_mode,
+         COALESCE(time_of_day_mode, 'auto') as time_of_day_mode,
+         COALESCE(manual_time_period, 'morning') as manual_time_period,
+         COALESCE(weather_overlay_enabled, true) as weather_overlay_enabled,
+         COALESCE(particle_intensity, 'medium') as particle_intensity
        FROM users WHERE id = $1`,
       [userId]
     );
@@ -167,6 +172,37 @@ router.get('/preferences', async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (err) {
+    // If columns don't exist yet, return defaults for environment settings
+    if (err.message && err.message.includes('column') && err.message.includes('does not exist')) {
+      console.log('[Preferences] Environment columns not yet migrated, returning defaults');
+      try {
+        const fallbackResult = await req.app.locals.dbClient.query(
+          `SELECT
+             theme, resolution, display_mode, timezone,
+             default_privacy_level, auto_hide_work_tasks,
+             work_hours_start, work_hours_end,
+             biometric_reveal_enabled, hide_all_tasks_mode
+           FROM users WHERE id = $1`,
+          [req.user.userId]
+        );
+
+        if (fallbackResult.rows.length === 0) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Add default environment settings
+        const prefs = fallbackResult.rows[0];
+        prefs.time_of_day_mode = 'auto';
+        prefs.manual_time_period = 'morning';
+        prefs.weather_overlay_enabled = true;
+        prefs.particle_intensity = 'medium';
+        return res.json(prefs);
+      } catch (fallbackErr) {
+        console.error('Fallback preferences error:', fallbackErr);
+        return res.status(500).json({ error: 'Failed to fetch preferences' });
+      }
+    }
+
     console.error('Get preferences error:', err);
     res.status(500).json({ error: 'Failed to fetch preferences' });
   }
@@ -188,7 +224,12 @@ router.patch(
     body('work_hours_start').optional().matches(/^\d{2}:\d{2}(:\d{2})?$/),
     body('work_hours_end').optional().matches(/^\d{2}:\d{2}(:\d{2})?$/),
     body('biometric_reveal_enabled').optional().isBoolean(),
-    body('hide_all_tasks_mode').optional().isBoolean()
+    body('hide_all_tasks_mode').optional().isBoolean(),
+    // Epic 10 Phase 3: Environment settings
+    body('time_of_day_mode').optional().isIn(['auto', 'manual']),
+    body('manual_time_period').optional().isIn(['dawn', 'morning', 'afternoon', 'evening', 'night']),
+    body('weather_overlay_enabled').optional().isBoolean(),
+    body('particle_intensity').optional().isIn(['low', 'medium', 'high'])
   ],
   async (req, res) => {
     try {
@@ -205,18 +246,44 @@ router.patch(
       const values = [userId];
       let i = 2;
 
-      const allowedFields = [
+      // Core fields that exist in all deployments
+      const coreFields = [
         'theme', 'resolution', 'display_mode', 'timezone',
         'default_privacy_level', 'auto_hide_work_tasks',
         'work_hours_start', 'work_hours_end',
         'biometric_reveal_enabled', 'hide_all_tasks_mode'
       ];
 
+      // Environment fields (Epic 10 Phase 3) - may not exist yet
+      const environmentFields = [
+        'time_of_day_mode', 'manual_time_period',
+        'weather_overlay_enabled', 'particle_intensity'
+      ];
+
+      const allowedFields = [...coreFields, ...environmentFields];
+
+      // Separate updates into core and environment
+      const coreUpdates = {};
+      const envUpdates = {};
+
       for (const [key, value] of Object.entries(updates)) {
-        if (allowedFields.includes(key)) {
-          fields.push(`${key} = $${i++}`);
-          values.push(value);
+        if (coreFields.includes(key)) {
+          coreUpdates[key] = value;
+        } else if (environmentFields.includes(key)) {
+          envUpdates[key] = value;
         }
+      }
+
+      // Build query for core fields first
+      for (const [key, value] of Object.entries(coreUpdates)) {
+        fields.push(`${key} = $${i++}`);
+        values.push(value);
+      }
+
+      // Try to add environment fields (may fail if columns don't exist)
+      for (const [key, value] of Object.entries(envUpdates)) {
+        fields.push(`${key} = $${i++}`);
+        values.push(value);
       }
 
       if (fields.length === 0) {
@@ -225,17 +292,71 @@ router.patch(
 
       fields.push('updated_at = NOW()');
 
-      const query = `
+      // Try full query first with all fields
+      let query = `
         UPDATE users
         SET ${fields.join(', ')}
         WHERE id = $1
         RETURNING theme, resolution, display_mode, timezone,
                   default_privacy_level, auto_hide_work_tasks,
                   work_hours_start, work_hours_end,
-                  biometric_reveal_enabled, hide_all_tasks_mode
+                  biometric_reveal_enabled, hide_all_tasks_mode,
+                  COALESCE(time_of_day_mode, 'auto') as time_of_day_mode,
+                  COALESCE(manual_time_period, 'morning') as manual_time_period,
+                  COALESCE(weather_overlay_enabled, true) as weather_overlay_enabled,
+                  COALESCE(particle_intensity, 'medium') as particle_intensity
       `;
 
-      const result = await client.query(query, values);
+      let result;
+      try {
+        result = await client.query(query, values);
+      } catch (err) {
+        // If environment columns don't exist, retry with core fields only
+        if (err.message && err.message.includes('column') && err.message.includes('does not exist')) {
+          console.log('[Preferences] Environment columns not migrated, updating core fields only');
+
+          if (Object.keys(coreUpdates).length === 0) {
+            return res.status(400).json({
+              error: 'Environment settings not available yet. Please run database migration.',
+              pending_migration: true
+            });
+          }
+
+          // Rebuild query with only core fields
+          const coreOnlyFields = [];
+          const coreOnlyValues = [userId];
+          let j = 2;
+
+          for (const [key, value] of Object.entries(coreUpdates)) {
+            coreOnlyFields.push(`${key} = $${j++}`);
+            coreOnlyValues.push(value);
+          }
+
+          coreOnlyFields.push('updated_at = NOW()');
+
+          query = `
+            UPDATE users
+            SET ${coreOnlyFields.join(', ')}
+            WHERE id = $1
+            RETURNING theme, resolution, display_mode, timezone,
+                      default_privacy_level, auto_hide_work_tasks,
+                      work_hours_start, work_hours_end,
+                      biometric_reveal_enabled, hide_all_tasks_mode
+          `;
+
+          result = await client.query(query, coreOnlyValues);
+
+          // Add default environment settings to response
+          if (result.rows.length > 0) {
+            result.rows[0].time_of_day_mode = 'auto';
+            result.rows[0].manual_time_period = 'morning';
+            result.rows[0].weather_overlay_enabled = true;
+            result.rows[0].particle_intensity = 'medium';
+          }
+        } else {
+          throw err;
+        }
+      }
 
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'User not found' });

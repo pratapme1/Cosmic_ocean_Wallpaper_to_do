@@ -216,5 +216,14 @@ data class UserPreferencesResponse(
     @SerializedName("biometric_reveal_enabled")
     val biometricRevealEnabled: Boolean = true,
     @SerializedName("hide_all_tasks_mode")
-    val hideAllTasksMode: Boolean = false
+    val hideAllTasksMode: Boolean = false,
+    // Epic 10 Phase 3: Environment settings
+    @SerializedName("time_of_day_mode")
+    val timeOfDayMode: String? = "auto",  // auto, manual
+    @SerializedName("manual_time_period")
+    val manualTimePeriod: String? = "morning",  // dawn, morning, afternoon, evening, night
+    @SerializedName("weather_overlay_enabled")
+    val weatherOverlayEnabled: Boolean? = true,
+    @SerializedName("particle_intensity")
+    val particleIntensity: String? = "medium"  // low, medium, high
 )

@@ -189,14 +189,10 @@ class RealTimeWallpaperService : Service() {
                     if (bitmap != null) {
                         val wallpaperManager = WallpaperManager.getInstance(applicationContext)
 
-                        // Clear and set for reliable update on BOTH screens
+                        // RACE CONDITION FIX (2026-01-09):
+                        // Do NOT call clear() before setBitmap() - if setBitmap fails, wallpaper stays blank
+                        // setBitmap() atomically replaces the existing wallpaper
                         val wallpaperFlags = WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
-                        try {
-                            wallpaperManager.clear(wallpaperFlags)
-                            Thread.sleep(50)
-                        } catch (e: Exception) {
-                            // Ignore clear errors
-                        }
 
                         wallpaperManager.setBitmap(
                             bitmap,

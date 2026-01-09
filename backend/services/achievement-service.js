@@ -234,8 +234,8 @@ class AchievementService {
       if (cached) return cached;
     }
 
-    const completedTasks = (tasks || []).filter(t => t && t.completed);
-    const pendingTasks = (tasks || []).filter(t => t && !t.completed);
+    const completedTasks = (tasks || []).filter(t => t && t.completed === true);
+    const pendingTasks = (tasks || []).filter(t => t && t.completed !== true);
     const stats = this.statsAggregator.computeStats(tasks);
 
     // Track which achievements are already earned

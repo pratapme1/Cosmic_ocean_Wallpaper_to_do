@@ -1,0 +1,389 @@
+{
+  "passed": 10,
+  "failed": 0,
+  "tests": [
+    {
+      "name": "A",
+      "input": "missed call yesterday at 3pm",
+      "timezone": "Asia/Kolkata",
+      "result": {
+        "title": "missed call",
+        "due_date": "2026-01-08",
+        "due_time": "15:00",
+        "estimate_minutes": null,
+        "priority": 1,
+        "category": "other",
+        "energy_level": "medium",
+        "context_tags": [],
+        "is_recurring": false,
+        "recurring_pattern": null,
+        "confidence": 0.8,
+        "source": "llm",
+        "model": "claude-3-haiku-20240307"
+      },
+      "expected": {
+        "due_date": "2026-01-08",
+        "due_time": "15:00"
+      },
+      "checks": [
+        {
+          "field": "due_date",
+          "actual": "2026-01-08",
+          "expected": "2026-01-08",
+          "pass": true
+        },
+        {
+          "field": "due_time",
+          "actual": "15:00",
+          "expected": "15:00",
+          "pass": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "B",
+      "input": "call mom now",
+      "timezone": "Asia/Kolkata",
+      "result": {
+        "title": "call mom",
+        "due_date": "2026-01-09",
+        "due_time": "14:40",
+        "estimate_minutes": null,
+        "priority": 1,
+        "category": "personal",
+        "energy_level": "medium",
+        "context_tags": [],
+        "is_recurring": false,
+        "recurring_pattern": null,
+        "confidence": 1,
+        "source": "llm",
+        "model": "claude-3-haiku-20240307"
+      },
+      "expected": {
+        "due_date": "2026-01-09",
+        "due_time": "NOW",
+        "priority": 1
+      },
+      "checks": [
+        {
+          "field": "due_date",
+          "actual": "2026-01-09",
+          "expected": "2026-01-09",
+          "pass": true
+        },
+        {
+          "field": "due_time",
+          "actual": "14:40",
+          "expected": "~14:40",
+          "pass": true
+        },
+        {
+          "field": "priority",
+          "actual": 1,
+          "expected": 1,
+          "pass": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "C",
+      "input": "meeting tomorrow at 10am",
+      "timezone": "Asia/Kolkata",
+      "result": {
+        "title": "meeting",
+        "due_date": "2026-01-10",
+        "due_time": "10:00",
+        "estimate_minutes": null,
+        "priority": 2,
+        "category": "work",
+        "energy_level": "medium",
+        "context_tags": [],
+        "is_recurring": false,
+        "recurring_pattern": null,
+        "confidence": 1,
+        "source": "llm",
+        "model": "claude-3-haiku-20240307"
+      },
+      "expected": {
+        "due_date": "2026-01-10",
+        "due_time": "10:00"
+      },
+      "checks": [
+        {
+          "field": "due_date",
+          "actual": "2026-01-10",
+          "expected": "2026-01-10",
+          "pass": true
+        },
+        {
+          "field": "due_time",
+          "actual": "10:00",
+          "expected": "10:00",
+          "pass": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "D.1",
+      "input": "remind in 30 min",
+      "timezone": "Asia/Kolkata",
+      "result": {
+        "title": "remind",
+        "due_date": "2026-01-09",
+        "due_time": "15:10",
+        "estimate_minutes": null,
+        "priority": 1,
+        "category": "other",
+        "energy_level": "medium",
+        "context_tags": [],
+        "is_recurring": false,
+        "recurring_pattern": null,
+        "confidence": 1,
+        "source": "llm",
+        "model": "claude-3-haiku-20240307"
+      },
+      "expected": {
+        "due_date": "2026-01-09",
+        "due_time": "15:10"
+      },
+      "checks": [
+        {
+          "field": "due_date",
+          "actual": "2026-01-09",
+          "expected": "2026-01-09",
+          "pass": true
+        },
+        {
+          "field": "due_time",
+          "actual": "15:10",
+          "expected": "15:10",
+          "pass": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "D.2",
+      "input": "call in 2 hours",
+      "timezone": "Asia/Kolkata",
+      "result": {
+        "title": "call",
+        "due_date": "2026-01-09",
+        "due_time": "16:40",
+        "estimate_minutes": null,
+        "priority": 1,
+        "category": "other",
+        "energy_level": "medium",
+        "context_tags": [],
+        "is_recurring": false,
+        "recurring_pattern": null,
+        "confidence": 1,
+        "source": "llm",
+        "model": "claude-3-haiku-20240307"
+      },
+      "expected": {
+        "due_date": "2026-01-09",
+        "due_time": "16:40"
+      },
+      "checks": [
+        {
+          "field": "due_date",
+          "actual": "2026-01-09",
+          "expected": "2026-01-09",
+          "pass": true
+        },
+        {
+          "field": "due_time",
+          "actual": "16:40",
+          "expected": "16:40",
+          "pass": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "D.3",
+      "input": "meeting next week",
+      "timezone": "Asia/Kolkata",
+      "result": {
+        "title": "meeting",
+        "due_date": "2026-01-16",
+        "due_time": null,
+        "estimate_minutes": null,
+        "priority": 2,
+        "category": "work",
+        "energy_level": "medium",
+        "context_tags": [],
+        "is_recurring": false,
+        "recurring_pattern": null,
+        "confidence": 0.8,
+        "source": "llm",
+        "model": "claude-3-haiku-20240307"
+      },
+      "expected": {
+        "due_date": "2026-01-16"
+      },
+      "checks": [
+        {
+          "field": "due_date",
+          "actual": "2026-01-16",
+          "expected": "2026-01-16",
+          "pass": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "E",
+      "input": "buy groceries",
+      "timezone": "Asia/Kolkata",
+      "result": {
+        "title": "buy groceries",
+        "due_date": "2026-01-09",
+        "due_time": "14:40",
+        "estimate_minutes": null,
+        "priority": 2,
+        "category": "errands",
+        "energy_level": "medium",
+        "context_tags": [],
+        "is_recurring": false,
+        "recurring_pattern": null,
+        "confidence": 1,
+        "source": "llm",
+        "model": "claude-3-haiku-20240307"
+      },
+      "expected": {
+        "due_date": "2026-01-09",
+        "due_time": "NOW"
+      },
+      "checks": [
+        {
+          "field": "due_date",
+          "actual": "2026-01-09",
+          "expected": "2026-01-09",
+          "pass": true
+        },
+        {
+          "field": "due_time",
+          "actual": "14:40",
+          "expected": "~14:40",
+          "pass": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "F",
+      "input": "dentist Friday",
+      "timezone": "Asia/Kolkata",
+      "result": {
+        "title": "dentist",
+        "due_date": "2026-01-09",
+        "due_time": null,
+        "estimate_minutes": null,
+        "priority": 2,
+        "category": "health",
+        "energy_level": "medium",
+        "context_tags": [],
+        "is_recurring": false,
+        "recurring_pattern": null,
+        "confidence": 1,
+        "source": "llm",
+        "model": "claude-3-haiku-20240307"
+      },
+      "expected": {
+        "due_date": "2026-01-09",
+        "due_time": null
+      },
+      "checks": [
+        {
+          "field": "due_date",
+          "actual": "2026-01-09",
+          "expected": "2026-01-09",
+          "pass": true
+        },
+        {
+          "field": "due_time",
+          "actual": null,
+          "expected": null,
+          "pass": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "G",
+      "input": "standup at 9am",
+      "timezone": "Asia/Kolkata",
+      "result": {
+        "title": "standup",
+        "due_date": "2026-01-09",
+        "due_time": "09:00",
+        "estimate_minutes": null,
+        "priority": 2,
+        "category": "work",
+        "energy_level": "medium",
+        "context_tags": [],
+        "is_recurring": false,
+        "recurring_pattern": null,
+        "confidence": 1,
+        "source": "llm",
+        "model": "claude-3-haiku-20240307"
+      },
+      "expected": {
+        "due_date": "2026-01-09",
+        "due_time": "09:00"
+      },
+      "checks": [
+        {
+          "field": "due_date",
+          "actual": "2026-01-09",
+          "expected": "2026-01-09",
+          "pass": true
+        },
+        {
+          "field": "due_time",
+          "actual": "09:00",
+          "expected": "09:00",
+          "pass": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "H",
+      "input": "task tomorrow",
+      "timezone": "Asia/Kolkata",
+      "result": {
+        "title": "task",
+        "due_date": "2026-01-10",
+        "due_time": null,
+        "estimate_minutes": null,
+        "priority": 2,
+        "category": "other",
+        "energy_level": "medium",
+        "context_tags": [],
+        "is_recurring": false,
+        "recurring_pattern": null,
+        "confidence": 1,
+        "source": "llm",
+        "model": "claude-3-haiku-20240307"
+      },
+      "expected": {
+        "due_date": "2026-01-10"
+      },
+      "checks": [
+        {
+          "field": "due_date",
+          "actual": "2026-01-10",
+          "expected": "2026-01-10",
+          "pass": true
+        }
+      ],
+      "passed": true
+    }
+  ]
+}

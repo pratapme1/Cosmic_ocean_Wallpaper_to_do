@@ -97,20 +97,15 @@ class WallpaperUpdateWorker(
                     // Don't use WallpaperManager.desiredMinimum* - those are for home screen with 2x width!
                     Log.e(TAG, "Setting wallpaper for LOCK screen using original bitmap (no scaling)...")
 
-                    // CRITICAL FIX: Clear any existing wallpaper first to force Android to update
-                    // Update BOTH home and lock screen for reliable visual feedback
+                    // RACE CONDITION FIX (2026-01-09):
+                    // Do NOT call clear() before setBitmap() - if setBitmap fails, wallpaper stays blank
+                    // setBitmap() with flags will replace existing wallpaper atomically
                     val wallpaperFlags = WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
-                    try {
-                        Log.e(TAG, "Clearing existing wallpaper (both screens) to force update...")
-                        wallpaperManager.clear(wallpaperFlags)
-                        // Small delay to ensure clear completes
-                        Thread.sleep(100)
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Could not clear wallpaper (may not exist): ${e.message}")
-                    }
 
-                    // Set wallpaper using setBitmap without scaling
-                    // This preserves the aspect ratio and prevents stretching
+                    Log.e(TAG, "Setting wallpaper on BOTH home and lock screens...")
+
+                    // Set wallpaper using setBitmap without clearing first
+                    // This atomically replaces the existing wallpaper
                     wallpaperManager.setBitmap(
                         bitmap,
                         null,

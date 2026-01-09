@@ -14,6 +14,18 @@ CREATE TABLE IF NOT EXISTS users (
   done_for_today BOOLEAN DEFAULT FALSE,
   done_for_today_at TIMESTAMP,
   wallpaper_token VARCHAR(255) UNIQUE,
+  -- Epic 10: Privacy settings
+  default_privacy_level VARCHAR(20) DEFAULT 'public',
+  auto_hide_work_tasks BOOLEAN DEFAULT FALSE,
+  work_hours_start TIME DEFAULT '09:00',
+  work_hours_end TIME DEFAULT '17:00',
+  biometric_reveal_enabled BOOLEAN DEFAULT TRUE,
+  hide_all_tasks_mode BOOLEAN DEFAULT FALSE,
+  -- Epic 10 Phase 3: Environment settings
+  time_of_day_mode VARCHAR(20) DEFAULT 'auto',
+  manual_time_period VARCHAR(20) DEFAULT 'morning',
+  weather_overlay_enabled BOOLEAN DEFAULT TRUE,
+  particle_intensity VARCHAR(20) DEFAULT 'medium',
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );

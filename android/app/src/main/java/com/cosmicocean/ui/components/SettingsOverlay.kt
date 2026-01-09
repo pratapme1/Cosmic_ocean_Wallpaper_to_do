@@ -21,7 +21,8 @@ fun SettingsOverlay(
     userEmail: String? = null,
     currentTheme: String = "cosmic",
     onThemeChange: (String) -> Unit = {},
-    onOpenPrivacySettings: (() -> Unit)? = null
+    onOpenPrivacySettings: (() -> Unit)? = null,
+    onOpenEnvironmentSettings: (() -> Unit)? = null
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -139,6 +140,18 @@ fun SettingsOverlay(
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF9C27B0))
                 ) {
                     Text("🔒 Privacy Settings", color = Color(0xFF9C27B0))
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Environment Settings (Epic 10 Phase 3)
+            if (onOpenEnvironmentSettings != null) {
+                OutlinedButton(
+                    onClick = onOpenEnvironmentSettings,
+                    modifier = Modifier.fillMaxWidth(),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00E5FF))
+                ) {
+                    Text("🌤️ Environment Settings", color = Color(0xFF00E5FF))
                 }
                 Spacer(modifier = Modifier.height(12.dp))
             }

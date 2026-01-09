@@ -109,6 +109,7 @@ class MainActivity : ComponentActivity() {
                 var showSettings by remember { mutableStateOf(false) }
                 var showTrophyGallery by remember { mutableStateOf(false) }
                 var showPrivacySettings by remember { mutableStateOf(false) }
+                var showEnvironmentSettings by remember { mutableStateOf(false) }
                 var editingStar by remember { mutableStateOf<Star?>(null) }
                 var lastTapOffset by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
                 var isInteracting by remember { mutableStateOf(false) }
@@ -246,6 +247,10 @@ class MainActivity : ComponentActivity() {
                                 onOpenPrivacySettings = {
                                     showSettings = false
                                     showPrivacySettings = true
+                                },
+                                onOpenEnvironmentSettings = {
+                                    showSettings = false
+                                    showEnvironmentSettings = true
                                 }
                             )
                         }
@@ -255,6 +260,14 @@ class MainActivity : ComponentActivity() {
                             PrivacySettingsWrapper(
                                 apiService = NetworkModule.getApi(this@MainActivity),
                                 onNavigateBack = { showPrivacySettings = false }
+                            )
+                        }
+
+                        // Epic 10 Phase 3: Environment Settings Screen
+                        if (showEnvironmentSettings) {
+                            EnvironmentSettingsWrapper(
+                                apiService = NetworkModule.getApi(this@MainActivity),
+                                onNavigateBack = { showEnvironmentSettings = false }
                             )
                         }
 

@@ -204,7 +204,7 @@ async function renderTextToSvg(layout, tasks, colors, doneForToday, intelligentM
               fontWeight: 400,
               textShadow: '0 0 20px rgba(255,255,255,0.5)',
             },
-            children: 'All clear ✨',
+            children: 'All clear',
           },
         },
       },
