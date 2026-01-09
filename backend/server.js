@@ -288,7 +288,9 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
       auto_hide_work_tasks: userObj?.auto_hide_work_tasks || false,
       work_hours_start: userObj?.work_hours_start || '09:00',
       work_hours_end: userObj?.work_hours_end || '17:00',
-      default_privacy_level: userObj?.default_privacy_level || 'public'
+      default_privacy_level: userObj?.default_privacy_level || 'public',
+      // Epic 10 Phase 2: Achievement preferences
+      show_achievements_on_wallpaper: userObj?.show_achievements_on_wallpaper !== false // Default to true
     };
 
     console.log(`🖼️  GENERATING: theme=${user.theme}, resolution=${user.resolution}, done=${user.done_for_today}`);
