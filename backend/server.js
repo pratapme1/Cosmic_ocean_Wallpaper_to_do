@@ -39,6 +39,7 @@ const { errorHandler, notFoundHandler, asyncHandler, APIError, ErrorCodes } = re
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
 const syncRoutes = require('./routes/sync');
+const achievementRoutes = require('./routes/achievements');
 
 /**
  * Parse date/time value for PostgreSQL.
@@ -234,6 +235,10 @@ app.use('/api/user', userRoutes);
 // --- SYNC ROUTES ---
 // Offline sync with conflict resolution
 app.use('/api/sync', syncRoutes);
+
+// --- ACHIEVEMENT ROUTES ---
+// Epic 10 Phase 2: Achievement/gamification system
+app.use('/api/achievements', achievementRoutes);
 
 // GET /api/wallpaper
 // Supports both JWT auth and wallpaper tokens with Redis caching

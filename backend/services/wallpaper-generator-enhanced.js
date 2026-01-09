@@ -23,11 +23,14 @@ const { AtmosphereController } = require('./atmosphere-controller');
 const { StatsAggregator } = require('./stats-aggregator');
 const { getCurrentMessage } = require('./wallpaper-message-provider');
 const { filterTasksForWallpaper, getPrivacyStats } = require('./privacy-filter');
+const { AchievementService } = require('./achievement-service');
+const { renderAchievementsToSvg, generateStreakDisplay } = require('./achievement-renderer');
 
 // Initialize intelligence layer components
 const messageEngine = new MessageEngine();
 const atmosphereController = new AtmosphereController();
 const statsAggregator = new StatsAggregator();
+const achievementService = new AchievementService();
 
 /**
  * Determine urgency level from tasks
@@ -445,6 +448,56 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now(), tim
     // Layer 3: Transition gradient
     const transitionSvg = generateTransitionLayer(layout, colors);
     layers.push({ input: Buffer.from(transitionSvg), blend: 'over' });
+
+    // =====================================
+    // ACHIEVEMENT LAYER (Epic 10 Phase 2)
+    // =====================================
+    const showAchievements = user.show_achievements_on_wallpaper !== false;
+
+    if (showAchievements && !done_for_today) {
+      try {
+        // Detect achievements from task history
+        const achievementResult = await achievementService.detectAchievements(
+          user.id,
+          allTasks,
+          [] // We don't have existing achievements here; detection works without them
+        );
+
+        // Get top achievements for display (max 3)
+        const wallpaperAchievements = achievementService.getWallpaperAchievements(
+          achievementResult.earned,
+          3
+        );
+
+        // Get next achievement in progress
+        const inProgress = achievementResult.inProgress?.slice(0, 1) || [];
+
+        if (wallpaperAchievements.length > 0 || inProgress.length > 0) {
+          console.log(`[Achievements] Rendering ${wallpaperAchievements.length} badges, ${inProgress.length} in-progress`);
+
+          // Layer 3.5: Achievements bar (rendered at top of screen)
+          const achievementSvg = await renderAchievementsToSvg(
+            layout,
+            wallpaperAchievements,
+            inProgress,
+            colors,
+            { maxBadges: 3, showProgress: true }
+          );
+          layers.push({ input: Buffer.from(achievementSvg), blend: 'over' });
+        } else {
+          console.log(`[Achievements] No achievements to display`);
+        }
+
+        // Log achievement stats
+        console.log(`[Intelligence] Achievements: earned=${achievementResult.earned.length}, points=${achievementResult.totalPoints}`);
+      } catch (err) {
+        console.error('[Achievements] Failed to render achievements:', err.message);
+        // Continue without achievements layer - don't break wallpaper generation
+      }
+    }
+    // =====================================
+    // END ACHIEVEMENT LAYER
+    // =====================================
 
     // Layer 4: Task overlay with text (using satori for serverless font rendering)
     // Now includes intelligent message!
