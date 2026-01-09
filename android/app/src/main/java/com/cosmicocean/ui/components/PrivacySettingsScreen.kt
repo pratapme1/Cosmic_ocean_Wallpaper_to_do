@@ -555,3 +555,38 @@ private fun formatTime(time: String): String {
     }
     return String.format("%d:%02d %s", displayHour, minute, amPm)
 }
+
+/**
+ * Stateful wrapper for PrivacySettingsScreen that handles state internally
+ * Used when you just need a simple back navigation callback
+ */
+@Composable
+fun PrivacySettingsWrapper(
+    onNavigateBack: () -> Unit
+) {
+    // Local state for preferences
+    var preferences by remember { mutableStateOf(PrivacyPreferences()) }
+
+    PrivacySettingsScreen(
+        preferences = preferences,
+        onDefaultPrivacyLevelChanged = { level ->
+            preferences = preferences.copy(defaultPrivacyLevel = level)
+        },
+        onAutoHideWorkTasksChanged = { enabled ->
+            preferences = preferences.copy(autoHideWorkTasks = enabled)
+        },
+        onWorkHoursStartChanged = { time ->
+            preferences = preferences.copy(workHoursStart = time)
+        },
+        onWorkHoursEndChanged = { time ->
+            preferences = preferences.copy(workHoursEnd = time)
+        },
+        onBiometricRevealChanged = { enabled ->
+            preferences = preferences.copy(biometricRevealEnabled = enabled)
+        },
+        onHideAllTasksModeChanged = { enabled ->
+            preferences = preferences.copy(hideAllTasksMode = enabled)
+        },
+        onNavigateBack = onNavigateBack
+    )
+}

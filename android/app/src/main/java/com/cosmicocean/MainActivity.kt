@@ -106,6 +106,7 @@ class MainActivity : ComponentActivity() {
                 var showSearch by remember { mutableStateOf(false) }
                 var showSettings by remember { mutableStateOf(false) }
                 var showTrophyGallery by remember { mutableStateOf(false) }
+                var showPrivacySettings by remember { mutableStateOf(false) }
                 var editingStar by remember { mutableStateOf<Star?>(null) }
                 var lastTapOffset by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
                 var isInteracting by remember { mutableStateOf(false) }
@@ -228,7 +229,18 @@ class MainActivity : ComponentActivity() {
                                 onThemeChange = { newTheme ->
                                     currentTheme = newTheme
                                     changeWallpaperTheme(newTheme)
+                                },
+                                onOpenPrivacySettings = {
+                                    showSettings = false
+                                    showPrivacySettings = true
                                 }
+                            )
+                        }
+
+                        // Epic 10: Privacy Settings Screen
+                        if (showPrivacySettings) {
+                            PrivacySettingsWrapper(
+                                onNavigateBack = { showPrivacySettings = false }
                             )
                         }
 
