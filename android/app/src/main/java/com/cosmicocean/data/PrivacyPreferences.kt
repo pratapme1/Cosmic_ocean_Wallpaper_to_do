@@ -35,7 +35,20 @@ enum class PrivacyLevel(val displayName: String, val description: String) {
     CATEGORY("Category Only", "Show category instead of title (e.g., 'Work task')"),
     INITIALS("Initials", "Show first letter only (e.g., 'M...')"),
     HIDDEN("Hidden", "Don't show on wallpaper"),
-    CUSTOM("Custom Text", "Show your own custom display text")
+    CUSTOM("Custom Text", "Show your own custom display text");
+
+    companion object {
+        fun fromString(value: String?): PrivacyLevel {
+            return when (value?.lowercase()) {
+                "public" -> PUBLIC
+                "category" -> CATEGORY
+                "initials" -> INITIALS
+                "hidden" -> HIDDEN
+                "custom" -> CUSTOM
+                else -> PUBLIC
+            }
+        }
+    }
 }
 
 /**

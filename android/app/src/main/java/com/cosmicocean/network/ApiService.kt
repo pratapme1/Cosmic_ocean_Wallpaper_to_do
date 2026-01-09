@@ -82,6 +82,13 @@ interface ApiService {
     @DELETE("api/user")
     suspend fun deleteAccount(): Response<com.cosmicocean.model.DeleteAccountResponse>
 
+    // ==================== Privacy Preferences (Epic 10) ====================
+    @GET("api/user/preferences")
+    suspend fun getPreferences(): Response<com.cosmicocean.model.UserPreferencesResponse>
+
+    @PATCH("api/user/preferences")
+    suspend fun updatePreferences(@Body body: @JvmSuppressWildcards Map<String, Any>): Response<com.cosmicocean.model.UserPreferencesResponse>
+
     @GET("api/user/export")
     suspend fun exportUserData(): Response<ResponseBody>
 

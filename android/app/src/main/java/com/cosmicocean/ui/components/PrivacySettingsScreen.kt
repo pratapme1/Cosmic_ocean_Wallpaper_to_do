@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cosmicocean.data.PrivacyPreferences
 import com.cosmicocean.data.PrivacyLevel
+import com.cosmicocean.network.ApiService
+import kotlinx.coroutines.launch
 
 /**
  * Epic 10: Task Privacy & Masking
@@ -558,35 +560,97 @@ private fun formatTime(time: String): String {
 
 /**
  * Stateful wrapper for PrivacySettingsScreen that handles state internally
- * Used when you just need a simple back navigation callback
+ * Loads preferences from API and saves changes back to API
  */
 @Composable
 fun PrivacySettingsWrapper(
+    apiService: ApiService,
     onNavigateBack: () -> Unit
 ) {
-    // Local state for preferences
+    val scope = rememberCoroutineScope()
     var preferences by remember { mutableStateOf(PrivacyPreferences()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    PrivacySettingsScreen(
-        preferences = preferences,
-        onDefaultPrivacyLevelChanged = { level ->
-            preferences = preferences.copy(defaultPrivacyLevel = level)
-        },
-        onAutoHideWorkTasksChanged = { enabled ->
-            preferences = preferences.copy(autoHideWorkTasks = enabled)
-        },
-        onWorkHoursStartChanged = { time ->
-            preferences = preferences.copy(workHoursStart = time)
-        },
-        onWorkHoursEndChanged = { time ->
-            preferences = preferences.copy(workHoursEnd = time)
-        },
-        onBiometricRevealChanged = { enabled ->
-            preferences = preferences.copy(biometricRevealEnabled = enabled)
-        },
-        onHideAllTasksModeChanged = { enabled ->
-            preferences = preferences.copy(hideAllTasksMode = enabled)
-        },
-        onNavigateBack = onNavigateBack
-    )
+    // Load preferences from API on first composition
+    LaunchedEffect(Unit) {
+        try {
+            val response = apiService.getPreferences()
+            if (response.isSuccessful && response.body() != null) {
+                val apiPrefs = response.body()!!
+                preferences = PrivacyPreferences(
+                    defaultPrivacyLevel = PrivacyLevel.fromString(apiPrefs.defaultPrivacyLevel ?: "public"),
+                    autoHideWorkTasks = apiPrefs.autoHideWorkTasks,
+                    workHoursStart = apiPrefs.workHoursStart ?: "09:00",
+                    workHoursEnd = apiPrefs.workHoursEnd ?: "17:00",
+                    biometricRevealEnabled = apiPrefs.biometricRevealEnabled,
+                    hideAllTasksMode = apiPrefs.hideAllTasksMode
+                )
+            }
+        } catch (e: Exception) {
+            errorMessage = "Failed to load preferences: ${e.message}"
+        } finally {
+            isLoading = false
+        }
+    }
+
+    // Helper function to save preferences to API
+    fun savePreference(key: String, value: Any) {
+        scope.launch {
+            try {
+                val body = mapOf(key to value)
+                apiService.updatePreferences(body)
+            } catch (e: Exception) {
+                errorMessage = "Failed to save: ${e.message}"
+            }
+        }
+    }
+
+    if (isLoading) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF0F0F1E)),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(color = Color(0xFF9C27B0))
+        }
+    } else {
+        PrivacySettingsScreen(
+            preferences = preferences,
+            onDefaultPrivacyLevelChanged = { level ->
+                preferences = preferences.copy(defaultPrivacyLevel = level)
+                savePreference("default_privacy_level", level.name.lowercase())
+            },
+            onAutoHideWorkTasksChanged = { enabled ->
+                preferences = preferences.copy(autoHideWorkTasks = enabled)
+                savePreference("auto_hide_work_tasks", enabled)
+            },
+            onWorkHoursStartChanged = { time ->
+                preferences = preferences.copy(workHoursStart = time)
+                savePreference("work_hours_start", time)
+            },
+            onWorkHoursEndChanged = { time ->
+                preferences = preferences.copy(workHoursEnd = time)
+                savePreference("work_hours_end", time)
+            },
+            onBiometricRevealChanged = { enabled ->
+                preferences = preferences.copy(biometricRevealEnabled = enabled)
+                savePreference("biometric_reveal_enabled", enabled)
+            },
+            onHideAllTasksModeChanged = { enabled ->
+                preferences = preferences.copy(hideAllTasksMode = enabled)
+                savePreference("hide_all_tasks_mode", enabled)
+            },
+            onNavigateBack = onNavigateBack
+        )
+    }
+
+    // Show error snackbar if there's an error
+    errorMessage?.let { error ->
+        LaunchedEffect(error) {
+            kotlinx.coroutines.delay(3000)
+            errorMessage = null
+        }
+    }
 }

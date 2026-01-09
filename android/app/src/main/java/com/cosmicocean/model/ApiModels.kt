@@ -193,3 +193,28 @@ data class ParseLLMResponse(
     val originalInput: String,
     val timestamp: String
 )
+
+/**
+ * Epic 10: User Preferences Response
+ * Response from GET/PATCH /api/user/preferences
+ */
+data class UserPreferencesResponse(
+    val theme: String? = "cosmic",
+    val resolution: String? = null,
+    @SerializedName("display_mode")
+    val displayMode: String? = "one_thing",
+    val timezone: String? = null,
+    // Privacy settings
+    @SerializedName("default_privacy_level")
+    val defaultPrivacyLevel: String? = "public",
+    @SerializedName("auto_hide_work_tasks")
+    val autoHideWorkTasks: Boolean = false,
+    @SerializedName("work_hours_start")
+    val workHoursStart: String? = "09:00",
+    @SerializedName("work_hours_end")
+    val workHoursEnd: String? = "17:00",
+    @SerializedName("biometric_reveal_enabled")
+    val biometricRevealEnabled: Boolean = true,
+    @SerializedName("hide_all_tasks_mode")
+    val hideAllTasksMode: Boolean = false
+)
