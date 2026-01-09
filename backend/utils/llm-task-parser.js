@@ -43,176 +43,50 @@ function initializeClaude() {
 function buildPrompt(input, context) {
   const { today, currentTime, dayOfWeek } = context;
 
-  return `You are a task parser. Extract structured data from natural language task input.
+  return `Parse this task and extract structured data.
 
 INPUT: "${input}"
 TODAY: ${today} (${dayOfWeek})
 CURRENT TIME: ${currentTime}
 
-STRICT RULES (CRITICAL - DO NOT HALLUCINATE):
+Extract these fields:
 
-1. task: Extract ONLY the action description. Remove ALL date/time/priority words.
-   - "Email manager by 5pm tomorrow" → task: "Email manager"
-   - "Call mom in 10 minutes urgently" → task: "Call mom"
-   - "missed alert yesterday" → task: "missed alert"
-   - Remove trailing: "by", "at", "in", "on", "for"
+1. task: The action/task description (remove date/time/priority words)
+2. dueDate: YYYY-MM-DD format. Calculate relative dates from TODAY.
+   - Only set if a date is mentioned (today, tomorrow, yesterday, weekday, "next week", explicit date, etc.)
+   - "in X minutes/hours" → set to today (or tomorrow if crosses midnight)
+   - If no date mentioned → null
+3. dueTime: HH:MM 24-hour format
+   - "at 3pm" → "15:00", "in 30 min" → add 30 min to ${currentTime}
+   - If no time mentioned → null
+4. estimateMinutes: Task duration only (NOT "in X minutes" - that's due time)
+   - "30 minute meeting" → 30
+5. priority: 1=urgent/now/within 2hrs, 2=normal (DEFAULT), 3=someday/distant future
+6. category: work|personal|health|finance|learning|social|errands|general
+7. energyLevel: high|medium|low (default: medium)
+8. contextTags: Array of @mentions like ["@home", "@office"]
+9. isRecurring: true if "every day", "weekly", etc.
+10. recurringPattern: daily|weekly|monthly|null
 
-2. dueDate: ONLY if EXPLICITLY mentioned. Otherwise null.
-   - "tomorrow"/"tmrw" → add 1 day to ${today}
-     * EXAMPLE: If TODAY is ${today}, "task tomorrow" → dueDate: the next day in YYYY-MM-DD
-   - "today"/"tday" → ${today}
-   - "yesterday"/"ystrdy" → subtract 1 day from ${today}
-     * EXAMPLE: If TODAY is 2026-01-06, "missed alert yesterday" → dueDate: "2026-01-05"
-   - Day of week: "monday", "tuesday", "friday", "on monday", "on friday", "next friday" → calculate YYYY-MM-DD
-     * TODAY is ${dayOfWeek}, ${today}
-     * If input mentions TODAY's day (${dayOfWeek}), use ${today}
-     * If input mentions a different day, find the NEXT occurrence of that day
-     * "party on friday" → if today is Friday, use ${today}; otherwise find next Friday
-     * EXAMPLE: If today is Friday 2026-01-09, "dentist Friday" → dueDate: "2026-01-09"
-     * EXAMPLE: If today is Friday 2026-01-09, "meeting Monday" → dueDate: "2026-01-12" (next Monday)
-   - Date phrases: "end of day"/"eod", "end of week"/"eow", "this weekend" → calculate date
-     * "next week" → add 7 days to ${today} → YYYY-MM-DD
-     * "next month" → add 30 days to ${today} → YYYY-MM-DD
-     * "next year" → add 365 days to ${today} → YYYY-MM-DD
-   - Past phrases: "last week", "last month" → calculate appropriate past date
-   - Explicit dates: "Jan 5", "1/15", "2026-01-20" → YYYY-MM-DD
-   - NO date words in input → null (DO NOT INVENT)
-   - "today" → ${today}
+IMPORTANT:
+- Do NOT invent dates/times not in the input
+- "in X minutes" is a DUE TIME, not duration
+- Default priority is 2 unless urgent or explicitly low priority
 
-3. dueTime: ONLY if EXPLICITLY mentioned. Otherwise null.
-   - "at 3pm", "at 3:30pm", "by 5:00", "noon", "midnight" → HH:MM (24-hour format)
-     * EXAMPLE: "yesterday at 3pm" → dueTime: "15:00"
-     * EXAMPLE: "meeting at 10am" → dueTime: "10:00"
-     * EXAMPLE: "call at 2:30pm" → dueTime: "14:30"
-   - "in X minutes/hours" → ADD X to ${currentTime} and return result as HH:MM
-     * EXAMPLE: If currentTime is 23:21 and input is "in 39 minutes" → 23:21 + 39min = 00:00 (next day)
-     * EXAMPLE: If currentTime is 14:30 and input is "in 1 hour" → 14:30 + 60min = 15:30
-     * IMPORTANT: Handle midnight rollover correctly!
-   - Time-of-day words (when used as timing, not just description):
-     "morning task", "task in the morning" → 09:00
-     "afternoon meeting", "task in afternoon" → 14:00
-     "evening call", "task in evening" → 18:00
-   - NO time words → null (DO NOT INVENT)
-   - CRITICAL: "in 39 minutes" means DUE TIME, NOT duration. Set dueTime, NOT estimateMinutes!
-
-4. estimateMinutes: ONLY from explicit TASK DURATION mentions. NOT "in X minutes".
-   - "30 minute call" → 30 (how long the call takes)
-   - "quick task" → 15, "1 hour meeting" → 60
-   - "record in 39 minutes" → estimateMinutes: null (39 is DUE TIME, not duration!)
-   - NO duration mentioned → null
-
-5. priority: Infer from BOTH urgency keywords AND time pressure (semantic understanding).
-
-   CRITICAL: This determines star size and color in the app:
-   - Priority 1 (HIGH) → 52px RED star (always urgent)
-   - Priority 2 (MEDIUM) → 36px ORANGE/BLUE star (time-based)
-   - Priority 3 (LOW) → 24px BLUE star (future/someday)
-
-   Priority 1 (HIGH) - Use when ANY of these apply:
-   - Explicit urgency: "urgent", "asap", "critical", "now", "immediately", "!!!"
-   - Time pressure: due within 2 hours (CHECK THIS CAREFULLY!)
-     * "in 10 minutes", "in 10m" → Priority 1 (urgent)
-     * "in 1 hour", "in 1h", "in 30m", "in 45min" → Priority 1 (urgent)
-     * "by 3pm today" (if current time is after 1pm) → Priority 1
-     * ANY "in X minutes/hours" where X ≤ 2 hours → Priority 1
-   - Semantic urgency: "emergency", "hurry", "quick"
-
-   Priority 3 (LOW) - ONLY use when EXPLICITLY applies. Otherwise default to Priority 2!
-
-   CRITICAL: Today is ${dayOfWeek}, ${today}. Calculate time distance carefully!
-
-   TWO CRITERIA ONLY (must meet one):
-
-   A) Due date >24 hours away (calculate from today!):
-      * "by friday" when today is ${dayOfWeek} → if friday is >1 day away → Priority 3
-      * "next week", "next monday", "next month" → >1 day away → Priority 3
-      * "physical therapy session friday" → if friday >1 day away → Priority 3
-      * "code review by friday" → if friday >1 day away → Priority 3
-      * "dinner friday 7pm" → if friday >1 day away → Priority 3
-
-   B) Explicit low-priority keywords (ALWAYS Priority 3):
-      * "maybe", "someday", "eventually", "when free", "if time", "could", "might want to"
-      * "maybe clean garage", "someday learn piano" → Priority 3
-
-   DO NOT use Priority 3 for:
-   - Regular tasks without distant dates ("journal", "study", "workout")
-   - Tasks due today, tomorrow, or within 24 hours
-   - Work/health/learning tasks without explicit low-priority keywords
-
-   Priority 2 (MEDIUM) - THIS IS THE DEFAULT! Use when NOT Priority 1 or 3:
-   - Due in 2-24 hours ("tomorrow morning", "today evening", "by 5pm tomorrow")
-   - Regular tasks: "journal", "study", "workout", "call", "email", "meeting"
-   - Work/health/finance/learning tasks without urgency or distant future dates
-   - No deadline specified: "buy groceries", "finish homework", "drink water"
-   - Keywords: "important", "soon", "today" (without distant date)
-
-   DECISION FLOW (FOLLOW THIS ORDER):
-   1. Check Priority 1 criteria first (urgent/within 2hrs) → if yes, Priority 1
-   2. Check Priority 3 criteria second (>24hrs OR low-priority keywords) → if yes, Priority 3
-   3. DEFAULT to Priority 2 if neither 1 nor 3 apply → Priority 2
-
-6. category: Infer from keywords and context. Be specific - only use "other" as last resort.
-
-   Options: work, personal, health, finance, learning, social, errands, other
-
-   PRIORITY ORDER (action keywords override relationship keywords):
-   1. Check ACTION keywords first (buy, study, workout, pay, etc.)
-   2. Then check CONTEXT keywords (family, work, social, etc.)
-
-   Category Keywords:
-   - errands: buy, groceries, shopping, pick up, drop off, mail, post office, pharmacy, return, store, purchase, get
-   - work: email, meeting, presentation, manager, client, project, code, deploy, standup, review, deadline, report
-   - health: workout, gym, exercise, doctor, appointment, yoga, run, meditate, vitamins, therapy, prescription, sleep
-   - finance: pay, rent, bill, budget, money, bank, credit card, taxes, subscription, savings, expense, cancel subscription
-   - learning: study, read, homework, course, tutorial, learn, practice, review, flashcards, chapter, exam, certification
-   - social: coffee, dinner, party, friends, RSVP, wedding, visit, volunteer, game night, hangout
-   - personal: mom, dad, family, call, message, organize, clean, plan, home, journal, personal care
-
-   EXAMPLES:
-   - "buy gift for nephew" → errands (action "buy" takes priority over relationship "nephew")
-   - "call mom" → personal (family relationship)
-   - "meditate for 10 minutes" → health (meditation is wellness)
-   - "finish homework" → learning (homework is education)
-   - "cancel subscriptions" → finance (subscriptions are recurring payments)
-   - "study for certification exam" → learning (studying is education)
-   - "buy groceries" → errands (shopping task)
-   - "team meeting" → work (workplace)
-   - "journal before sleep" → personal (personal care activity)
-
-7. energyLevel: From explicit energy mentions ONLY.
-   - Keywords: "high energy", "intense" → "high"
-   - Keywords: "low energy", "tired", "relaxed" → "low"
-   - NO keywords → "medium"
-
-8. contextTags: Extract @location mentions.
-   - "@office", "@home", "@gym" → extract as array
-   - NO @ mentions → []
-
-9. isRecurring: ONLY if explicit recurrence.
-   - "every day", "weekly", "monthly" → true
-   - NO recurrence words → false
-
-10. recurringPattern: ONLY if isRecurring = true.
-    - "every Monday" → "weekly"
-    - "daily standup" → "daily"
-    - Not recurring → null
-
-RESPONSE FORMAT (JSON):
+Respond with JSON only:
 {
-  "task": "Clean task name",
+  "task": "string",
   "dueDate": "YYYY-MM-DD or null",
   "dueTime": "HH:MM or null",
   "estimateMinutes": number or null,
-  "priority": 1 | 2 | 3,
-  "category": "work|personal|health|finance|learning|social|errands|other",
+  "priority": 1|2|3,
+  "category": "string",
   "energyLevel": "high|medium|low",
-  "contextTags": ["@location"],
-  "isRecurring": boolean,
-  "recurringPattern": "daily|weekly|monthly|null",
+  "contextTags": [],
+  "isRecurring": false,
+  "recurringPattern": null,
   "confidence": 0.0-1.0
-}
-
-CRITICAL: If you're not certain about a field, use null. NEVER invent data.`;
+}`;
 }
 
 /**
