@@ -229,15 +229,19 @@ async function renderTextToSvg(layout, tasks, colors, doneForToday, intelligentM
       const titleMaxWidth = taskAreaWidth - priorityDotWidth - margins.horizontal;
 
       // Truncate title using pixel-based measurement
+      // Use displayTitle (privacy-filtered) if available, otherwise use original title
       const title = truncateText(
-        task.title || 'Untitled',
+        task.displayTitle || task.title || 'Untitled',
         typography.titleLarge,  // Font size
         500,  // Font weight (Medium)
         titleMaxWidth
       );
 
       // Build category badge if category exists and not 'general'
-      const categoryBadge = task.category && task.category !== 'general' ? {
+      // Don't show category badge for privacy-filtered tasks (except 'category' level which shows category anyway)
+      const showCategoryBadge = task.category && task.category !== 'general' &&
+        (!task.is_private || task.privacy_level === 'public' || task.privacy_level === 'category');
+      const categoryBadge = showCategoryBadge ? {
         type: 'div',
         props: {
           style: {
@@ -257,7 +261,10 @@ async function renderTextToSvg(layout, tasks, colors, doneForToday, intelligentM
       } : null;
 
       // Build context tag (show first tag if exists)
-      const contextTag = task.context_tags && task.context_tags.length > 0 ? {
+      // Don't show context tags for private tasks (reveals too much information)
+      const showContextTag = task.context_tags && task.context_tags.length > 0 &&
+        (!task.is_private || task.privacy_level === 'public');
+      const contextTag = showContextTag ? {
         type: 'div',
         props: {
           style: {

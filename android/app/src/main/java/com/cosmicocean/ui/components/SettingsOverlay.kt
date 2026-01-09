@@ -17,7 +17,8 @@ fun SettingsOverlay(
     onLogout: (() -> Unit)? = null,
     userEmail: String? = null,
     currentTheme: String = "cosmic",
-    onThemeChange: (String) -> Unit = {}
+    onThemeChange: (String) -> Unit = {},
+    onOpenPrivacySettings: (() -> Unit)? = null
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -116,6 +117,18 @@ fun SettingsOverlay(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+
+            // Privacy Settings
+            if (onOpenPrivacySettings != null) {
+                OutlinedButton(
+                    onClick = onOpenPrivacySettings,
+                    modifier = Modifier.fillMaxWidth(),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF9C27B0))
+                ) {
+                    Text("🔒 Privacy Settings", color = Color(0xFF9C27B0))
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             // Quick Actions
             Button(

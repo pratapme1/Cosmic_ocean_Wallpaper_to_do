@@ -7,6 +7,140 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.6] - 2026-01-09 (Android + Backend)
+
+### Added - Epic 10 Phase 1: Task Privacy & Masking 🔒
+
+**Status:** ✅ COMPLETE - Privacy system ready for production
+**Progress:** Phase 1 complete (Tasks 1-4 of 22 total in Epic 10)
+**Test Coverage:** 85 E2E tests across backend + Android build verified
+
+#### Feature Overview
+
+Task Privacy allows users to control how their task titles appear on wallpapers:
+- **PUBLIC** - Show full task title (default)
+- **CATEGORY** - Show category instead of title ("Personal task")
+- **INITIALS** - Show first letter only ("B...")
+- **HIDDEN** - Don't show on wallpaper at all
+- **CUSTOM** - Show user-defined custom text ("Appointment")
+
+#### Database Schema (Task 1) ✅
+
+**Migration 010: Privacy Fields**
+```sql
+-- New columns in tasks table
+is_private BOOLEAN DEFAULT FALSE,
+privacy_level VARCHAR(20) DEFAULT 'public',
+privacy_display VARCHAR(255) NULL
+```
+
+**Files Created:**
+- `backend/migrations/010_privacy_fields.sql` - Add privacy columns
+- `backend/migrations/010_privacy_fields_rollback.sql` - Rollback support
+
+#### Backend Privacy Filtering (Task 2) ✅
+
+**Privacy Filter Service** - `backend/services/privacy-filter.js`
+- `applyPrivacyFilter(tasks, globalSettings)` - Filter task list
+- `getDisplayTitle(task, globalSettings)` - Get masked title based on privacy level
+- Supports per-task and global privacy settings
+- Auto-hide work tasks during non-work hours
+
+**Text Renderer Integration** - `backend/services/text-renderer.js`
+- Privacy filtering applied before wallpaper text generation
+- Hidden tasks excluded from wallpaper entirely
+- Custom display text rendered when privacy_level = 'custom'
+
+#### API Endpoints (Task 3) ✅
+
+**Privacy Preferences API** - `GET/PATCH /api/user/preferences`
+- `default_privacy_level` - Default for new tasks
+- `auto_hide_work_tasks` - Auto-hide work category outside work hours
+- `work_hours_start` / `work_hours_end` - Work hours configuration
+- `biometric_reveal_enabled` - Require biometric to reveal tasks
+- `hide_all_tasks_mode` - Master toggle to hide all tasks
+
+**Task Privacy Fields** - `POST/PATCH /api/tasks`
+- `is_private` - Boolean privacy flag
+- `privacy_level` - PUBLIC/CATEGORY/INITIALS/HIDDEN/CUSTOM
+- `privacy_display` - Custom display text
+
+#### Android Privacy UI (Task 4) ✅
+
+**Privacy Preferences** - `PrivacyPreferences.kt` (120 lines)
+- `PrivacyLevel` enum with display names and descriptions
+- `PrivacyPreferences` data class
+- `PrivacyPreferencesRepository` with DataStore persistence
+- Flow-based reactive state management
+
+**Privacy Settings Screen** - `PrivacySettingsScreen.kt` (450 lines)
+- Master controls (Hide All Tasks toggle)
+- Default privacy level selector
+- Work hours configuration with time pickers
+- Biometric reveal toggle
+- Purple accent theme (#9C27B0)
+
+**Task Privacy Dialog** - `TaskPrivacyDialog.kt` (347 lines)
+- Per-task privacy configuration
+- Live preview of privacy masking
+- Privacy level options with icons
+- Custom display text input
+- Helper components: `TaskPrivacyToggle`, `PrivacyBadge`
+
+**Settings Integration** - `SettingsOverlay.kt` (modified)
+- Added "Privacy Settings" button with lock icon
+- `onOpenPrivacySettings` callback
+
+**API Models** - `ApiModels.kt` (modified)
+- Added `isPrivate`, `privacyLevel`, `privacyDisplay` to TaskResponse
+
+### Test Results
+
+| Test Suite | Tests | Status |
+|------------|-------|--------|
+| E2E Privacy API | 26 | ✅ PASS |
+| E2E User Preferences | 34 | ✅ PASS |
+| E2E Authentication | 25 | ✅ PASS |
+| Android Build | - | ✅ PASS |
+| **TOTAL** | **85** | **100%** |
+
+### Files Created
+
+**Backend:**
+- `backend/migrations/010_privacy_fields.sql`
+- `backend/migrations/010_privacy_fields_rollback.sql`
+- `backend/services/privacy-filter.js`
+- `backend/tests/e2e-privacy-api.test.mjs`
+
+**Android:**
+- `android/.../data/PrivacyPreferences.kt`
+- `android/.../ui/components/PrivacySettingsScreen.kt`
+- `android/.../ui/components/TaskPrivacyDialog.kt`
+
+### Files Modified
+
+**Backend:**
+- `backend/services/wallpaper-generator-enhanced.js` - Privacy filtering integration
+- `backend/services/text-renderer.js` - Privacy-aware text generation
+- `backend/routes/user.js` - Privacy preferences endpoints
+
+**Android:**
+- `android/.../ui/components/SettingsOverlay.kt` - Privacy settings button
+- `android/.../model/ApiModels.kt` - Privacy fields in TaskResponse
+
+### Build Output
+- APK: `/home/vi/supernova/cosmic-ocean-v1.3.6.apk` (7.4 MB)
+- versionCode: 10
+- versionName: 1.3.6
+
+### Next Steps (Epic 10 Phase 2-5)
+- **Phase 2:** Achievements & Gamification (Tasks 5-8)
+- **Phase 3:** Additional Themes (Tasks 9-14)
+- **Phase 4:** Enhanced Animations (Tasks 15-18)
+- **Phase 5:** Advanced Features (Tasks 19-22)
+
+---
+
 ## [1.3.5] - 2026-01-09 (Android + Backend)
 
 ### Fixed - Wallpaper Refresh Reliability 🔄
@@ -1005,6 +1139,8 @@ ENABLE_LLM_MESSAGES=true  # Enable/disable message worker
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 1.3.6 | 2026-01-09 | Epic 10 Phase 1: Task Privacy & Masking |
+| 1.3.5 | 2026-01-09 | Wallpaper Refresh Reliability |
 | 1.2.1 | 2026-01-04 | Epic 7 Complete + Resolution Scaling Fix |
 | 1.2.0 | 2026-01-03 | Intelligence Layer + 263 Tests |
 | 1.1.0 | 2026-01-03 | Satori Font Rendering |
@@ -1013,6 +1149,13 @@ ENABLE_LLM_MESSAGES=true  # Enable/disable message worker
 ---
 
 ## Upgrade Notes
+
+### 1.3.5 → 1.3.6
+- **NEW FEATURE** - Task Privacy & Masking (Epic 10 Phase 1)
+- **Database:** Run migration 010 (`backend/migrations/010_privacy_fields.sql`)
+- Backend auto-deploys via Vercel (zero downtime)
+- Android requires new APK installation (v1.3.6)
+- **Breaking:** None - all new fields have defaults, fully backward compatible
 
 ### 1.2.0 → 1.2.1
 - **RECOMMENDED UPGRADE** - Fixes critical resolution scaling bug

@@ -20,7 +20,10 @@ router.get('/', async (req, res) => {
     const result = await client.query(
       `SELECT id, email, theme, resolution, display_mode, timezone,
               setup_complete, done_for_today, done_for_today_at,
-              wallpaper_token, created_at, updated_at
+              wallpaper_token, created_at, updated_at,
+              default_privacy_level, auto_hide_work_tasks,
+              work_hours_start, work_hours_end,
+              biometric_reveal_enabled, hide_all_tasks_mode
        FROM users WHERE id = $1`,
       [userId]
     );
@@ -48,7 +51,14 @@ router.patch(
     body('display_mode').optional().isIn(['one_thing', 'all_tasks']),
     body('timezone').optional().isString(),
     body('setup_complete').optional().isBoolean(),
-    body('done_for_today').optional().isBoolean()
+    body('done_for_today').optional().isBoolean(),
+    // Privacy settings (Epic 10)
+    body('default_privacy_level').optional().isIn(['public', 'category', 'initials', 'hidden', 'custom']),
+    body('auto_hide_work_tasks').optional().isBoolean(),
+    body('work_hours_start').optional().matches(/^\d{2}:\d{2}(:\d{2})?$/),
+    body('work_hours_end').optional().matches(/^\d{2}:\d{2}(:\d{2})?$/),
+    body('biometric_reveal_enabled').optional().isBoolean(),
+    body('hide_all_tasks_mode').optional().isBoolean()
   ],
   async (req, res) => {
     try {
@@ -74,7 +84,14 @@ router.patch(
         'display_mode',
         'timezone',
         'setup_complete',
-        'done_for_today'
+        'done_for_today',
+        // Privacy settings (Epic 10)
+        'default_privacy_level',
+        'auto_hide_work_tasks',
+        'work_hours_start',
+        'work_hours_end',
+        'biometric_reveal_enabled',
+        'hide_all_tasks_mode'
       ];
 
       for (const [key, value] of Object.entries(updates)) {
@@ -101,7 +118,10 @@ router.patch(
         WHERE id = $1
         RETURNING id, email, theme, resolution, display_mode, timezone,
                   setup_complete, done_for_today, done_for_today_at,
-                  wallpaper_token, created_at, updated_at
+                  wallpaper_token, created_at, updated_at,
+                  default_privacy_level, auto_hide_work_tasks,
+                  work_hours_start, work_hours_end,
+                  biometric_reveal_enabled, hide_all_tasks_mode
       `;
 
       const result = await client.query(query, values);

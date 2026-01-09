@@ -71,7 +71,14 @@ data class TaskResponse(
     @SerializedName("created_at")
     val createdAt: String? = null,
     @SerializedName("updated_at")
-    val updatedAt: String? = null
+    val updatedAt: String? = null,
+    // Epic 10: Privacy fields
+    @SerializedName("is_private")
+    val isPrivate: Boolean = false,
+    @SerializedName("privacy_level")
+    val privacyLevel: String? = "public",  // public, category, initials, hidden, custom
+    @SerializedName("privacy_display")
+    val privacyDisplay: String? = null     // Custom display text for 'custom' privacy level
 )
 
 /**

@@ -393,6 +393,9 @@ app.get('/api/tasks/all', optionalAuth, async (req, res) => {
         snoozed_until,
         created_at,
         updated_at,
+        is_private,
+        privacy_level,
+        privacy_display,
         CASE
           WHEN completed THEN 'completed'
           WHEN archived THEN 'archived'
@@ -510,22 +513,35 @@ app.post('/api/tasks/parse-llm', llmRateLimiter, verifyToken, async (req, res) =
 app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
   try {
     const userId = getUserId(req);
-    const { rawTitle, title: directTitle, priority, context_location, context_time, x, y, is_subtask, is_recurring, echo_interval } = req.body;
+    const { rawTitle, title: directTitle, priority, context_location, context_time, x, y, is_subtask, is_recurring, echo_interval,
+            is_private, privacy_level, privacy_display } = req.body;
 
-    // FIX 2026-01-06: Query user timezone for accurate time calculations
+    // FIX 2026-01-06: Query user timezone and privacy defaults
     let userTimezone = 'UTC'; // default
+    let defaultPrivacyLevel = 'public';
     try {
-      const tzResult = await req.dbClient.query(
-        'SELECT timezone FROM users WHERE id = $1',
+      const userResult = await req.dbClient.query(
+        'SELECT timezone, default_privacy_level FROM users WHERE id = $1',
         [userId]
       );
-      if (tzResult.rows.length > 0 && tzResult.rows[0].timezone) {
-        userTimezone = tzResult.rows[0].timezone;
-        console.log(`[Task Creation] User timezone: ${userTimezone}`);
+      if (userResult.rows.length > 0) {
+        if (userResult.rows[0].timezone) {
+          userTimezone = userResult.rows[0].timezone;
+          console.log(`[Task Creation] User timezone: ${userTimezone}`);
+        }
+        if (userResult.rows[0].default_privacy_level) {
+          defaultPrivacyLevel = userResult.rows[0].default_privacy_level;
+          console.log(`[Task Creation] Default privacy level: ${defaultPrivacyLevel}`);
+        }
       }
     } catch (tzErr) {
-      console.warn('[Task Creation] Failed to fetch timezone, using UTC:', tzErr.message);
+      console.warn('[Task Creation] Failed to fetch user settings, using defaults:', tzErr.message);
     }
+
+    // Apply privacy defaults (Epic 10)
+    const taskPrivacyLevel = privacy_level || defaultPrivacyLevel;
+    const taskIsPrivate = is_private !== undefined ? is_private : (taskPrivacyLevel !== 'public');
+    const taskPrivacyDisplay = privacy_display || null;
 
     console.log(`[Task Creation] START - Input: "${rawTitle || directTitle}"`);
 
@@ -674,9 +690,10 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
         user_id, title, raw_title, estimate_minutes, priority, due_date, due_time,
         context_location, context_time, x, y, is_subtask, is_recurring, echo_interval,
         category, context_tags, energy_level, time_context,
-        recurring_interval, recurring_day_of_week, recurring_day_of_month
+        recurring_interval, recurring_day_of_week, recurring_day_of_month,
+        is_private, privacy_level, privacy_display
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
       RETURNING *
     `;
     const values = [
@@ -701,7 +718,11 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
       timeContext,
       recurring ? recurring.interval : null,
       recurring ? recurring.dayOfWeek : null,
-      recurring ? recurring.dayOfMonth : null
+      recurring ? recurring.dayOfMonth : null,
+      // Privacy fields (Epic 10)
+      taskIsPrivate,
+      taskPrivacyLevel,
+      taskPrivacyDisplay
     ];
 
     const result = await req.dbClient.query(query, values);
@@ -825,7 +846,9 @@ app.patch('/api/tasks/:id', optionalAuth, async (req, res) => {
       'completed', 'completed_at', 'snoozed_until', 'context_location',
       'context_time', 'energy_required', 'x', 'y', 'is_subtask',
       'is_recurring', 'echo_interval', 'archived', 'archived_at',
-      'category'  // v1.4.8: Allow category from rawTitle parsing
+      'category',  // v1.4.8: Allow category from rawTitle parsing
+      // Privacy fields (Epic 10)
+      'is_private', 'privacy_level', 'privacy_display'
     ];
 
     for (const [key, value] of Object.entries(updates)) {

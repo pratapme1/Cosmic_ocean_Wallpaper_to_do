@@ -22,6 +22,7 @@ const { MessageEngine } = require('./message-engine');
 const { AtmosphereController } = require('./atmosphere-controller');
 const { StatsAggregator } = require('./stats-aggregator');
 const { getCurrentMessage } = require('./wallpaper-message-provider');
+const { filterTasksForWallpaper, getPrivacyStats } = require('./privacy-filter');
 
 // Initialize intelligence layer components
 const messageEngine = new MessageEngine();
@@ -330,8 +331,32 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now(), tim
   try {
     const { theme = 'cosmic', resolution = '1080x1920', done_for_today = false } = user;
     const [width, height] = resolution.split('x').map(Number);
-    const tasks = data.tasks || [];
-    const allTasks = data.allTasks || tasks; // Include completed tasks for stats
+    const rawTasks = data.tasks || [];
+    const allTasks = data.allTasks || rawTasks; // Include completed tasks for stats
+
+    // =====================================
+    // PRIVACY FILTERING (Epic 10)
+    // =====================================
+
+    // Build user privacy preferences object
+    const privacyPrefs = {
+      hide_all_tasks_mode: user.hide_all_tasks_mode || false,
+      auto_hide_work_tasks: user.auto_hide_work_tasks || false,
+      work_hours_start: user.work_hours_start || '09:00',
+      work_hours_end: user.work_hours_end || '17:00',
+      default_privacy_level: user.default_privacy_level || 'public'
+    };
+
+    // Apply privacy filtering to tasks
+    const tasks = filterTasksForWallpaper(rawTasks, privacyPrefs, timezone);
+
+    // Log privacy stats
+    const privacyStats = getPrivacyStats(rawTasks, tasks);
+    console.log(`[Privacy] Filtered: ${privacyStats.totalTasks} -> ${privacyStats.displayedTasks} tasks (${privacyStats.hiddenTasks} hidden)`);
+
+    // =====================================
+    // END PRIVACY FILTERING
+    // =====================================
 
     // Calculate layout
     const layout = getLayoutConfig(width, height);
