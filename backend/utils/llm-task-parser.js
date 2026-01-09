@@ -58,21 +58,32 @@ STRICT RULES (CRITICAL - DO NOT HALLUCINATE):
    - Remove trailing: "by", "at", "in", "on", "for"
 
 2. dueDate: ONLY if EXPLICITLY mentioned. Otherwise null.
-   - "tomorrow"/"tmrw", "today"/"tday", "yesterday"/"ystrdy" → calculate from ${today}
-     * "yesterday" → date one day before ${today}
+   - "tomorrow"/"tmrw" → add 1 day to ${today}
+     * EXAMPLE: If TODAY is ${today}, "task tomorrow" → dueDate: the next day in YYYY-MM-DD
+   - "today"/"tday" → ${today}
+   - "yesterday"/"ystrdy" → subtract 1 day from ${today}
      * EXAMPLE: If TODAY is 2026-01-06, "missed alert yesterday" → dueDate: "2026-01-05"
    - Day of week: "monday", "tuesday", "friday", "on monday", "on friday", "next friday" → calculate YYYY-MM-DD
-     * If day is ${dayOfWeek} and input says "monday", find next Monday's date
-     * "party on friday" → find next Friday's date → YYYY-MM-DD
-     * "call on monday" → find next Monday's date → YYYY-MM-DD
-   - Date phrases: "end of day"/"eod", "end of week"/"eow", "this weekend", "next week", "next month" → calculate date
+     * TODAY is ${dayOfWeek}, ${today}
+     * If input mentions TODAY's day (${dayOfWeek}), use ${today}
+     * If input mentions a different day, find the NEXT occurrence of that day
+     * "party on friday" → if today is Friday, use ${today}; otherwise find next Friday
+     * EXAMPLE: If today is Friday 2026-01-09, "dentist Friday" → dueDate: "2026-01-09"
+     * EXAMPLE: If today is Friday 2026-01-09, "meeting Monday" → dueDate: "2026-01-12" (next Monday)
+   - Date phrases: "end of day"/"eod", "end of week"/"eow", "this weekend" → calculate date
+     * "next week" → add 7 days to ${today} → YYYY-MM-DD
+     * "next month" → add 30 days to ${today} → YYYY-MM-DD
+     * "next year" → add 365 days to ${today} → YYYY-MM-DD
    - Past phrases: "last week", "last month" → calculate appropriate past date
    - Explicit dates: "Jan 5", "1/15", "2026-01-20" → YYYY-MM-DD
    - NO date words in input → null (DO NOT INVENT)
    - "today" → ${today}
 
 3. dueTime: ONLY if EXPLICITLY mentioned. Otherwise null.
-   - "at 3pm", "by 5:00", "noon" → HH:MM (24-hour)
+   - "at 3pm", "at 3:30pm", "by 5:00", "noon", "midnight" → HH:MM (24-hour format)
+     * EXAMPLE: "yesterday at 3pm" → dueTime: "15:00"
+     * EXAMPLE: "meeting at 10am" → dueTime: "10:00"
+     * EXAMPLE: "call at 2:30pm" → dueTime: "14:30"
    - "in X minutes/hours" → ADD X to ${currentTime} and return result as HH:MM
      * EXAMPLE: If currentTime is 23:21 and input is "in 39 minutes" → 23:21 + 39min = 00:00 (next day)
      * EXAMPLE: If currentTime is 14:30 and input is "in 1 hour" → 14:30 + 60min = 15:30
@@ -247,6 +258,9 @@ function validateAndClean(llmResponse, input) {
     /\bfinish (this|next) week/i, // "finish this week"
     /\bin\s+\d+\s*days?\b/i, // "in 3 days", "in 1 day"
     /\b\d+\s*days?\s*(from now|away)\b/i, // "3 days from now", "5 days away"
+    /\bin\s+\d+\s*(min|mins|minute|minutes|m)\b/i, // "in 30 min", "in 10 minutes"
+    /\bin\s+\d+\s*(hr|hrs|hour|hours|h)\b/i, // "in 2 hours", "in 1h"
+    /\bin\s+\d+(\.\d+)?\s*(hr|hrs|hour|hours|h)\b/i, // "in 1.5 hours"
   ];
   const hasDateMention = dateWords.some(word => {
     if (word instanceof RegExp) {
@@ -255,13 +269,22 @@ function validateAndClean(llmResponse, input) {
     return inputLower.includes(word);
   });
 
-  if (!hasDateMention && llmResponse.dueDate) {
+  // Time validation - define timeWords first for use in both checks
+  const timeWords = ['at', 'by', 'in', 'morning', 'afternoon', 'evening', 'noon', 'midnight', 'pm', 'am', /\d{1,2}:\d{2}/, /\d{1,2}(am|pm)/];
+
+  // FIX v1.6.0: Don't strip date if we have a time expression
+  // "standup at 9am" has a time, so the LLM setting today's date is CORRECT behavior
+  const hasTimeExpression = timeWords.some(word => {
+    if (word instanceof RegExp) {
+      return word.test(inputLower);
+    }
+    return inputLower.includes(word);
+  });
+
+  if (!hasDateMention && !hasTimeExpression && llmResponse.dueDate) {
     console.warn(`[LLM Parser] Hallucinated date detected. Input: "${input}", LLM date: ${llmResponse.dueDate}`);
     llmResponse.dueDate = null;
   }
-
-  // Time validation - strip if not mentioned
-  const timeWords = ['at', 'by', 'in', 'morning', 'afternoon', 'evening', 'noon', 'midnight', 'pm', 'am', /\d{1,2}:\d{2}/, /\d{1,2}(am|pm)/];
   const hasTimeMention = timeWords.some(word => {
     if (word instanceof RegExp) {
       return word.test(inputLower);

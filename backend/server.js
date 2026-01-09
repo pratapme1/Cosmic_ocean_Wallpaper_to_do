@@ -654,6 +654,21 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
       }
     }
 
+    // FIX v1.6.0: If NO date AND NO time provided, default to NOW in user's timezone
+    // This implements the requirement: "If no date/time provided → default to NOW"
+    if (!dueDateForDB && !dueTimeForDB) {
+      const now = new Date();
+      dueDateForDB = parseDateForDB(now);
+      dueTimeForDB = now.toLocaleTimeString('en-GB', {
+        timeZone: userTimezone,
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      console.log(`[FIX v1.6.0] No date/time provided - defaulting to NOW: ${dueDateForDB} ${dueTimeForDB}`);
+    }
+
     const query = `
       INSERT INTO tasks (
         user_id, title, raw_title, estimate_minutes, priority, due_date, due_time,
@@ -1032,7 +1047,7 @@ app.get('/api/health', async (req, res) => {
 
   res.json({
     status: 'ok',
-    version: '1.5.9', // Fix: Midnight rollover for 'in X minutes'
+    version: '1.6.0', // Fix: Timezone - default to NOW when no date/time, fix 'in X min/hours'
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
     dbInitialized,
     debug: {
