@@ -277,10 +277,17 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
       id: userId,  // CRITICAL: Required for LLM message generation
       theme: theme,  // Use query param (matches cache key)
       resolution: resolution,  // Use query param (matches cache key)
-      done_for_today: userObj?.done_for_today || false
+      done_for_today: userObj?.done_for_today || false,
+      // Epic 10: Privacy preferences for wallpaper filtering
+      hide_all_tasks_mode: userObj?.hide_all_tasks_mode || false,
+      auto_hide_work_tasks: userObj?.auto_hide_work_tasks || false,
+      work_hours_start: userObj?.work_hours_start || '09:00',
+      work_hours_end: userObj?.work_hours_end || '17:00',
+      default_privacy_level: userObj?.default_privacy_level || 'public'
     };
 
     console.log(`🖼️  GENERATING: theme=${user.theme}, resolution=${user.resolution}, done=${user.done_for_today}`);
+    console.log(`🔒 PRIVACY: hide_all=${user.hide_all_tasks_mode}, auto_hide_work=${user.auto_hide_work_tasks}, default_level=${user.default_privacy_level}`);
 
     let imageBuffer;
 
