@@ -266,8 +266,9 @@ class TaskRepository(
     }
 
     suspend fun deleteStar(star: Star) {
-        // Delete from local database
-        starDao.deleteStar(star.toEntity())
+        // CRITICAL FIX: Use deleteStarById to ensure deletion by Primary Key
+        // Prevents issues where entity fields mismatch (e.g. float precision) causes silent fail
+        starDao.deleteStarById(star.id)
 
         // CRITICAL FIX: Sync deletion to backend API
         try {

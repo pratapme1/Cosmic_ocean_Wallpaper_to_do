@@ -46,14 +46,26 @@ class WallpaperPreferencesManager(private val context: Context) {
     }
 
     fun detectDeviceResolution(): String {
-        // CRITICAL FIX: Use resources.displayMetrics instead of getRealMetrics
-        // getRealMetrics includes nav bar + status bar (e.g., 1080x2408)
-        // resources.displayMetrics is actual usable screen area (e.g., 1080x2246)
-        // Must match what WallpaperUpdateWorker sees when setting wallpaper
-        val displayMetrics = context.resources.displayMetrics
+        // CRITICAL FIX: Use currentWindowMetrics (API 30+) or getRealMetrics (Legacy) 
+        // to get FULL physical display size including navigation/status bars.
+        // This ensures wallpaper covers the entire screen without gaps or letterboxing.
+        val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val width: Int
+        val height: Int
 
-        val width = displayMetrics.widthPixels
-        val height = displayMetrics.heightPixels
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            val metrics = windowManager.currentWindowMetrics
+            // bounds includes system decorations
+            width = metrics.bounds.width()
+            height = metrics.bounds.height()
+        } else {
+            val display = windowManager.defaultDisplay
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            display.getRealMetrics(metrics) // getRealMetrics includes system bars
+            width = metrics.widthPixels
+            height = metrics.heightPixels
+        }
 
         // Always store resolution as portrait (width x height where height > width)
         val resolution = if (height > width) {
