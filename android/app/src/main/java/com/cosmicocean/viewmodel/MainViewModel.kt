@@ -58,51 +58,41 @@ class MainViewModel(
         }
     }
 
-    fun addStar(star: Star, parent: Star? = null) {
-        viewModelScope.launch {
-            repository.addStar(star)
-            if (parent != null) {
-                orbitalSystem.createOrbit(parent, star)
-            }
+    suspend fun addStar(star: Star, parent: Star? = null) {
+        repository.addStar(star)
+        if (parent != null) {
+            orbitalSystem.createOrbit(parent, star)
         }
     }
 
-    fun completeStar(star: Star) {
-        viewModelScope.launch {
-            android.util.Log.d("MainViewModel", "completeStar called for: ${star.title}")
-            star.isCompleted = true
-            star.completedAt = System.currentTimeMillis()
-            android.util.Log.d("MainViewModel", "Calling updateStar with isCompleted=${star.isCompleted}")
-            repository.updateStar(star)
-            android.util.Log.d("MainViewModel", "updateStar completed")
-        }
+    suspend fun completeStar(star: Star) {
+        android.util.Log.d("MainViewModel", "completeStar called for: ${star.title}")
+        star.isCompleted = true
+        star.completedAt = System.currentTimeMillis()
+        android.util.Log.d("MainViewModel", "Calling updateStar with isCompleted=${star.isCompleted}")
+        repository.updateStar(star)
+        android.util.Log.d("MainViewModel", "updateStar completed")
     }
 
-    fun archiveStar(star: Star) {
-        viewModelScope.launch {
-            star.isArchived = true
-            star.archivedAt = System.currentTimeMillis()
-            repository.updateStar(star)
-        }
+    suspend fun archiveStar(star: Star) {
+        star.isArchived = true
+        star.archivedAt = System.currentTimeMillis()
+        repository.updateStar(star)
     }
 
-    fun deleteStar(star: Star) {
-        viewModelScope.launch {
-            android.util.Log.d("MainViewModel", "deleteStar called for: ${star.title}")
-            // Remove from in-memory list
-            stars.remove(star)
-            // Remove from physics engine
-            engine.removeParticle(star.particle)
-            // Delete from Room DB and backend API
-            repository.deleteStar(star)
-            android.util.Log.d("MainViewModel", "deleteStar completed")
-        }
+    suspend fun deleteStar(star: Star) {
+        android.util.Log.d("MainViewModel", "deleteStar called for: ${star.title}")
+        // Remove from in-memory list
+        stars.remove(star)
+        // Remove from physics engine
+        engine.removeParticle(star.particle)
+        // Delete from Room DB and backend API
+        repository.deleteStar(star)
+        android.util.Log.d("MainViewModel", "deleteStar completed")
     }
 
-    fun updateStar(star: Star) {
+    suspend fun updateStar(star: Star) {
         // EPIC 9: Save star properties (including position) to DB and backend
-        viewModelScope.launch {
-            repository.updateStar(star)
-        }
+        repository.updateStar(star)
     }
 }

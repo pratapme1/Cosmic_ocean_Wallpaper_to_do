@@ -192,13 +192,13 @@ class RealTimeWallpaperService : Service() {
                         // RACE CONDITION FIX (2026-01-09):
                         // Do NOT call clear() before setBitmap() - if setBitmap fails, wallpaper stays blank
                         // setBitmap() atomically replaces the existing wallpaper
-                        val wallpaperFlags = WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
+                        val wallpaperFlags = WallpaperManager.FLAG_LOCK
 
                         wallpaperManager.setBitmap(
                             bitmap,
                             null,
                             true,
-                            wallpaperFlags  // Update BOTH home and lock screen
+                            wallpaperFlags  // Update LOCK screen only (Home screen stays default to avoid parallax/sizing issues)
                         )
 
                         Log.d(TAG, "Wallpaper updated successfully: ${bitmap.width}x${bitmap.height}")

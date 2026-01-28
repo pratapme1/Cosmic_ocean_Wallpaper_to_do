@@ -29,7 +29,7 @@ class StarPlacementTest {
     // ============================================
 
     @Test
-    fun `zone forces - P1 urgent stars should move toward bottom`() {
+    fun `zone forces - P1 urgent stars should stay relatively stable (Epic 9)`() {
         val zoneManager = ZoneManager(SCREEN_WIDTH, SCREEN_HEIGHT)
 
         // Create P1 urgent star in middle of screen
@@ -49,15 +49,16 @@ class StarPlacementTest {
 
         val finalY = star.particle.y
 
-        // P1 stars should move DOWN (increase Y)
+        // P1 stars should NOT move significantly (random placement rule)
+        val movement = kotlin.math.abs(finalY - initialY)
         assertTrue(
-            "P1 star should move toward bottom. Initial: $initialY, Final: $finalY",
-            finalY > initialY
+            "P1 star should stay stable. Movement: $movement",
+            movement < 10.0f
         )
     }
 
     @Test
-    fun `zone forces - P3 low priority stars should move toward top`() {
+    fun `zone forces - P3 low priority stars should stay relatively stable (Epic 9)`() {
         val zoneManager = ZoneManager(SCREEN_WIDTH, SCREEN_HEIGHT)
 
         // Create P3 low priority star in middle of screen
@@ -77,10 +78,11 @@ class StarPlacementTest {
 
         val finalY = star.particle.y
 
-        // P3 stars should move UP (decrease Y)
+        // P3 stars should NOT move significantly
+        val movement = kotlin.math.abs(finalY - initialY)
         assertTrue(
-            "P3 star should move toward top. Initial: $initialY, Final: $finalY",
-            finalY < initialY
+            "P3 star should stay stable. Movement: $movement",
+            movement < 10.0f
         )
     }
 
@@ -134,10 +136,11 @@ class StarPlacementTest {
 
         val finalY = star.particle.y
 
-        // Even with small deltas, forces should eventually apply
+        // Even with small deltas, forces should eventually apply (or not, if forces are 0)
+        // For Epic 9, forces are 0, so position should NOT change
         assertTrue(
-            "Forces should apply even with small deltas. Initial: $initialY, Final: $finalY",
-            finalY != initialY
+            "Forces should be effectively zero. Initial: $initialY, Final: $finalY",
+            kotlin.math.abs(finalY - initialY) < 1.0f
         )
     }
 
@@ -333,12 +336,12 @@ class StarPlacementTest {
     // ============================================
 
     @Test
-    fun `integration - zone forces should overcome clustering`() {
+    fun `integration - stars should maintain position relative to each other (Epic 9)`() {
         val engine = VerletEngine()
         engine.setBounds(SCREEN_WIDTH, SCREEN_HEIGHT)
         val zoneManager = ZoneManager(SCREEN_WIDTH, SCREEN_HEIGHT)
 
-        // Create P1 urgent star and P3 low priority star close together
+        // Create P1 urgent star and P3 low priority star
         val urgentStar = createTestStar(
             x = SCREEN_WIDTH / 2,
             y = SCREEN_HEIGHT / 2,
@@ -357,17 +360,20 @@ class StarPlacementTest {
         engine.addParticle(lowPriorityStar.particle)
 
         val stars = listOf(urgentStar, lowPriorityStar)
+        val initialDiffY = urgentStar.particle.y - lowPriorityStar.particle.y
 
         // Run for 3 seconds
         repeat(180) {
             zoneManager.update(stars, DELTA)
             engine.update(DELTA)
         }
+        
+        val finalDiffY = urgentStar.particle.y - lowPriorityStar.particle.y
 
-        // P1 should be lower than P3
+        // Should not have drastically changed relative positions (minor physics jitter ok)
         assertTrue(
-            "P1 star should be below P3 star. P1 Y: ${urgentStar.particle.y}, P3 Y: ${lowPriorityStar.particle.y}",
-            urgentStar.particle.y > lowPriorityStar.particle.y
+            "Relative positions should be similar. Diff: ${kotlin.math.abs(finalDiffY - initialDiffY)}",
+            kotlin.math.abs(finalDiffY - initialDiffY) < 20.0f
         )
     }
 

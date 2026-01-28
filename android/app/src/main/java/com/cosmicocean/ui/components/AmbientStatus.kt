@@ -30,8 +30,8 @@ fun AmbientStatusHUD(stars: List<Star>, isInteracting: Boolean) {
                 delay(100)
                 idleTime += 100
                 
-                val overdue = stars.count { it.dueIn < 0 }
-                val urgent = stars.count { it.dueIn in 0f..120f }
+                val overdue = stars.count { it.dueIn < 0 && !it.isCompleted && !it.isArchived }
+                val urgent = stars.count { it.dueIn in 0f..120f && !it.isCompleted && !it.isArchived }
                 
                 val newMessage = when {
                     overdue > 0 -> if (overdue == 1) "1 overdue task" else "$overdue overdue tasks"

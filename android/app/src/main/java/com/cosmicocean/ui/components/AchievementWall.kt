@@ -22,10 +22,18 @@ fun AchievementWall(
 ) {
     if (completedStars.isEmpty()) return
 
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val screenHeight = configuration.screenHeightDp.dp
+    val isSmallScreen = screenHeight < 600.dp
+    
+    val wallHeight = if (isSmallScreen) 60.dp else 80.dp
+    val starSize = if (isSmallScreen) 24.dp else 32.dp
+    val contentPadding = if (isSmallScreen) 16.dp else 32.dp
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(80.dp)
+            .height(wallHeight)
             .background(
                 Brush.verticalGradient(
                     listOf(Color.Transparent, Color(0xFF000814).copy(alpha = 0.95f))
@@ -36,14 +44,14 @@ fun AchievementWall(
     ) {
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 32.dp),
+            contentPadding = PaddingValues(horizontal = contentPadding),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             items(completedStars) { star ->
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(starSize)
                         .background(Color(0xFF00FF88), shape = CircleShape)
                 )
             }

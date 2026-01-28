@@ -100,7 +100,7 @@ class WallpaperUpdateWorker(
                     // RACE CONDITION FIX (2026-01-09):
                     // Do NOT call clear() before setBitmap() - if setBitmap fails, wallpaper stays blank
                     // setBitmap() with flags will replace existing wallpaper atomically
-                    val wallpaperFlags = WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
+                    val wallpaperFlags = WallpaperManager.FLAG_LOCK
 
                     Log.e(TAG, "Setting wallpaper on BOTH home and lock screens...")
 
@@ -110,7 +110,7 @@ class WallpaperUpdateWorker(
                         bitmap,
                         null,
                         true,
-                        wallpaperFlags  // Update BOTH home and lock screen
+                        wallpaperFlags  // Update LOCK screen only
                     )
 
                     Log.e(TAG, "✅ Wallpaper set successfully! Theme: $theme, Size: ${bitmap.width}x${bitmap.height}, Timestamp: $timestamp")

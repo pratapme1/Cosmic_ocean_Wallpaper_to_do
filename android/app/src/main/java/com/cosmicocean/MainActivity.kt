@@ -148,7 +148,7 @@ class MainActivity : ComponentActivity() {
                         // Performance Monitor (Debug)
                         Box(modifier = Modifier.align(Alignment.TopStart)) {
                             com.cosmicocean.debug.PerformanceMonitor(
-                                enabled = true // TODO: Only enable in debug builds
+                                enabled = BuildConfig.DEBUG
                             )
                         }
 
@@ -284,16 +284,18 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleStarAction(star: Star, type: String) {
-        when (type) {
-            "complete" -> viewModel.completeStar(star)
-            "archive" -> viewModel.archiveStar(star)
-            "delete" -> {
-                // CRITICAL FIX: Use viewModel.deleteStar() to remove from Room DB + backend
-                viewModel.deleteStar(star)
-                Toast.makeText(this@MainActivity, "Star Exploded!", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            when (type) {
+                "complete" -> viewModel.completeStar(star)
+                "archive" -> viewModel.archiveStar(star)
+                "delete" -> {
+                    // CRITICAL FIX: Use viewModel.deleteStar() to remove from Room DB + backend
+                    viewModel.deleteStar(star)
+                    Toast.makeText(this@MainActivity, "Star Exploded!", Toast.LENGTH_SHORT).show()
+                }
             }
+            triggerImmediateUpdate()
         }
-        triggerImmediateUpdate()
     }
 
     private fun snoozeStar(star: Star, durationMinutes: Int) {
@@ -323,7 +325,9 @@ class MainActivity : ComponentActivity() {
 
     private fun saveStarPosition(star: Star) {
         // EPIC 9 FIX: Save star position after dragging
-        viewModel.updateStar(star)
+        lifecycleScope.launch {
+            viewModel.updateStar(star)
+        }
     }
 
     private fun updateStar(star: Star, title: String, urgency: Int, dueInMinutes: Float) {
@@ -391,10 +395,10 @@ class MainActivity : ComponentActivity() {
         // Create star with default P2 (will be updated from backend after NLP parsing)
         // TaskRepository.addStar() handles both local DB insert AND backend sync
         val star = Star(x, y, title, 2, null)
-        viewModel.addStar(star)
 
-        // Trigger wallpaper update after a short delay to allow backend sync
         lifecycleScope.launch {
+            viewModel.addStar(star)
+            // Trigger wallpaper update after a short delay to allow backend sync
             kotlinx.coroutines.delay(500) // Wait for backend sync to complete
             triggerImmediateUpdate()
         }

@@ -52,7 +52,7 @@ class WallpaperWorker(
         }
         
         // Set wallpaper for BOTH Home and Lock screen
-        val success = service.updateWallpaper(bitmap, WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK)
+        val success = service.updateWallpaper(bitmap, WallpaperManager.FLAG_LOCK)
         
         return if (success) {
             Log.d("WallpaperWorker", "Background wallpaper update successful.")

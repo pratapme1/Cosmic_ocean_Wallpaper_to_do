@@ -14,8 +14,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
+import com.cosmicocean.data.CosmicDatabase
+import com.cosmicocean.data.TaskRepository
+import com.cosmicocean.model.Star
 import com.cosmicocean.network.NetworkModule
 import kotlinx.coroutines.launch
+import java.util.Random
 
 class QuickAddActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,14 +78,34 @@ class QuickAddActivity : ComponentActivity() {
     }
 
     private fun saveTask(title: String) {
+        val database = CosmicDatabase.getDatabase(this)
+        val repository = TaskRepository(database.starDao(), NetworkModule.getApi(this), applicationContext)
+        
         lifecycleScope.launch {
             try {
-                // In real app, call API
-                // val response = NetworkModule.api.createTask(title)
-                Toast.makeText(this@QuickAddActivity, "Task added!", Toast.LENGTH_SHORT).show()
+                // Calculate random position (similar to MainActivity)
+                val random = Random()
+                val displayMetrics = resources.displayMetrics
+                val screenWidth = displayMetrics.widthPixels.toFloat()
+                val screenHeight = displayMetrics.heightPixels.toFloat()
+                
+                val horizontalPadding = screenWidth * 0.15f
+                val verticalPadding = screenHeight * 0.1f
+                
+                val x = horizontalPadding + random.nextFloat() * (screenWidth - 2 * horizontalPadding)
+                val y = verticalPadding + random.nextFloat() * (screenHeight - 2 * verticalPadding)
+                
+                // Create star
+                val star = Star(x, y, title, 2, null)
+                
+                // Save to local DB and sync to backend
+                repository.addStar(star)
+                
+                Toast.makeText(this@QuickAddActivity, "Task added to Cosmic Ocean", Toast.LENGTH_SHORT).show()
                 finish()
             } catch (e: Exception) {
-                Toast.makeText(this@QuickAddActivity, "Failed to add task", Toast.LENGTH_SHORT).show()
+                android.util.Log.e("QuickAddActivity", "Error adding task", e)
+                Toast.makeText(this@QuickAddActivity, "Failed to add task: ${e.message}", Toast.LENGTH_SHORT).show()
                 finish()
             }
         }
