@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.4] - 2026-01-30 (Android + Backend)
+
+### Fixed - Auth Security & Logic Consolidation 🔐
+- **Secure Token Storage**: Migrated `TokenManager` to `EncryptedSharedPreferences` using AES256-GCM.
+- **Password Validation Sync**: Standardized minimum password length to 8 characters across Android and Backend.
+- **Forgot Password Flow**: Wired Android UI to a new functional backend stub (`/api/auth/forgot-password`).
+- **Redundancy Cleanup**: Deleted `UserSession.kt` and consolidated session management into the secure `TokenManager`.
+- **Timezone Integration**: Device timezone is now correctly sent and stored during new user registration.
+
 ## [2.2.3] - 2026-01-30 (Android)
 
 ### Fixed - Wallpaper Update Triggers & Auth Sync 🛡️

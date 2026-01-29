@@ -286,4 +286,25 @@ describe('Authentication Flow', () => {
       expect(response.body.email).toBe(testEmail);
     });
   });
+
+  describe('POST /api/auth/forgot-password', () => {
+    it('should return success message for forgot password request', async () => {
+      const response = await request(app)
+        .post('/api/auth/forgot-password')
+        .send({ email: testEmail })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('message');
+      expect(response.body.message).toContain('sent to your email');
+    });
+
+    it('should reject forgot password with invalid email', async () => {
+      const response = await request(app)
+        .post('/api/auth/forgot-password')
+        .send({ email: 'not-an-email' })
+        .expect(400);
+
+      expect(response.body).toHaveProperty('errors');
+    });
+  });
 });
