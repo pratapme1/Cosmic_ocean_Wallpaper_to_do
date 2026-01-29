@@ -517,8 +517,8 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             viewModel.addStar(star)
-            // Trigger wallpaper update after a short delay to allow backend sync
-            kotlinx.coroutines.delay(500) // Wait for backend sync to complete
+            // No need for local delay here anymore, as RealTimeWallpaperService.ACTION_FORCE_UPDATE 
+            // now includes a 500ms delay internally for consistency.
             triggerImmediateUpdate()
         }
     }
@@ -570,6 +570,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun triggerImmediateUpdate() {
+        // 1. Fast path: Foreground Service (serialized with 500ms delay)
+        RealTimeWallpaperService.updateNow(this)
+
+        // 2. Backup path: WorkManager
         // FIX: Added setExpedited for truly immediate execution
         val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.cosmicocean.worker.WallpaperUpdateWorker>()
             .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)

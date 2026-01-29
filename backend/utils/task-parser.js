@@ -69,8 +69,17 @@ function parseTask(rawTitle) {
   // 4. Extract date/time using chrono-node FIRST (before duration!)
   // CRITICAL: "in 10 minutes" should be a DUE DATE, not estimate
   // chrono-node must see full text before duration extraction eats it
-  const { dueDate, dueTime, cleanedText: afterDateTime } = extractDateTime(workingTitle, suggestedHour);
+  const { dueDate: parsedDueDate, dueTime, cleanedText: afterDateTime } = extractDateTime(workingTitle, suggestedHour);
   workingTitle = afterDateTime;
+
+  let dueDate = parsedDueDate;
+  // FIX: If we have a time context (morning, EOD, etc.) but no explicit date was found,
+  // it almost certainly means "Today".
+  if (!dueDate && timeContext) {
+    dueDate = new Date();
+    extractions.push('date_from_context');
+  }
+
   if (dueDate) {
     extractions.push('date');
   }

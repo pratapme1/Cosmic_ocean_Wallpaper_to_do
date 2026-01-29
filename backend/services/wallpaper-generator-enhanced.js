@@ -102,6 +102,8 @@ function generateBackgroundLayer(layout, colors, animState) {
           </feMerge>
         </filter>
       </defs>
+      <!-- Solid base background to prevent gaps during animation scaling -->
+      <rect x="0" y="0" width="${width}" height="${height}" fill="${colors.bgPrimary}" />
       <rect x="${offsetX}" y="${offsetY}" width="${scaledWidth}" height="${scaledHeight}" fill="url(#bgGradient)" />
     </svg>
   `;

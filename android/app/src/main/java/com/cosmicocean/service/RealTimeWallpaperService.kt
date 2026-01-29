@@ -45,6 +45,7 @@ class RealTimeWallpaperService : Service() {
     private var screenReceiver: BroadcastReceiver? = null
     private var retryCount = 0
     private var wakeLock: PowerManager.WakeLock? = null
+    private var currentUpdateJob: Job? = null
 
     companion object {
         private const val TAG = "RealTimeWallpaper"
@@ -106,11 +107,15 @@ class RealTimeWallpaperService : Service() {
         Log.d(TAG, "Service onStartCommand: action=${intent?.action}")
         
         if (intent?.action == ACTION_FORCE_UPDATE) {
-            Log.d(TAG, "Force update requested")
-            updateWallpaper()
-            // Reset timer to avoid double update if close to next tick
+            Log.d(TAG, "Force update requested - scheduling with 500ms delay for sync consistency")
+            // Serialization: Cancel existing tick but schedule a fresh one after this update
             handler.removeCallbacks(updateRunnable)
-            handler.postDelayed(updateRunnable, UPDATE_INTERVAL_MS)
+            
+            // Artificial delay (500ms) to ensure backend DB has committed task changes
+            handler.postDelayed({
+                updateWallpaper()
+                handler.postDelayed(updateRunnable, UPDATE_INTERVAL_MS)
+            }, 500)
         } else {
              // Normal start
              startForeground(NOTIFICATION_ID, createNotification())
@@ -192,7 +197,10 @@ class RealTimeWallpaperService : Service() {
         // FIX 3: Acquire wake lock before starting update
         acquireWakeLock()
 
-        serviceScope.launch {
+        // SERALIZATION FIX: Cancel any existing update job to prevent overlapping downloads/sets
+        currentUpdateJob?.cancel()
+        
+        currentUpdateJob = serviceScope.launch {
             try {
                 val prefsManager = WallpaperPreferencesManager(applicationContext)
                 val theme = prefsManager.getTheme()
@@ -211,8 +219,11 @@ class RealTimeWallpaperService : Service() {
                 )
 
                 if (response.isSuccessful && response.body() != null) {
-                    val inputStream = response.body()!!.byteStream()
-                    val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                    // ROBUST IMAGE LOADING FIX: Read full byte array before decoding
+                    // BitmapFactory.decodeStream can partially decode and return a partial bitmap 
+                    // if the connection drops, leading to "black patches".
+                    val bytes = response.body()!!.bytes()
+                    val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
 
                     if (bitmap != null) {
                         val wallpaperManager = WallpaperManager.getInstance(applicationContext)
