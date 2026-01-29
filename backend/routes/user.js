@@ -2,30 +2,15 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { verifyToken } = require('../middleware/auth');
 const cacheService = require('../services/cache');
+const supabaseStorage = require('../services/supabase-storage');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 
 const router = express.Router();
 
-// Configure Multer for file uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, '../uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    // Save as: user-{id}-{timestamp}.ext
-    const ext = path.extname(file.originalname);
-    cb(null, `user-${req.user.userId}-${Date.now()}${ext}`);
-  }
-});
-
+// Configure Multer with memory storage (for serverless environments)
 const upload = multer({
-  storage: storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
@@ -75,7 +60,7 @@ router.get('/', async (req, res) => {
 
 /**
  * POST /api/user/wallpaper
- * Upload custom wallpaper
+ * Upload custom wallpaper to Supabase Storage
  */
 router.post('/wallpaper', upload.single('image'), async (req, res) => {
   try {
@@ -83,11 +68,32 @@ router.post('/wallpaper', upload.single('image'), async (req, res) => {
       return res.status(400).json({ error: 'No image file uploaded' });
     }
 
+    // Check if Supabase Storage is configured
+    if (!supabaseStorage.isConfigured()) {
+      console.error('Supabase Storage not configured');
+      return res.status(503).json({
+        error: 'Storage service not available',
+        details: 'Please configure SUPABASE_URL and SUPABASE_SERVICE_KEY'
+      });
+    }
+
     const userId = req.user.userId;
     const client = req.app.locals.dbClient;
-    const filePath = req.file.path; // Absolute path on server
 
-    // Update user record: set mode to custom and save path
+    // Generate unique filename
+    const ext = path.extname(req.file.originalname) || '.jpg';
+    const fileName = `user-${userId}-${Date.now()}${ext}`;
+
+    // Upload to Supabase Storage
+    const { url: publicUrl, path: storagePath } = await supabaseStorage.uploadFile(
+      req.file.buffer,
+      fileName,
+      req.file.mimetype
+    );
+
+    console.log(`[Upload] Wallpaper uploaded for user ${userId}: ${publicUrl}`);
+
+    // Update user record: set mode to custom and save URL
     const query = `
       UPDATE users
       SET wallpaper_mode = 'custom',
@@ -97,9 +103,11 @@ router.post('/wallpaper', upload.single('image'), async (req, res) => {
       RETURNING wallpaper_mode, custom_wallpaper_path
     `;
 
-    const result = await client.query(query, [filePath, userId]);
+    const result = await client.query(query, [publicUrl, userId]);
 
     if (result.rows.length === 0) {
+      // Cleanup uploaded file if user not found
+      await supabaseStorage.deleteFile(storagePath).catch(() => {});
       return res.status(404).json({ error: 'User not found' });
     }
 
@@ -109,11 +117,17 @@ router.post('/wallpaper', upload.single('image'), async (req, res) => {
     res.json({
       success: true,
       message: 'Wallpaper uploaded successfully',
-      data: result.rows[0]
+      data: {
+        ...result.rows[0],
+        url: publicUrl
+      }
     });
   } catch (err) {
     console.error('Upload wallpaper error:', err);
-    res.status(500).json({ error: 'Failed to upload wallpaper' });
+    res.status(500).json({
+      error: 'Failed to upload wallpaper',
+      details: err.message
+    });
   }
 });
 
