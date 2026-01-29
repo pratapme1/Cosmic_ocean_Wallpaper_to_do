@@ -113,46 +113,7 @@ fun EnvironmentSettingsScreen(
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
-            // ===== CUSTOM WALLPAPER SECTION (Epic 11) =====
-            EnvironmentSectionHeader(title = "Wallpaper Source", icon = "🖼️")
-
-            EnvironmentSettingCard(
-                title = "Use Custom Image",
-                subtitle = if (preferences.wallpaperMode == "custom") "Showing your uploaded image" else "Use generated cosmic theme",
-                icon = "📸"
-            ) {
-                Switch(
-                    checked = preferences.wallpaperMode == "custom",
-                    onCheckedChange = { isCustom ->
-                        onWallpaperModeChanged(if (isCustom) "custom" else "generated")
-                    },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color(0xFFE040FB),
-                        checkedTrackColor = Color(0xFFE040FB).copy(alpha = 0.5f)
-                    )
-                )
-            }
-
-            if (preferences.wallpaperMode == "custom") {
-                Button(
-                    onClick = onUploadWallpaperClick,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF2A2A3E)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = Color(0xFFE040FB))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Upload New Image", color = Color.White)
-                }
-
-                EnvironmentInfoCard(
-                    text = "Your image will have a subtle dark overlay added to ensure text remains readable.",
-                    color = Color(0xFF3E2A5F)
-                )
-            } else {
-                // ===== TIME OF DAY SECTION =====
+            // ===== TIME OF DAY SECTION =====
             EnvironmentSectionHeader(title = "Time of Day", icon = "🕐")
 
             // Auto vs Manual Mode
@@ -302,7 +263,6 @@ fun EnvironmentSettingsScreen(
             },
             onDismiss = { showParticleDialog = false }
         )
-    }
     }
 }
 
@@ -633,50 +593,6 @@ fun EnvironmentSettingsWrapper(
     val context = LocalContext.current
     val contentResolver = context.contentResolver
 
-    // File picker for wallpaper upload - defined at top level
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        uri?.let { selectedUri ->
-            scope.launch {
-                isLoading = true
-                try {
-                    // 1. Create temporary file from URI
-                    val inputStream = contentResolver.openInputStream(selectedUri)
-                    val tempFile = File.createTempFile("upload", ".jpg", context.cacheDir)
-                    tempFile.outputStream().use { output ->
-                        inputStream?.copyTo(output)
-                    }
-
-                    // 2. Prepare Multipart body
-                    val requestFile = tempFile.asRequestBody("image/*".toMediaTypeOrNull())
-                    val body = MultipartBody.Part.createFormData("image", tempFile.name, requestFile)
-
-                    // 3. Upload to API
-                    val response = apiService.uploadWallpaper(body)
-
-                    if (response.isSuccessful) {
-                        Log.d(TAG, "Wallpaper upload successful")
-                        successMessage = "Wallpaper uploaded!"
-                        preferences = preferences.copy(wallpaperMode = "custom")
-                    } else {
-                        Log.e(TAG, "Upload failed: ${response.code()}")
-                        errorMessage = "Upload failed"
-                    }
-
-                    // Cleanup
-                    tempFile.delete()
-
-                } catch (e: Exception) {
-                    Log.e(TAG, "Exception uploading wallpaper", e)
-                    errorMessage = "Error: ${e.message}"
-                } finally {
-                    isLoading = false
-                }
-            }
-        }
-    }
-
     // Load preferences from API on first composition
     LaunchedEffect(Unit) {
         Log.d(TAG, "Loading environment preferences from API...")
@@ -733,6 +649,12 @@ fun EnvironmentSettingsWrapper(
                 if (response.isSuccessful) {
                     Log.d(TAG, "Saved successfully: $key")
                     successMessage = "Saved"
+                    // Trigger immediate wallpaper update
+                    try {
+                        com.cosmicocean.service.RealTimeWallpaperService.updateNow(context)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to trigger update: ${e.message}")
+                    }
                 } else {
                     val errorBody = response.errorBody()?.string()
                     Log.e(TAG, "Save failed: ${response.code()} - $errorBody")
@@ -827,9 +749,7 @@ fun EnvironmentSettingsWrapper(
                             preferences = preferences.copy(wallpaperMode = mode)
                             savePreference("wallpaper_mode", mode)
                         },
-                        onUploadWallpaperClick = {
-                            launcher.launch("image/*")
-                        },
+                        onUploadWallpaperClick = {}, // No-op as UI is removed
                         onNavigateBack = onNavigateBack
                     )
                 }

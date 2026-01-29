@@ -55,6 +55,8 @@ class RealTimeWallpaperService : Service() {
         private const val INITIAL_RETRY_DELAY_MS = 5_000L // 5 seconds
         private const val WAKE_LOCK_TIMEOUT_MS = 30_000L // 30 seconds max
 
+        private const val ACTION_FORCE_UPDATE = "com.cosmicocean.service.FORCE_UPDATE"
+
         fun start(context: Context) {
             val intent = Intent(context, RealTimeWallpaperService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -66,6 +68,19 @@ class RealTimeWallpaperService : Service() {
 
         fun stop(context: Context) {
             context.stopService(Intent(context, RealTimeWallpaperService::class.java))
+        }
+
+        @JvmStatic
+        fun updateNow(context: Context) {
+            Log.d(TAG, "Requesting immediate wallpaper update")
+            val intent = Intent(context, RealTimeWallpaperService::class.java).apply {
+                action = ACTION_FORCE_UPDATE
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
         }
     }
 
@@ -88,9 +103,22 @@ class RealTimeWallpaperService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "Service started")
-        startForeground(NOTIFICATION_ID, createNotification())
-        startUpdates()
+        Log.d(TAG, "Service onStartCommand: action=${intent?.action}")
+        
+        if (intent?.action == ACTION_FORCE_UPDATE) {
+            Log.d(TAG, "Force update requested")
+            updateWallpaper()
+            // Reset timer to avoid double update if close to next tick
+            handler.removeCallbacks(updateRunnable)
+            handler.postDelayed(updateRunnable, UPDATE_INTERVAL_MS)
+        } else {
+             // Normal start
+             startForeground(NOTIFICATION_ID, createNotification())
+             if (!isUpdating) {
+                 startUpdates()
+             }
+        }
+        
         return START_STICKY
     }
 

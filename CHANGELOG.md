@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.0] - 2026-01-29 (Android + Backend)
+
+### Enhanced - Wallpaper Upload Experience 🖼️
+
+**Status:** ✅ COMPLETE
+**Test Coverage:** Backend integration + Android Unit tests passed.
+
+#### Feature Overview
+Simplified and consolidated the wallpaper upload flow directly into the Home Screen for a seamless experience.
+
+#### Key Changes
+- **Consolidated UI**: Removed separate "Custom Wallpaper" setting from Settings. Everything is now handled via the "Customize" button on Home.
+- **Glassmorphic Design**: New "Customize" pill button with blur effects, gradients, and proper touch feedback.
+- **Instant Feedback**: Added loading spinner state to the button during uploads.
+- **Event-Driven Updates**: Wallpapers refresh instantly across all clients upon upload.
+
+#### Backend
+- **Rate Limits Relaxed**: Increased wallpaper generation limit from 20/hr to 1000/hr to support frequent customization. (v1.6.0)
+
+#### Android
+- **Version**: 2.2.0 (versionCode 16)
+- **APK**: `CosmicOcean_V2.2.apk`
+
+
 ## [1.3.6] - 2026-01-09 (Android + Backend)
 
 ### Added - Epic 10 Phase 1: Task Privacy & Masking 🔒

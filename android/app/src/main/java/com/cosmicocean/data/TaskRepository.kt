@@ -19,7 +19,8 @@ import kotlinx.coroutines.flow.map
 class TaskRepository(
     private val starDao: StarDao,
     private val apiService: ApiService,
-    private val context: Context
+    private val context: Context,
+    private val wallpaperUpdater: (Context) -> Unit = { ctx -> com.cosmicocean.service.RealTimeWallpaperService.updateNow(ctx) }
 ) {
     companion object {
         private const val TAG = "TaskRepository"
@@ -31,9 +32,13 @@ class TaskRepository(
      */
     private fun triggerImmediateWallpaperUpdate() {
         try {
+            // 1. Try instant update via Foreground Service (fast path)
+            wallpaperUpdater(context)
+            
+            // 2. Schedule Worker as backup (reliable path)
             val updateRequest = OneTimeWorkRequestBuilder<WallpaperUpdateWorker>().build()
             WorkManager.getInstance(context).enqueue(updateRequest)
-            Log.d(TAG, "Triggered immediate wallpaper update")
+            Log.d(TAG, "Triggered immediate wallpaper update (Service + Worker)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to trigger wallpaper update: ${e.message}")
         }

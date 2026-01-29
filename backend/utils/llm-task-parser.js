@@ -145,7 +145,15 @@ function validateAndClean(llmResponse, input) {
   });
 
   // Time validation - define timeWords first for use in both checks
-  const timeWords = ['at', 'by', 'in', 'morning', 'afternoon', 'evening', 'noon', 'midnight', 'pm', 'am', /\d{1,2}:\d{2}/, /\d{1,2}(am|pm)/];
+  // Use specific regex for 'at' and 'in' to avoid matching "at home" or "in garbage"
+  const timeWords = [
+    /\bat\s+\d/i,     // "at 5", "at 12"
+    /\by\s+\d/i,      // "by 5"
+    /\bin\s+\d/i,     // "in 10"
+    'morning', 'afternoon', 'evening', 'noon', 'midnight', 'pm', 'am',
+    /\d{1,2}:\d{2}/,
+    /\d{1,2}(am|pm)/
+  ];
 
   // FIX v1.6.0: Don't strip date if we have a time expression
   // "standup at 9am" has a time, so the LLM setting today's date is CORRECT behavior

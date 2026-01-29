@@ -23,6 +23,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.cosmicocean.auth.TokenManager
 import com.cosmicocean.data.CosmicDatabase
 import com.cosmicocean.data.TaskRepository
@@ -221,34 +225,6 @@ class MainActivity : ComponentActivity() {
                                 .align(Alignment.TopEnd)
                                 .padding(16.dp)
                         ) {
-                            // Upload Custom Wallpaper Button
-                            IconButton(
-                                onClick = {
-                                    if (!isUploadingWallpaper) {
-                                        wallpaperPickerLauncher.launch("image/*")
-                                    }
-                                },
-                                modifier = Modifier.background(
-                                    if (isUploadingWallpaper) Color(0xFF00E5FF).copy(0.6f) else Color.Black.copy(0.4f),
-                                    shape = MaterialTheme.shapes.small
-                                ),
-                                enabled = !isUploadingWallpaper
-                            ) {
-                                if (isUploadingWallpaper) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(24.dp),
-                                        color = Color.White,
-                                        strokeWidth = 2.dp
-                                    )
-                                } else {
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.ic_upload),
-                                        contentDescription = "Upload Wallpaper",
-                                        tint = Color.White
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
                             // Refresh Wallpaper Button
                             IconButton(
                                 onClick = {
@@ -272,6 +248,66 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.background(Color.Black.copy(0.4f), shape = MaterialTheme.shapes.small)
                             ) {
                                 Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White)
+                            }
+                        }
+
+                        // NEW: Glassmorphic Wallpaper Upload Button (Bottom Start)
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(24.dp)
+                                .padding(bottom = 80.dp) // Align with FAB height
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(
+                                        brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color(0xFF2A2A3E).copy(alpha = 0.8f),
+                                                Color(0xFF1A1A2E).copy(alpha = 0.9f)
+                                            )
+                                        )
+                                    )
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (isUploadingWallpaper) Color(0xFFE040FB) else Color.White.copy(alpha = 0.3f),
+                                        shape = RoundedCornerShape(24.dp)
+                                    )
+                                    .clickable(enabled = !isUploadingWallpaper) {
+                                        wallpaperPickerLauncher.launch("image/*")
+                                    }
+                                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    if (isUploadingWallpaper) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            color = Color(0xFFE040FB),
+                                            strokeWidth = 2.dp
+                                        )
+                                        Text(
+                                            "Uploading...",
+                                            color = Color.White.copy(alpha = 0.9f),
+                                            style = MaterialTheme.typography.labelLarge
+                                        )
+                                    } else {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.ic_upload),
+                                            contentDescription = "Custom Wallpaper",
+                                            tint = Color(0xFFE040FB), // Cosmic Purple Accent
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Text(
+                                            "Customize",
+                                            color = Color.White.copy(alpha = 0.9f),
+                                            style = MaterialTheme.typography.labelLarge
+                                        )
+                                    }
+                                }
                             }
                         }
 

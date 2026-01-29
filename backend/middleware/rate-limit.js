@@ -42,7 +42,7 @@ const authLimiter = rateLimit({
  */
 const wallpaperLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 20, // 20 requests per window
+  max: 1000, // 1000 requests per window (supports 60s polling w/ extra buffer)
   message: { error: 'Wallpaper generation rate limit exceeded' },
   standardHeaders: true,
   legacyHeaders: false,

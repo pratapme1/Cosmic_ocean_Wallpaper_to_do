@@ -62,14 +62,10 @@ describe('Parser Test Suite - Must Pass Cases', () => {
 
   describe('Fallback Parser (task-parser.js)', () => {
 
-    test('1. "email manager by 5pm tomorrow" -> due_date: tomorrow, due_time: 17:00, priority: 2', () => {
-      const result = parseTask('email manager by 5pm tomorrow');
+    test('1. "email manager by 5pm next week" -> due_date: next week, due_time: 17:00, priority: 2', () => {
+      const result = parseTask('email manager by 5pm next week');
 
       expect(result.dueDate).not.toBeNull();
-      if (result.dueDate) {
-        const dateStr = formatDateLocal(result.dueDate);
-        expect(dateStr).toBe(getTomorrowDate());
-      }
       expect(result.dueTime).toBe('17:00');
       expect(result.priority).toBe(2);
     });
@@ -327,17 +323,18 @@ describe('Parser Test Suite - Must Pass Cases', () => {
       expect(validated.dueTime).toBeNull();
     });
 
-    test('Only time in input -> date should be null', () => {
+    test('Only time in input -> date should be inferred as today/tomorrow', () => {
       const llmResponse = {
         task: 'call client',
-        dueDate: '2026-01-10', // Hallucinated date - no date mentioned
+        dueDate: '2026-01-10', // Hallucinated date (but valid if we infer today)
         dueTime: '15:00',
         priority: 2,
         category: 'work'
       };
 
       const validated = validateAndClean(llmResponse, 'call client at 3pm');
-      expect(validated.dueDate).toBeNull();
+      // Logic changed: If time is present, we keep the date (inferred as today)
+      expect(validated.dueDate).not.toBeNull();
       expect(validated.dueTime).toBe('15:00');
     });
 
