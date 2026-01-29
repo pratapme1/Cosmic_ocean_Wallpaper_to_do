@@ -225,5 +225,10 @@ data class UserPreferencesResponse(
     @SerializedName("weather_overlay_enabled")
     val weatherOverlayEnabled: Boolean? = true,
     @SerializedName("particle_intensity")
-    val particleIntensity: String? = "medium"  // low, medium, high
+    val particleIntensity: String? = "medium",  // low, medium, high
+    // Epic 11: Custom Wallpaper
+    @SerializedName("wallpaper_mode")
+    val wallpaperMode: String? = "generated", // generated, custom
+    @SerializedName("custom_wallpaper_path")
+    val customWallpaperPath: String? = null
 )

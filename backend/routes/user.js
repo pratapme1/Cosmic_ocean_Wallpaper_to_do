@@ -2,8 +2,39 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { verifyToken } = require('../middleware/auth');
 const cacheService = require('../services/cache');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const router = express.Router();
+
+// Configure Multer for file uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = path.join(__dirname, '../uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // Save as: user-{id}-{timestamp}.ext
+    const ext = path.extname(file.originalname);
+    cb(null, `user-${req.user.userId}-${Date.now()}${ext}`);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'), false);
+    }
+  }
+});
 
 // All user routes require authentication
 router.use(verifyToken);
@@ -23,19 +54,66 @@ router.get('/', async (req, res) => {
               wallpaper_token, created_at, updated_at,
               default_privacy_level, auto_hide_work_tasks,
               work_hours_start, work_hours_end,
-              biometric_reveal_enabled, hide_all_tasks_mode
+              biometric_reveal_enabled, hide_all_tasks_mode,
+              wallpaper_mode, custom_wallpaper_path
        FROM users WHERE id = $1`,
       [userId]
     );
+
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
 
+
     res.json(result.rows[0]);
   } catch (err) {
     console.error('Get user error:', err);
     res.status(500).json({ error: 'Failed to fetch user data' });
+  }
+});
+
+/**
+ * POST /api/user/wallpaper
+ * Upload custom wallpaper
+ */
+router.post('/wallpaper', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file uploaded' });
+    }
+
+    const userId = req.user.userId;
+    const client = req.app.locals.dbClient;
+    const filePath = req.file.path; // Absolute path on server
+
+    // Update user record: set mode to custom and save path
+    const query = `
+      UPDATE users
+      SET wallpaper_mode = 'custom',
+          custom_wallpaper_path = $1,
+          updated_at = NOW()
+      WHERE id = $2
+      RETURNING wallpaper_mode, custom_wallpaper_path
+    `;
+
+    const result = await client.query(query, [filePath, userId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Invalidate cache so next request generates using new custom image
+    await cacheService.invalidateUserWallpapers(userId);
+
+    res.json({
+      success: true,
+      message: 'Wallpaper uploaded successfully',
+      data: result.rows[0]
+    });
+  } catch (err) {
+    console.error('Upload wallpaper error:', err);
+    res.status(500).json({ error: 'Failed to upload wallpaper' });
   }
 });
 
@@ -58,7 +136,8 @@ router.patch(
     body('work_hours_start').optional().matches(/^\d{2}:\d{2}(:\d{2})?$/),
     body('work_hours_end').optional().matches(/^\d{2}:\d{2}(:\d{2})?$/),
     body('biometric_reveal_enabled').optional().isBoolean(),
-    body('hide_all_tasks_mode').optional().isBoolean()
+    body('hide_all_tasks_mode').optional().isBoolean(),
+    body('wallpaper_mode').optional().isIn(['generated', 'custom'])
   ],
   async (req, res) => {
     try {
@@ -91,7 +170,8 @@ router.patch(
         'work_hours_start',
         'work_hours_end',
         'biometric_reveal_enabled',
-        'hide_all_tasks_mode'
+        'hide_all_tasks_mode',
+        'wallpaper_mode'
       ];
 
       for (const [key, value] of Object.entries(updates)) {
@@ -121,7 +201,8 @@ router.patch(
                   wallpaper_token, created_at, updated_at,
                   default_privacy_level, auto_hide_work_tasks,
                   work_hours_start, work_hours_end,
-                  biometric_reveal_enabled, hide_all_tasks_mode
+                  biometric_reveal_enabled, hide_all_tasks_mode,
+                  wallpaper_mode, custom_wallpaper_path
       `;
 
       const result = await client.query(query, values);

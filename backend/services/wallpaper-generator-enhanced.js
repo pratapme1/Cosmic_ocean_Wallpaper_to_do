@@ -231,8 +231,8 @@ function generateTextLayer(layout, tasks, colors, doneForToday) {
   // Tasks
   topTasks.forEach((task, index) => {
     const priorityColor = task.priority === 2 ? colors.accentSecondary :
-                         task.priority === 1 ? colors.accentPrimary :
-                         colors.textSecondary;
+      task.priority === 1 ? colors.accentPrimary :
+        colors.textSecondary;
 
     // Priority indicator circle
     svgContent += `
@@ -462,17 +462,57 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now(), tim
     // Generate layers
     const layers = [];
 
-    // Layer 1: Background with gradient
-    const backgroundSvg = generateBackgroundLayer(layout, colors, animState);
-    layers.push({ input: Buffer.from(backgroundSvg), blend: 'over' });
+    // =====================================
+    // CUSTOM WALLPAPER MODE (Epic 11)
+    // =====================================
+    if (user.wallpaper_mode === 'custom' && user.custom_wallpaper_path) {
+      const fs = require('fs');
+      if (fs.existsSync(user.custom_wallpaper_path)) {
+        console.log(`[Wallpaper] Using custom wallpaper: ${user.custom_wallpaper_path}`);
 
-    // Layer 2: Particles (stars, bubbles) - use visual params for particle count
-    const particleSvg = generateParticleLayerWithParams(layout, theme, urgency, animState, visualParams);
-    layers.push({ input: Buffer.from(particleSvg), blend: 'over' });
+        // Layer 1: Custom Image (resized/cropped to fit)
+        const customImage = await sharp(user.custom_wallpaper_path)
+          .resize(width, height, { fit: 'cover' })
+          .toBuffer();
 
-    // Layer 3: Transition gradient
-    const transitionSvg = generateTransitionLayer(layout, colors);
-    layers.push({ input: Buffer.from(transitionSvg), blend: 'over' });
+        layers.push({ input: customImage, blend: 'over' });
+
+        // Layer 2: Dark Overlay (for text readability)
+        // using simple rect SVG
+        const overlaySvg = `
+          <svg width="${width}" height="${height}">
+            <rect width="${width}" height="${height}" fill="black" opacity="0.4" />
+          </svg>
+        `;
+        layers.push({ input: Buffer.from(overlaySvg), blend: 'over' });
+
+        // Skip standard background/particle/transition generation
+      } else {
+        console.warn(`[Wallpaper] Custom wallpaper file missing: ${user.custom_wallpaper_path}, falling back to generated`);
+        // Fallback to generated if file missing
+        const backgroundSvg = generateBackgroundLayer(layout, colors, animState);
+        layers.push({ input: Buffer.from(backgroundSvg), blend: 'over' });
+
+        const particleSvg = generateParticleLayerWithParams(layout, theme, urgency, animState, visualParams);
+        layers.push({ input: Buffer.from(particleSvg), blend: 'over' });
+
+        const transitionSvg = generateTransitionLayer(layout, colors);
+        layers.push({ input: Buffer.from(transitionSvg), blend: 'over' });
+      }
+    } else {
+      // STANDARD GENERATED MODE
+      // Layer 1: Background with gradient
+      const backgroundSvg = generateBackgroundLayer(layout, colors, animState);
+      layers.push({ input: Buffer.from(backgroundSvg), blend: 'over' });
+
+      // Layer 2: Particles (stars, bubbles)
+      const particleSvg = generateParticleLayerWithParams(layout, theme, urgency, animState, visualParams);
+      layers.push({ input: Buffer.from(particleSvg), blend: 'over' });
+
+      // Layer 3: Transition gradient
+      const transitionSvg = generateTransitionLayer(layout, colors);
+      layers.push({ input: Buffer.from(transitionSvg), blend: 'over' });
+    }
 
     // =====================================
     // ACHIEVEMENT LAYER (Epic 10 Phase 2)

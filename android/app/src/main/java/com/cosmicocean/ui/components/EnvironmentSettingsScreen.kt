@@ -7,6 +7,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import java.io.File
+import androidx.compose.ui.platform.LocalContext
+import android.util.Log
+import com.cosmicocean.network.ApiService
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,26 +28,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.util.Log
-import com.cosmicocean.network.ApiService
 import kotlinx.coroutines.launch
 
-/**
- * Epic 10 Phase 3: Dynamic Environments
- * Task 12: Android Environment Settings UI
- *
- * Allows users to:
- * - Toggle time-of-day: Auto / Manual override
- * - Weather overlay: On / Off
- * - Preview environment changes
- */
+private const val TAG = "EnvironmentSettings"
 
-// Environment preference data class
 data class EnvironmentPreferences(
     val timeOfDayMode: TimeOfDayMode = TimeOfDayMode.AUTO,
     val manualTimePeriod: String = "morning",  // Used when mode is MANUAL
     val weatherOverlayEnabled: Boolean = true,
-    val particleIntensity: ParticleIntensity = ParticleIntensity.MEDIUM
+    val particleIntensity: ParticleIntensity = ParticleIntensity.MEDIUM,
+    val wallpaperMode: String = "generated" // generated, custom
 )
 
 enum class TimeOfDayMode(val displayName: String, val description: String) {
@@ -73,6 +73,8 @@ fun EnvironmentSettingsScreen(
     onManualTimePeriodChanged: (String) -> Unit,
     onWeatherOverlayChanged: (Boolean) -> Unit,
     onParticleIntensityChanged: (ParticleIntensity) -> Unit,
+    onWallpaperModeChanged: (String) -> Unit,
+    onUploadWallpaperClick: () -> Unit,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -111,7 +113,46 @@ fun EnvironmentSettingsScreen(
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
-            // ===== TIME OF DAY SECTION =====
+            // ===== CUSTOM WALLPAPER SECTION (Epic 11) =====
+            EnvironmentSectionHeader(title = "Wallpaper Source", icon = "🖼️")
+
+            EnvironmentSettingCard(
+                title = "Use Custom Image",
+                subtitle = if (preferences.wallpaperMode == "custom") "Showing your uploaded image" else "Use generated cosmic theme",
+                icon = "📸"
+            ) {
+                Switch(
+                    checked = preferences.wallpaperMode == "custom",
+                    onCheckedChange = { isCustom ->
+                        onWallpaperModeChanged(if (isCustom) "custom" else "generated")
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color(0xFFE040FB),
+                        checkedTrackColor = Color(0xFFE040FB).copy(alpha = 0.5f)
+                    )
+                )
+            }
+
+            if (preferences.wallpaperMode == "custom") {
+                Button(
+                    onClick = onUploadWallpaperClick,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF2A2A3E)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, tint = Color(0xFFE040FB))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Upload New Image", color = Color.White)
+                }
+
+                EnvironmentInfoCard(
+                    text = "Your image will have a subtle dark overlay added to ensure text remains readable.",
+                    color = Color(0xFF3E2A5F)
+                )
+            } else {
+                // ===== TIME OF DAY SECTION =====
             EnvironmentSectionHeader(title = "Time of Day", icon = "🕐")
 
             // Auto vs Manual Mode
@@ -261,6 +302,7 @@ fun EnvironmentSettingsScreen(
             },
             onDismiss = { showParticleDialog = false }
         )
+    }
     }
 }
 
@@ -569,7 +611,7 @@ private fun ParticleIntensityOption(
     }
 }
 
-private const val TAG = "EnvironmentSettings"
+
 
 /**
  * Stateful wrapper for EnvironmentSettingsScreen that handles state internally
@@ -588,6 +630,52 @@ fun EnvironmentSettingsWrapper(
     var successMessage by remember { mutableStateOf<String?>(null) }
     var loadedFromApi by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    val contentResolver = context.contentResolver
+
+    // File picker for wallpaper upload - defined at top level
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let { selectedUri ->
+            scope.launch {
+                isLoading = true
+                try {
+                    // 1. Create temporary file from URI
+                    val inputStream = contentResolver.openInputStream(selectedUri)
+                    val tempFile = File.createTempFile("upload", ".jpg", context.cacheDir)
+                    tempFile.outputStream().use { output ->
+                        inputStream?.copyTo(output)
+                    }
+
+                    // 2. Prepare Multipart body
+                    val requestFile = tempFile.asRequestBody("image/*".toMediaTypeOrNull())
+                    val body = MultipartBody.Part.createFormData("image", tempFile.name, requestFile)
+
+                    // 3. Upload to API
+                    val response = apiService.uploadWallpaper(body)
+
+                    if (response.isSuccessful) {
+                        Log.d(TAG, "Wallpaper upload successful")
+                        successMessage = "Wallpaper uploaded!"
+                        preferences = preferences.copy(wallpaperMode = "custom")
+                    } else {
+                        Log.e(TAG, "Upload failed: ${response.code()}")
+                        errorMessage = "Upload failed"
+                    }
+
+                    // Cleanup
+                    tempFile.delete()
+
+                } catch (e: Exception) {
+                    Log.e(TAG, "Exception uploading wallpaper", e)
+                    errorMessage = "Error: ${e.message}"
+                } finally {
+                    isLoading = false
+                }
+            }
+        }
+    }
 
     // Load preferences from API on first composition
     LaunchedEffect(Unit) {
@@ -603,6 +691,7 @@ fun EnvironmentSettingsWrapper(
                 Log.d(TAG, "   manual_time_period: ${apiPrefs.manualTimePeriod}")
                 Log.d(TAG, "   weather_overlay_enabled: ${apiPrefs.weatherOverlayEnabled}")
                 Log.d(TAG, "   particle_intensity: ${apiPrefs.particleIntensity}")
+                Log.d(TAG, "   wallpaper_mode: ${apiPrefs.wallpaperMode}")
 
                 preferences = EnvironmentPreferences(
                     timeOfDayMode = when (apiPrefs.timeOfDayMode?.lowercase()) {
@@ -615,19 +704,18 @@ fun EnvironmentSettingsWrapper(
                         "low" -> ParticleIntensity.LOW
                         "high" -> ParticleIntensity.HIGH
                         else -> ParticleIntensity.MEDIUM
-                    }
+                    },
+                    wallpaperMode = apiPrefs.wallpaperMode ?: "generated"
                 )
                 loadedFromApi = true
                 successMessage = "Settings loaded"
             } else {
                 val errorBody = response.errorBody()?.string()
                 Log.e(TAG, "API Error: ${response.code()} - $errorBody")
-                // Use defaults, not an error
                 loadedFromApi = true
             }
         } catch (e: Exception) {
             Log.e(TAG, "Exception loading preferences", e)
-            // Use defaults on network error
             loadedFromApi = true
         } finally {
             isLoading = false
@@ -674,7 +762,7 @@ fun EnvironmentSettingsWrapper(
         containerColor = Color(0xFF0F0F1E)
     ) { scaffoldPadding ->
         Box(modifier = Modifier.padding(scaffoldPadding)) {
-            if (isLoading) {
+            if (isLoading && !loadedFromApi) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -734,6 +822,14 @@ fun EnvironmentSettingsWrapper(
                             preferences = preferences.copy(particleIntensity = intensity)
                             savePreference("particle_intensity", intensity.name.lowercase())
                         },
+                        onWallpaperModeChanged = { mode ->
+                            Log.d(TAG, "Wallpaper mode changed: $mode")
+                            preferences = preferences.copy(wallpaperMode = mode)
+                            savePreference("wallpaper_mode", mode)
+                        },
+                        onUploadWallpaperClick = {
+                            launcher.launch("image/*")
+                        },
                         onNavigateBack = onNavigateBack
                     )
                 }
@@ -741,3 +837,4 @@ fun EnvironmentSettingsWrapper(
         }
     }
 }
+
