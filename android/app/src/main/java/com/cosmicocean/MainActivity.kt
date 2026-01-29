@@ -3,7 +3,9 @@ package com.cosmicocean
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -16,6 +18,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -35,6 +39,10 @@ import com.cosmicocean.viewmodel.MainViewModel
 import com.cosmicocean.viewmodel.MainViewModelFactory
 import com.cosmicocean.service.RealTimeWallpaperService
 import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import java.io.File
 
 class MainActivity : ComponentActivity() {
 
@@ -114,6 +122,53 @@ class MainActivity : ComponentActivity() {
                 var lastTapOffset by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
                 var isInteracting by remember { mutableStateOf(false) }
                 var currentTheme by remember { mutableStateOf(wallpaperPreferences.getTheme()) }
+                var isUploadingWallpaper by remember { mutableStateOf(false) }
+                val context = LocalContext.current
+                val contentResolver = context.contentResolver
+                val coroutineScope = rememberCoroutineScope()
+
+                // File picker for wallpaper upload
+                val wallpaperPickerLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.GetContent()
+                ) { uri ->
+                    uri?.let { selectedUri ->
+                        coroutineScope.launch {
+                            isUploadingWallpaper = true
+                            Toast.makeText(context, "Uploading wallpaper...", Toast.LENGTH_SHORT).show()
+                            try {
+                                // Create temporary file from URI
+                                val inputStream = contentResolver.openInputStream(selectedUri)
+                                val tempFile = File.createTempFile("wallpaper", ".jpg", context.cacheDir)
+                                tempFile.outputStream().use { output ->
+                                    inputStream?.copyTo(output)
+                                }
+
+                                // Prepare Multipart body
+                                val requestFile = tempFile.asRequestBody("image/*".toMediaTypeOrNull())
+                                val body = MultipartBody.Part.createFormData("image", tempFile.name, requestFile)
+
+                                // Upload to API
+                                val response = NetworkModule.getApi(context).uploadWallpaper(body)
+
+                                if (response.isSuccessful) {
+                                    Toast.makeText(context, "Wallpaper uploaded! Refreshing...", Toast.LENGTH_SHORT).show()
+                                    // Trigger wallpaper refresh after successful upload
+                                    triggerImmediateUpdate()
+                                } else {
+                                    Toast.makeText(context, "Upload failed: ${response.code()}", Toast.LENGTH_SHORT).show()
+                                }
+
+                                // Cleanup temp file
+                                tempFile.delete()
+                            } catch (e: Exception) {
+                                android.util.Log.e("MainActivity", "Wallpaper upload error", e)
+                                Toast.makeText(context, "Upload error: ${e.message}", Toast.LENGTH_SHORT).show()
+                            } finally {
+                                isUploadingWallpaper = false
+                            }
+                        }
+                    }
+                }
 
                 LaunchedEffect(isInteracting) {
                     if (isInteracting) {
@@ -166,6 +221,34 @@ class MainActivity : ComponentActivity() {
                                 .align(Alignment.TopEnd)
                                 .padding(16.dp)
                         ) {
+                            // Upload Custom Wallpaper Button
+                            IconButton(
+                                onClick = {
+                                    if (!isUploadingWallpaper) {
+                                        wallpaperPickerLauncher.launch("image/*")
+                                    }
+                                },
+                                modifier = Modifier.background(
+                                    if (isUploadingWallpaper) Color(0xFF00E5FF).copy(0.6f) else Color.Black.copy(0.4f),
+                                    shape = MaterialTheme.shapes.small
+                                ),
+                                enabled = !isUploadingWallpaper
+                            ) {
+                                if (isUploadingWallpaper) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_upload),
+                                        contentDescription = "Upload Wallpaper",
+                                        tint = Color.White
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
                             // Refresh Wallpaper Button
                             IconButton(
                                 onClick = {
