@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.3] - 2026-01-30 (Android)
+
+### Fixed - Wallpaper Update Triggers & Auth Sync 🛡️
+- **Authentication Sync**: Unified auth storage between UI and Service. Fixed issue where background updates were skipped due to "missing" login data.
+- **Service Stability**: Guaranteed `startForeground()` calls for all intents to prevent system-enforced kills.
+- **Fail-safe Robustness**: Ported atomic bitmap loading fix to the backup `WallpaperUpdateWorker`.
+
 ## [2.2.2] - 2026-01-30 (Android + Backend)
 
 ### Fixed - Wallpaper Robustness & Visual Stability 🛠️

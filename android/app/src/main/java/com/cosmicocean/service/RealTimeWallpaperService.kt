@@ -20,7 +20,7 @@ import androidx.core.app.NotificationCompat
 import com.cosmicocean.MainActivity
 import com.cosmicocean.R
 import com.cosmicocean.network.NetworkModule
-import com.cosmicocean.utils.UserSession
+import com.cosmicocean.auth.TokenManager
 import com.cosmicocean.utils.WallpaperPreferencesManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -106,6 +106,9 @@ class RealTimeWallpaperService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Service onStartCommand: action=${intent?.action}")
         
+        // ALWAYS call startForeground for all intents to satisfy system requirements
+        startForeground(NOTIFICATION_ID, createNotification())
+
         if (intent?.action == ACTION_FORCE_UPDATE) {
             Log.d(TAG, "Force update requested - scheduling with 500ms delay for sync consistency")
             // Serialization: Cancel existing tick but schedule a fresh one after this update
@@ -117,8 +120,6 @@ class RealTimeWallpaperService : Service() {
                 handler.postDelayed(updateRunnable, UPDATE_INTERVAL_MS)
             }, 500)
         } else {
-             // Normal start
-             startForeground(NOTIFICATION_ID, createNotification())
              if (!isUpdating) {
                  startUpdates()
              }
@@ -188,9 +189,10 @@ class RealTimeWallpaperService : Service() {
     }
 
     private fun updateWallpaper() {
-        val userId = UserSession.getUserId(applicationContext)
+        val tokenManager = TokenManager(applicationContext)
+        val userId = tokenManager.getUserId()
         if (userId == null) {
-            Log.w(TAG, "No user logged in, skipping update")
+            Log.w(TAG, "❌ No user logged in (TokenManager), skipping update")
             return
         }
 

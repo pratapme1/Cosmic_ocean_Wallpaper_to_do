@@ -33,14 +33,11 @@ class TokenManagerTest {
     fun setUp() {
         MockitoAnnotations.openMocks(this)
 
-        // Setup SharedPreferences mocks
-        `when`(mockContext.getSharedPreferences("cosmic_auth", Context.MODE_PRIVATE))
-            .thenReturn(mockSharedPreferences)
         `when`(mockSharedPreferences.edit()).thenReturn(mockEditor)
         `when`(mockEditor.putString(anyString(), anyString())).thenReturn(mockEditor)
         `when`(mockEditor.apply()).then { }
 
-        tokenManager = TokenManager(mockContext)
+        tokenManager = TokenManager(mockContext, mockSharedPreferences)
     }
 
     @Test

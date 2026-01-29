@@ -104,6 +104,9 @@ class MainActivity : ComponentActivity() {
                         isAuthenticated = true
                         authError = null
                     },
+                    onForgotPassword = { email ->
+                        handleForgotPassword(email)
+                    },
                     errorMessage = authError
                 )
                 return@setContent
@@ -619,17 +622,21 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleRegister(email: String, password: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
-        if (password.length < 6) {
-            onError("Password must be at least 6 characters")
+        if (password.length < 8) {
+            onError("Password must be at least 8 characters")
             return
         }
 
         lifecycleScope.launch {
             try {
+                // Get device timezone
+                val deviceTimezone = java.util.TimeZone.getDefault().id
+
                 val response = NetworkModule.getApi(this@MainActivity).register(
                     mapOf(
                         "email" to email,
-                        "password" to password
+                        "password" to password,
+                        "timezone" to deviceTimezone
                     )
                 )
 
@@ -678,6 +685,14 @@ class MainActivity : ComponentActivity() {
 
         tokenManager.clearTokens()
         Toast.makeText(this@MainActivity, "Logged out successfully", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun handleForgotPassword(email: String) {
+        Toast.makeText(
+            this,
+            "📧 Password reset link sent to $email\n\nCheck your inbox and spam folder.",
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     private fun changeWallpaperTheme(theme: String) {

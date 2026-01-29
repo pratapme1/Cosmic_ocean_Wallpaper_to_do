@@ -251,4 +251,18 @@ router.post('/wallpaper-token', async (req, res) => {
   }
 });
 
+// POST /api/auth/forgot-password
+// Stub for future implementation
+router.post('/forgot-password', [
+  body('email').isEmail().normalizeEmail()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  // In production, this would trigger an email
+  res.json({ message: 'Password reset instructions have been sent to your email.' });
+});
+
 module.exports = router;

@@ -5,6 +5,7 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.cosmicocean.auth.TokenManager
 import com.cosmicocean.network.NetworkModule
 import com.cosmicocean.utils.WallpaperPreferencesManager
 import java.io.IOException
@@ -16,8 +17,9 @@ class WallpaperUpdateWorker(
 
     override suspend fun doWork(): Result {
         return try {
-            val userId = com.cosmicocean.utils.UserSession.getUserId(applicationContext) ?: "none"
-            Log.e(TAG, "======== WALLPAPER UPDATE STARTING ========")
+            val tokenManager = TokenManager(applicationContext)
+            val userId = tokenManager.getUserId() ?: "none"
+            Log.e(TAG, "======== WALLPAPER UPDATE WORKER STARTING ========")
             Log.e(TAG, "User ID: $userId")
 
             // 1. Get user preferences
@@ -79,9 +81,10 @@ class WallpaperUpdateWorker(
                     return Result.failure()
                 }
 
-                Log.e(TAG, "Decoding wallpaper bitmap from response...")
-                val inputStream = responseBody.byteStream()
-                val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                Log.e(TAG, "Downloading full wallpaper bytes...")
+                // ROBUST IMAGE LOADING FIX: Read full byte array before decoding
+                val bytes = responseBody.bytes()
+                val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
 
                 if (bitmap != null) {
                     Log.e(TAG, "Bitmap decoded successfully: ${bitmap.width}x${bitmap.height}, config: ${bitmap.config}")
