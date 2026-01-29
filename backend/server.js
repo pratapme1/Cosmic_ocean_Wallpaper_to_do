@@ -290,10 +290,13 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
       work_hours_end: userObj?.work_hours_end || '17:00',
       default_privacy_level: userObj?.default_privacy_level || 'public',
       // Epic 10 Phase 2: Achievement preferences
-      show_achievements_on_wallpaper: userObj?.show_achievements_on_wallpaper !== false // Default to true
+      show_achievements_on_wallpaper: userObj?.show_achievements_on_wallpaper !== false, // Default to true
+      // Epic 11: Custom wallpaper support
+      wallpaper_mode: userObj?.wallpaper_mode || 'generated',
+      custom_wallpaper_path: userObj?.custom_wallpaper_path || null
     };
 
-    console.log(`🖼️  GENERATING: theme=${user.theme}, resolution=${user.resolution}, done=${user.done_for_today}`);
+    console.log(`🖼️  GENERATING: theme=${user.theme}, resolution=${user.resolution}, done=${user.done_for_today}, wallpaper_mode=${user.wallpaper_mode}`);
     console.log(`🔒 PRIVACY: hide_all=${user.hide_all_tasks_mode}, auto_hide_work=${user.auto_hide_work_tasks}, default_level=${user.default_privacy_level}`);
 
     let imageBuffer;
