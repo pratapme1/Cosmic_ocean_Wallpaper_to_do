@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.2] - 2026-01-30 (Android + Backend)
+
+### Fixed - Wallpaper Robustness & Visual Stability 🛠️
+
+**Status:** ✅ COMPLETE
+**Test Coverage:** Logic audit + manual verification passed.
+
+#### Key Changes
+- **Backend: Black Patch Fix**: Added a solid non-scaling background layer to `wallpaper-generator-enhanced.js`. Prevents visual gaps during "breathing" animations.
+- **Android: Atomic Image Loading**: Switched to full byte-array loading in `RealTimeWallpaperService` before decoding. Eliminates "black patches" caused by partial network stream decoding.
+- **Android: Update Serialization**: Implemented job cancellation to ensure only one wallpaper update runs at a time, preventing race conditions and stale overwrites.
+- **Android: Consistency Delay**: Added a 500ms internal delay for force updates to ensure backend database commits are fully complete before rendering.
+- **Unified Triggers**: Main app UI and TaskRepository now both use the fast-path Foreground Service for instant feedback.
+
+#### Android
+- **Version**: 2.2.2 (versionCode 18)
+- **APK**: `CosmicOcean_V2.2.2.apk`
+
+---
+
 ## [2.2.1] - 2026-01-29 (Android + Backend)
 
 ### Fixed - Wallpaper Update Race Condition 🛠️
