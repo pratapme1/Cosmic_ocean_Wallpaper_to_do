@@ -260,34 +260,21 @@ function extractDateTime(text, suggestedHour = null) {
     // Duration: "2 hours", "45m", "90 minutes" (no preposition)
 
     // Patterns that indicate DUE DATE (when something should be done)
-    const isDueDate =
-      matchedText.startsWith('in ') ||           // "in 10 minutes"
-      matchedText.startsWith('at ') ||           // "at 3pm"
-      matchedText.startsWith('by ') ||           // "by friday"
-      matchedText.startsWith('on ') ||           // "on monday"
-      matchedText.startsWith('before ') ||       // "before noon"
-      matchedText.startsWith('after ') ||        // "after lunch"
-      matchedText.startsWith('due ') ||          // "due friday"
-      matchedText.startsWith('deadline ') ||     // "deadline friday"
-      matchedText.startsWith('until ') ||        // "until friday"
-      matchedText.includes('tomorrow') ||        // "tomorrow"
-      matchedText.includes('today') ||           // "today"
-      matchedText.includes('tonight') ||         // "tonight"
-      matchedText.includes('yesterday') ||       // "yesterday"
-      matchedText.match(/\b(mon|tue|wed|thu|fri|sat|sun)/i) ||  // weekdays
-      matchedText.includes('next ') ||           // "next week"
-      matchedText.includes('this ') ||           // "this evening"
-      matchedText.includes('last ') ||           // "last week"
-      /\d{1,2}[:\s]?\d{2}\s*(am|pm)/i.test(matchedText) ||  // "3:30pm"
-      /\d{1,2}\s*(am|pm)/i.test(matchedText) ||  // "3pm"
-      /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(matchedText) ||  // month names
-      /\d{4}-\d{2}-\d{2}/.test(matchedText) ||   // ISO date "2026-01-15"
-      /\d{1,2}\/\d{1,2}(\/\d{2,4})?/.test(matchedText);  // "12/25" or "12/25/2026"
+    // FIX: Simplified Logic (v1.6.0)
+    // Instead of whitelist (must start with "on", "by"), use blacklist.
+    // Accept EVERYTHING that Chrono parses, UNLESS it looks like a "bare duration" (e.g. "30 minutes").
+    // "30 minutes" -> ExtractDuration should handle it (Estimate).
+    // "in 30 minutes" -> Chrono handles it (Due Date/Time).
+    // "Friday" -> Chrono handles it (Due Date).
 
-    // If it's just a bare duration (no preposition), let extractDuration handle it
-    if (!isDueDate) {
+    const isBareDuration = /^\d+(\.\d+)?\s*(m|min|minutes?|h|hours?|hrs?)$/i.test(matchedText);
+
+    // If it's a bare duration (no 'in', 'at'), ignore it here so extractDuration can grab it
+    if (isBareDuration) {
       return { dueDate: null, dueTime: null, cleanedText: text };
     }
+
+
 
     let date = result.start.date();
 

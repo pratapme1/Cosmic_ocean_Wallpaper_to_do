@@ -1,0 +1,11 @@
+>>> STARTING E2E TEST FOR CUSTOM WALLPAPER <<<
+
+1. Authentication...
+   Register Response:  {"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhMGVhNDBlMy1lODQ0LTQ0ZmYtYWEzZS03MjZlMWFjYjE0ZmIiLCJlbWFpbCI6InRlc3RfdXNlcl8xNzY5NjUyNjUxMzkxQGV4YW1wbGUuY29tIiwiaWF0IjoxNzY5NjUyNjU1LCJleHAiOjE3NzAyNTc0NTV9.oYGGC7J_w-_GosG11VtkdIeeo2VSgsHeSPrHUjAt7yI","refreshToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhMGVhNDBlMy1lODQ0LTQ0ZmYtYWEzZS03MjZlMWFjYjE0ZmIiLCJlbWFpbCI6InRlc3RfdXNlcl8xNzY5NjUyNjUxMzkxQGV4YW1wbGUuY29tIiwicmVmcmVzaCI6dHJ1ZSwiaWF0IjoxNzY5NjUyNjU1LCJleHAiOjE3NzIyNDQ2NTV9.fD3Zumi0w_7VkXVTMf8rEH9zcAaxsgIZBY7LY-GEpsc","wallpaperToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhMGVhNDBlMy1lODQ0LTQ0ZmYtYWEzZS03MjZlMWFjYjE0ZmIiLCJzY29wZSI6IndhbGxwYXBlciIsImlhdCI6MTc2OTY1MjY1NCwiZXhwIjoxODAxMTg4NjU0fQ.Mca_R_k5h3nDoOT16t-FJVhUcrxZGuW3yixbwbPow48","user":{"id":"a0ea40e3-e844-44ff-aa3e-726e1acb14fb","email":"test_user_1769652651391@example.com","theme":"cosmic","timezone":"UTC","resolution":"1170x2532"}}
+   Registered new user. Token obtained.
+
+2. Uploading Custom Wallpaper...
+
+!!! TEST FAILED !!!
+Status: 500
+Data: { error: 'Failed to upload wallpaper' }

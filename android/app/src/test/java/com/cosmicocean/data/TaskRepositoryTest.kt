@@ -10,6 +10,8 @@ import org.junit.Assert.*
 import org.junit.runner.RunWith
 import org.mockito.Mock
 import org.mockito.Mockito
+import org.mockito.ArgumentMatchers.anyMap
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.junit.MockitoJUnitRunner
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.runBlocking
@@ -22,8 +24,10 @@ class TaskRepositoryTest {
     @Mock
     lateinit var context: Context
 
+    @Mock
+    lateinit var apiService: ApiService
+
     private lateinit var starDao: FakeStarDao
-    private lateinit var apiService: FakeApiService
     private lateinit var repository: TaskRepository
     
     // Capture the wallpaper update call
@@ -33,7 +37,6 @@ class TaskRepositoryTest {
     fun setup() {
         wallpaperUpdateCalled = false
         starDao = FakeStarDao()
-        apiService = FakeApiService()
         
         // Inject lambda that sets flag
         repository = TaskRepository(
@@ -47,67 +50,121 @@ class TaskRepositoryTest {
     }
 
     @Test
-    fun `addStar should trigger immediate wallpaper update via lambda`() = runBlocking {
+    fun `addStar should trigger wallpaper update ONLY on success`() = runBlocking {
         Mockito.mockStatic(android.util.Log::class.java).use {
             // Arrange
-            val star = Star(
-                x = 100f,
-                y = 100f,
-                title = "Test Star",
-                urgency = 1,
-                dueDate = null,
-                id = "test-id"
+            val star = createStar()
+            val successfulResponse = Response.success(
+                TaskResponse(
+                    id = "new-id",
+                    title = "Test Star",
+                    dueDate = "2026-01-01"
+                )
             )
+            Mockito.`when`(apiService.createTask(anyMap())).thenReturn(successfulResponse)
 
             // Act
             repository.addStar(star)
 
             // Assert
-            assertTrue("Wallpaper update lambda should be called", wallpaperUpdateCalled)
+            assertTrue("Wallpaper update SHOULD be called on sync success", wallpaperUpdateCalled)
         }
     }
 
     @Test
-    fun `updateStar should trigger immediate wallpaper update via lambda`() = runBlocking {
+    fun `addStar should NOT trigger wallpaper update on failure`() = runBlocking {
         Mockito.mockStatic(android.util.Log::class.java).use {
             // Arrange
-            val star = Star(
-                x = 100f,
-                y = 100f,
-                title = "Test Star",
-                urgency = 1,
-                dueDate = null,
-                id = "test-id"
+            val star = createStar()
+            val errorResponse = Response.error<TaskResponse>(500, ResponseBody.create(null, "Error"))
+            Mockito.`when`(apiService.createTask(anyMap())).thenReturn(errorResponse)
+
+            // Act
+            repository.addStar(star)
+
+            // Assert
+            assertFalse("Wallpaper update should NOT be called on sync failure", wallpaperUpdateCalled)
+        }
+    }
+
+    @Test
+    fun `updateStar should trigger wallpaper update ONLY on success`() = runBlocking {
+        Mockito.mockStatic(android.util.Log::class.java).use {
+            // Arrange
+            val star = createStar()
+            val successfulResponse = Response.success(
+                TaskResponse(
+                    id = "test-id",
+                    title = "Test Star",
+                    dueDate = "2026-01-01"
+                )
             )
+            Mockito.`when`(apiService.updateTask(anyString(), anyMap())).thenReturn(successfulResponse)
 
             // Act
             repository.updateStar(star)
 
             // Assert
-            assertTrue("Wallpaper update lambda should be called", wallpaperUpdateCalled)
+            assertTrue("Wallpaper update SHOULD be called on sync success", wallpaperUpdateCalled)
         }
     }
 
     @Test
-    fun `deleteStar should trigger immediate wallpaper update via lambda`() = runBlocking {
+    fun `updateStar should NOT trigger wallpaper update on failure`() = runBlocking {
         Mockito.mockStatic(android.util.Log::class.java).use {
             // Arrange
-            val star = Star(
-                x = 100f,
-                y = 100f,
-                title = "Test Star",
-                urgency = 1,
-                dueDate = null,
-                id = "test-id"
-            )
+            val star = createStar()
+            val errorResponse = Response.error<TaskResponse>(500, ResponseBody.create(null, "Error"))
+            Mockito.`when`(apiService.updateTask(anyString(), anyMap())).thenReturn(errorResponse)
+
+            // Act
+            repository.updateStar(star)
+
+            // Assert
+            assertFalse("Wallpaper update should NOT be called on sync failure", wallpaperUpdateCalled)
+        }
+    }
+
+    @Test
+    fun `deleteStar should trigger wallpaper update ONLY on success`() = runBlocking {
+        Mockito.mockStatic(android.util.Log::class.java).use {
+            // Arrange
+            val star = createStar()
+            val successfulResponse = Response.success<Void>(null)
+            Mockito.`when`(apiService.deleteTask(anyString())).thenReturn(successfulResponse)
 
             // Act
             repository.deleteStar(star)
 
             // Assert
-            assertTrue("Wallpaper update lambda should be called", wallpaperUpdateCalled)
+            assertTrue("Wallpaper update SHOULD be called on sync success", wallpaperUpdateCalled)
         }
     }
+
+    @Test
+    fun `deleteStar should NOT trigger wallpaper update on failure`() = runBlocking {
+        Mockito.mockStatic(android.util.Log::class.java).use {
+            // Arrange
+            val star = createStar()
+            val errorResponse = Response.error<Void>(500, ResponseBody.create(null, "Error"))
+            Mockito.`when`(apiService.deleteTask(anyString())).thenReturn(errorResponse)
+
+            // Act
+            repository.deleteStar(star)
+
+            // Assert
+            assertFalse("Wallpaper update should NOT be called on sync failure", wallpaperUpdateCalled)
+        }
+    }
+
+    private fun createStar() = Star(
+        x = 100f,
+        y = 100f,
+        title = "Test Star",
+        urgency = 1,
+        dueDate = null,
+        id = "test-id"
+    )
 }
 
 // Minimal Fakes needed for test to run without errors
@@ -118,33 +175,4 @@ class FakeStarDao : StarDao {
     override suspend fun deleteStar(star: StarEntity) {}
     override suspend fun deleteStarById(id: String) {}
     override suspend fun deleteAllStars() {}
-}
-
-class FakeApiService : ApiService {
-    override suspend fun createTask(body: Map<String, String>) = Response.error<TaskResponse>(500, ResponseBody.create(null, "Fake"))
-    override suspend fun updateTask(id: String, body: Map<String, Any>) = Response.error<TaskResponse>(500, ResponseBody.create(null, "Fake"))
-    override suspend fun deleteTask(id: String) = Response.error<Void>(500, ResponseBody.create(null, "Fake"))
-    
-    // Stub required members as TODO or minimal defaults
-    override suspend fun register(body: Map<String, String>) = TODO()
-    override suspend fun login(body: Map<String, String>) = TODO()
-    override suspend fun refreshToken(body: Map<String, String>) = TODO()
-    override suspend fun regenerateWallpaperToken() = TODO()
-    override suspend fun getWallpaper(t: String?, r: String?, e: Boolean, ts: Long?, tz: String?) = TODO()
-    override suspend fun uploadWallpaper(image: okhttp3.MultipartBody.Part) = TODO()
-    override suspend fun parseTaskLLM(body: com.cosmicocean.model.ParseRequest) = TODO()
-    override suspend fun getTasks() = TODO()
-    override suspend fun getTask(id: String) = TODO()
-    override suspend fun clearAllTasks() = TODO()
-    override suspend fun snoozeTask(id: String, body: Map<String, Any>) = TODO()
-    override suspend fun markDoneForToday() = TODO()
-    override suspend fun reportAppOpen() = TODO()
-    override suspend fun getUser() = TODO()
-    override suspend fun updateUser(body: Map<String, String>) = TODO()
-    override suspend fun deleteAccount() = TODO()
-    override suspend fun getPreferences() = TODO()
-    override suspend fun updatePreferences(body: Map<String, Any>) = TODO()
-    override suspend fun exportUserData() = TODO()
-    override suspend fun getWeeklyStats() = TODO()
-    override suspend fun getGraduationStats() = TODO()
 }

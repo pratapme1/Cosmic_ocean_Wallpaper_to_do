@@ -204,6 +204,9 @@ class TaskRepository(
                 // Insert with new UUID
                 starDao.insertStar(star.toEntity())
                 Log.d(TAG, "✅ Task synced: local=$oldId -> backend=${star.id}")
+
+                // Trigger immediate wallpaper update ONLY after successful sync
+                triggerImmediateWallpaperUpdate()
             } else {
                 Log.e(TAG, "Backend create failed: ${response.code()} - ${response.errorBody()?.string()}")
             }
@@ -211,9 +214,6 @@ class TaskRepository(
             // Log error but don't fail - offline mode
             Log.e(TAG, "Failed to sync new star $oldId to backend: ${e.message}", e)
         }
-
-        // Trigger immediate wallpaper update to reflect new task
-        triggerImmediateWallpaperUpdate()
     }
 
     suspend fun updateStar(star: Star) {
@@ -224,7 +224,7 @@ class TaskRepository(
         try {
             // If star is completed, call the complete endpoint
             if (star.isCompleted && star.completedAt != null) {
-                android.util.Log.d("TaskRepository", "Sending PATCH for completed task: ${star.id}")
+                android.util.Log.d(TAG, "Sending PATCH for completed task: ${star.id}")
                 val response = apiService.updateTask(
                     star.id,
                     mapOf(
@@ -234,11 +234,13 @@ class TaskRepository(
                         "y" to star.particle.y.toString()
                     )
                 )
-                android.util.Log.d("TaskRepository", "PATCH response: ${response.code()}")
+                if (response.isSuccessful) {
+                    triggerImmediateWallpaperUpdate()
+                }
             }
             // If star is archived, call the update endpoint with archived flag
             else if (star.isArchived && star.archivedAt != null) {
-                apiService.updateTask(
+                val response = apiService.updateTask(
                     star.id,
                     mapOf(
                         "archived" to true,
@@ -247,10 +249,13 @@ class TaskRepository(
                         "y" to star.particle.y.toString()
                     )
                 )
+                if (response.isSuccessful) {
+                    triggerImmediateWallpaperUpdate()
+                }
             }
             // Otherwise, just update task details
             else {
-                apiService.updateTask(
+                val response = apiService.updateTask(
                     star.id,
                     mapOf(
                         "rawTitle" to star.title,  // FIX: Use rawTitle to trigger NLP re-parsing
@@ -259,15 +264,16 @@ class TaskRepository(
                         "y" to star.particle.y.toString()
                     )
                 )
+                if (response.isSuccessful) {
+                    // Trigger immediate wallpaper update ONLY after successful sync
+                    triggerImmediateWallpaperUpdate()
+                }
             }
         } catch (e: Exception) {
             // Log error but don't fail - offline mode
             android.util.Log.e("TaskRepository", "Failed to sync star ${star.id} to backend: ${e.message}", e)
             println("Failed to sync star ${star.id} to backend: ${e.message}")
         }
-
-        // Trigger immediate wallpaper update to reflect task changes
-        triggerImmediateWallpaperUpdate()
     }
 
     suspend fun deleteStar(star: Star) {
@@ -277,14 +283,15 @@ class TaskRepository(
 
         // CRITICAL FIX: Sync deletion to backend API
         try {
-            apiService.deleteTask(star.id)
+            val response = apiService.deleteTask(star.id)
+            if (response.isSuccessful) {
+                // Trigger immediate wallpaper update ONLY after successful sync
+                triggerImmediateWallpaperUpdate()
+            }
         } catch (e: Exception) {
             // Log error but don't fail - offline mode
             println("Failed to sync deletion of star ${star.id} to backend: ${e.message}")
         }
-
-        // Trigger immediate wallpaper update to reflect task deletion
-        triggerImmediateWallpaperUpdate()
     }
 
     private fun StarEntity.toDomain(): Star {

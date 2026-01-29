@@ -100,85 +100,9 @@ Respond with JSON only:
 function validateAndClean(llmResponse, input) {
   const inputLower = input.toLowerCase();
 
-  // Date validation - strip if not mentioned
-  const dateWords = [
-    // Common dates and abbreviations
-    'tomorrow', 'today', 'yesterday', 'tmrw', 'tday', 'ystrdy',
-    'tmw', 'tmr', 'tmrw', // More abbreviations for tomorrow
-    'nxt', 'next', // "nxt week", "next week"
-
-    // Weekday names
-    'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
-    'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun',
-
-    // Relative time references
-    'next week', 'next month', 'this week', 'this weekend', 'weekend',
-    'last week', 'last month',
-
-    // End of period references
-    'end of day', 'eod', 'end of week', 'eow', 'end of month', 'eom',
-    'by end of', // "by end of day", "by end of week"
-
-    // Due/deadline keywords
-    'due', 'deadline', 'before', 'until',
-
-    // Month names
-    'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
-
-    // Regex patterns
-    /\d{1,2}\/\d{1,2}/, // "12/25"
-    /\d{4}-\d{2}-\d{2}/, // "2026-01-15"
-    /\bon (monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i, // "on friday"
-    /\b(due|deadline|by)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i, // "due friday"
-    /\bfinish (this|next) week/i, // "finish this week"
-    /\bin\s+\d+\s*days?\b/i, // "in 3 days", "in 1 day"
-    /\b\d+\s*days?\s*(from now|away)\b/i, // "3 days from now", "5 days away"
-    /\bin\s+\d+\s*(min|mins|minute|minutes|m)\b/i, // "in 30 min", "in 10 minutes"
-    /\bin\s+\d+\s*(hr|hrs|hour|hours|h)\b/i, // "in 2 hours", "in 1h"
-    /\bin\s+\d+(\.\d+)?\s*(hr|hrs|hour|hours|h)\b/i, // "in 1.5 hours"
-  ];
-  const hasDateMention = dateWords.some(word => {
-    if (word instanceof RegExp) {
-      return word.test(inputLower);
-    }
-    return inputLower.includes(word);
-  });
-
-  // Time validation - define timeWords first for use in both checks
-  // Use specific regex for 'at' and 'in' to avoid matching "at home" or "in garbage"
-  const timeWords = [
-    /\bat\s+\d/i,     // "at 5", "at 12"
-    /\by\s+\d/i,      // "by 5"
-    /\bin\s+\d/i,     // "in 10"
-    'morning', 'afternoon', 'evening', 'noon', 'midnight', 'pm', 'am',
-    /\d{1,2}:\d{2}/,
-    /\d{1,2}(am|pm)/
-  ];
-
-  // FIX v1.6.0: Don't strip date if we have a time expression
-  // "standup at 9am" has a time, so the LLM setting today's date is CORRECT behavior
-  const hasTimeExpression = timeWords.some(word => {
-    if (word instanceof RegExp) {
-      return word.test(inputLower);
-    }
-    return inputLower.includes(word);
-  });
-
-  if (!hasDateMention && !hasTimeExpression && llmResponse.dueDate) {
-    console.warn(`[LLM Parser] Hallucinated date detected. Input: "${input}", LLM date: ${llmResponse.dueDate}`);
-    llmResponse.dueDate = null;
-  }
-  const hasTimeMention = timeWords.some(word => {
-    if (word instanceof RegExp) {
-      return word.test(inputLower);
-    }
-    return inputLower.includes(word);
-  });
-
-  if (!hasTimeMention && llmResponse.dueTime) {
-    console.warn(`[LLM Parser] Hallucinated time detected. Input: "${input}", LLM time: ${llmResponse.dueTime}`);
-    llmResponse.dueTime = null;
-  }
+  // REMOVED: Aggressive date/time validation (keyword checking)
+  // We now trust the LLM to extract "implicit" dates that strict regex might miss
+  // e.g. "Submit Q3 report" -> LLM knows Q3 date vs Regex misses it
 
   // Clean task name - remove trailing prepositions
   if (llmResponse.task) {
@@ -206,9 +130,6 @@ function validateAndClean(llmResponse, input) {
 
   // SEMANTIC TIME-BASED PRIORITY UPGRADE
   // If LLM set a due_time, check if it's within 2 hours → auto-upgrade to Priority 1
-  // This fixes the issue where LLM parses the time correctly but doesn't infer urgency from it
-  // NOTE: This function is called from validateAndClean, which doesn't have access to timezone
-  // Priority upgrade uses UTC time - this is acceptable since it's relative time (2 hours is same in any TZ)
   if (llmResponse.dueTime && llmResponse.priority !== 1) {
     try {
       const now = new Date();
@@ -248,6 +169,7 @@ function validateAndClean(llmResponse, input) {
 
   return llmResponse;
 }
+
 
 /**
  * Parse task using Gemini LLM

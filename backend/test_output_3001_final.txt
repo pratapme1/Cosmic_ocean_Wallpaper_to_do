@@ -1,0 +1,14 @@
+>>> STARTING E2E TEST FOR CUSTOM WALLPAPER <<<
+
+1. Authentication...
+   Register Response:  {"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2ZTg3YzliYy1lZTZmLTQ3MzMtODE4Mi02MTE0ZDE3NzgxYTQiLCJlbWFpbCI6InRlc3RfdXNlcl8xNzY5NjUyNzU1OTU5QGV4YW1wbGUuY29tIiwiaWF0IjoxNzY5NjUyNzYxLCJleHAiOjE3NzAyNTc1NjF9.EoIoHy62Xwm9z4NQdr5LhJkVrilt3Z-s89hq9h9p7co","refreshToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2ZTg3YzliYy1lZTZmLTQ3MzMtODE4Mi02MTE0ZDE3NzgxYTQiLCJlbWFpbCI6InRlc3RfdXNlcl8xNzY5NjUyNzU1OTU5QGV4YW1wbGUuY29tIiwicmVmcmVzaCI6dHJ1ZSwiaWF0IjoxNzY5NjUyNzYxLCJleHAiOjE3NzIyNDQ3NjF9.vrC5hRvtSAhLvNu4TbpDZA8E2JEDaZduVajlo-_rJVU","wallpaperToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2ZTg3YzliYy1lZTZmLTQ3MzMtODE4Mi02MTE0ZDE3NzgxYTQiLCJzY29wZSI6IndhbGxwYXBlciIsImlhdCI6MTc2OTY1Mjc2MSwiZXhwIjoxODAxMTg4NzYxfQ.9jzexbb8XkcUGk_XMU4PdJgeyIRCupkFIbo8DH8zjH4","user":{"id":"6e87c9bc-ee6f-4733-8182-6114d17781a4","email":"test_user_1769652755959@example.com","theme":"cosmic","timezone":"UTC","resolution":"1170x2532"}}
+   Registered new user. Token obtained.
+
+2. Uploading Custom Wallpaper...
+   Upload Successful: {"success":true,"message":"Wallpaper uploaded successfully","data":{"id":"6e87c9bc-ee6f-4733-8182-6114d17781a4","email":"test_user_1769652755959@example.com","password_hash":"$2b$10$u1uIS3OE9gjYl5V9mX5KeuWMT.ix/XjlxHGeKL7Fv7EL5agqrAfBS","theme":"cosmic","timezone":"UTC","resolution":"1170x2532","wallpaper_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2ZTg3YzliYy1lZTZmLTQ3MzMtODE4Mi02MTE0ZDE3NzgxYTQiLCJzY29wZSI6IndhbGxwYXBlciIsImlhdCI6MTc2OTY1Mjc2MSwiZXhwIjoxODAxMTg4NzYxfQ.9jzexbb8XkcUGk_XMU4PdJgeyIRCupkFIbo8DH8zjH4","setup_complete":false,"done_for_today":false,"done_for_today_at":null,"created_at":"2026-01-29T02:12:41.073Z","updated_at":"2026-01-29T02:12:41.110Z"}}
+
+3. Verifying User Preferences...
+   User Preferences:  undefined
+
+!!! TEST FAILED !!!
+Cannot read properties of undefined (reading 'wallpaper_mode')

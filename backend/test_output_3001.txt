@@ -1,0 +1,10 @@
+>>> STARTING E2E TEST FOR CUSTOM WALLPAPER <<<
+
+1. Authentication...
+   Registered new user. Token obtained.
+
+2. Uploading Custom Wallpaper...
+
+!!! TEST FAILED !!!
+Status: 401
+Data: { error: 'Invalid or expired token' }

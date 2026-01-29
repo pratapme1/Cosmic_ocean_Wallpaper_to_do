@@ -1,0 +1,36 @@
+>>> STARTING E2E TEST FOR CUSTOM WALLPAPER <<<
+
+1. Authentication...
+   Register Response:  {"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJlOTUwOWM1ZC1kY2VkLTRkODQtYjM5Ny0zM2U2MTM3MzEyODMiLCJlbWFpbCI6InRlc3RfdXNlcl8xNzY5NjUyOTI1NjY3QGV4YW1wbGUuY29tIiwiaWF0IjoxNzY5NjUyOTI4LCJleHAiOjE3NzAyNTc3Mjh9.9JRgE7OElS77L7jt_ELTnDlEKqNgQmN5t_hhf8DgnA4","refreshToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJlOTUwOWM1ZC1kY2VkLTRkODQtYjM5Ny0zM2U2MTM3MzEyODMiLCJlbWFpbCI6InRlc3RfdXNlcl8xNzY5NjUyOTI1NjY3QGV4YW1wbGUuY29tIiwicmVmcmVzaCI6dHJ1ZSwiaWF0IjoxNzY5NjUyOTI4LCJleHAiOjE3NzIyNDQ5Mjh9._WpVJtPWpmAy-kNCwdfS6NptfEHny6xPKLODIRh4ars","wallpaperToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJlOTUwOWM1ZC1kY2VkLTRkODQtYjM5Ny0zM2U2MTM3MzEyODMiLCJzY29wZSI6IndhbGxwYXBlciIsImlhdCI6MTc2OTY1MjkyOCwiZXhwIjoxODAxMTg4OTI4fQ.78FHEwaEXlrJ5lG5QBGFalrwe8zOr-C8msc7l-DuSyg","user":{"id":"e9509c5d-dced-4d84-b397-33e613731283","email":"test_user_1769652925667@example.com","theme":"cosmic","timezone":"UTC","resolution":"1170x2532"}}
+   Registered new user. Token obtained.
+
+2. Uploading Custom Wallpaper...
+   Upload Successful: {"success":true,"message":"Wallpaper uploaded successfully","data":{"wallpaper_mode":"custom","custom_wallpaper_path":"/home/vi/supernova/backend/uploads/user-e9509c5d-dced-4d84-b397-33e613731283-1769652928990.png"}}
+
+3. Verifying User Preferences...
+   User Data:  {
+  id: 'e9509c5d-dced-4d84-b397-33e613731283',
+  email: 'test_user_1769652925667@example.com',
+  theme: 'cosmic',
+  resolution: '1170x2532',
+  display_mode: 'one_thing',
+  timezone: 'UTC',
+  setup_complete: false,
+  done_for_today: false,
+  done_for_today_at: null,
+  wallpaper_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJlOTUwOWM1ZC1kY2VkLTRkODQtYjM5Ny0zM2U2MTM3MzEyODMiLCJzY29wZSI6IndhbGxwYXBlciIsImlhdCI6MTc2OTY1MjkyOCwiZXhwIjoxODAxMTg4OTI4fQ.78FHEwaEXlrJ5lG5QBGFalrwe8zOr-C8msc7l-DuSyg',
+  created_at: '2026-01-28T20:45:28.343Z',
+  updated_at: '2026-01-28T20:45:29.083Z',
+  default_privacy_level: 'public',
+  auto_hide_work_tasks: false,
+  work_hours_start: '09:00:00',
+  work_hours_end: '17:00:00',
+  biometric_reveal_enabled: true,
+  hide_all_tasks_mode: false,
+  wallpaper_mode: 'custom',
+  custom_wallpaper_path: '/home/vi/supernova/backend/uploads/user-e9509c5d-dced-4d84-b397-33e613731283-1769652928990.png'
+}
+   SUCCESS: wallpaper_mode is 'custom'
+   SUCCESS: custom_wallpaper_path is set to /home/vi/supernova/backend/uploads/user-e9509c5d-dced-4d84-b397-33e613731283-1769652928990.png
+
+>>> E2E TEST COMPLETED SUCCESSFULLY <<<

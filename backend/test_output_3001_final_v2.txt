@@ -1,0 +1,28 @@
+>>> STARTING E2E TEST FOR CUSTOM WALLPAPER <<<
+
+1. Authentication...
+   Register Response:  {"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4MDcwNTVmZi0yMjliLTQwNjUtYTMzNi00NWRmOTQ2NmE0N2EiLCJlbWFpbCI6InRlc3RfdXNlcl8xNzY5NjUyNzk0NDkyQGV4YW1wbGUuY29tIiwiaWF0IjoxNzY5NjUyNzk0LCJleHAiOjE3NzAyNTc1OTR9.VNDrah7AsMvRLbsJlNUqKNq9HoX8ZdUA7isUa0PAlW8","refreshToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4MDcwNTVmZi0yMjliLTQwNjUtYTMzNi00NWRmOTQ2NmE0N2EiLCJlbWFpbCI6InRlc3RfdXNlcl8xNzY5NjUyNzk0NDkyQGV4YW1wbGUuY29tIiwicmVmcmVzaCI6dHJ1ZSwiaWF0IjoxNzY5NjUyNzk0LCJleHAiOjE3NzIyNDQ3OTR9.QPQdAhWCUF8JL_pBYb0ETBjLf9ccCp_Q-d56duy3kUw","wallpaperToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4MDcwNTVmZi0yMjliLTQwNjUtYTMzNi00NWRmOTQ2NmE0N2EiLCJzY29wZSI6IndhbGxwYXBlciIsImlhdCI6MTc2OTY1Mjc5NCwiZXhwIjoxODAxMTg4Nzk0fQ.nKa_TMF6TcTlE3pAjRMIDFJM6hIPDoTotTQDh8m7HKE","user":{"id":"807055ff-229b-4065-a336-45df9466a47a","email":"test_user_1769652794492@example.com","theme":"cosmic","timezone":"UTC","resolution":"1170x2532"}}
+   Registered new user. Token obtained.
+
+2. Uploading Custom Wallpaper...
+   Upload Successful: {"success":true,"message":"Wallpaper uploaded successfully","data":{"id":"807055ff-229b-4065-a336-45df9466a47a","email":"test_user_1769652794492@example.com","password_hash":"$2b$10$4pq5J.OQjHLXrTOGe0RP3esQoAcmK8OmJC0gWftwYeW6TEb9YBSMC","theme":"cosmic","timezone":"UTC","resolution":"1170x2532","wallpaper_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4MDcwNTVmZi0yMjliLTQwNjUtYTMzNi00NWRmOTQ2NmE0N2EiLCJzY29wZSI6IndhbGxwYXBlciIsImlhdCI6MTc2OTY1Mjc5NCwiZXhwIjoxODAxMTg4Nzk0fQ.nKa_TMF6TcTlE3pAjRMIDFJM6hIPDoTotTQDh8m7HKE","setup_complete":false,"done_for_today":false,"done_for_today_at":null,"created_at":"2026-01-29T02:13:14.611Z","updated_at":"2026-01-29T02:13:14.631Z"}}
+
+3. Verifying User Preferences...
+   User Data:  {
+  id: '807055ff-229b-4065-a336-45df9466a47a',
+  email: 'test_user_1769652794492@example.com',
+  password_hash: '$2b$10$4pq5J.OQjHLXrTOGe0RP3esQoAcmK8OmJC0gWftwYeW6TEb9YBSMC',
+  theme: 'cosmic',
+  timezone: 'UTC',
+  resolution: '1170x2532',
+  wallpaper_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4MDcwNTVmZi0yMjliLTQwNjUtYTMzNi00NWRmOTQ2NmE0N2EiLCJzY29wZSI6IndhbGxwYXBlciIsImlhdCI6MTc2OTY1Mjc5NCwiZXhwIjoxODAxMTg4Nzk0fQ.nKa_TMF6TcTlE3pAjRMIDFJM6hIPDoTotTQDh8m7HKE',
+  setup_complete: false,
+  done_for_today: false,
+  done_for_today_at: null,
+  created_at: '2026-01-29T02:13:14.611Z',
+  updated_at: '2026-01-29T02:13:14.631Z'
+}
+   FAILURE: wallpaper_mode is undefined
+   FAILURE: custom_wallpaper_path is missing
+
+>>> E2E TEST COMPLETED SUCCESSFULLY <<<

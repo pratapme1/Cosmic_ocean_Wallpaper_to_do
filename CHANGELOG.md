@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.1] - 2026-01-29 (Android + Backend)
+
+### Fixed - Wallpaper Update Race Condition 🛠️
+
+**Status:** ✅ COMPLETE
+**Test Coverage:** Android Unit tests verified (success/failure paths).
+
+#### Key Changes
+- **Synchronous Update Logic**: Updated `TaskRepository.kt` to trigger wallpaper updates *only* after a successful backend API response.
+- **Race Condition Prevention**: Prevents the wallpaper from refreshing with stale data if the backend sync is still in progress or failed.
+- **Reliability**: Ensures the lock screen always reflects the actual server-side task state.
+
+#### Android
+- **Version**: 2.2.1 (versionCode 17)
+- **APK**: `CosmicOcean_V2.2.1.apk`
+
+---
+
 ## [2.2.0] - 2026-01-29 (Android + Backend)
 
 ### Enhanced - Wallpaper Upload Experience 🖼️

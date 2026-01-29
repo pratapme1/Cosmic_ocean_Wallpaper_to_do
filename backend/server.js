@@ -109,9 +109,9 @@ app.use(globalLimiter);
 
 // --- REQUEST LOGGER ---
 app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-    console.log(`Auth: ${req.headers['authorization'] || 'none'}`);
-    next();
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  console.log(`Auth: ${req.headers['authorization'] || 'none'}`);
+  next();
 });
 
 // Database Connection Pool - Lazy initialization for serverless
@@ -335,7 +335,7 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
         AND (snoozed_until IS NULL OR snoozed_until < NOW())
       `, [userId]);
 
-      const prioritized = prioritizeTasks(result.rows);
+      const prioritized = prioritizeTasks(result.rows, { timezone });
       const topTasks = prioritized.slice(0, 3);
       const count = Math.max(0, prioritized.length - 3);
 
@@ -391,7 +391,18 @@ app.get('/api/tasks', optionalAuth, async (req, res) => {
       AND (archived = false OR archived IS NULL)
       AND (snoozed_until IS NULL OR snoozed_until < NOW())
     `, [userId]);
-    const prioritized = prioritizeTasks(result.rows, { location, timeOfDay: time });
+    // FIX: Fetch user timezone for accurate prioritization
+    let userTimezone = 'UTC';
+    try {
+      const userRes = await req.dbClient.query('SELECT timezone FROM users WHERE id = $1', [userId]);
+      if (userRes.rows.length > 0 && userRes.rows[0].timezone) {
+        userTimezone = userRes.rows[0].timezone;
+      }
+    } catch (tzErr) {
+      console.warn('Failed to fetch timezone for tasks list:', tzErr);
+    }
+
+    const prioritized = prioritizeTasks(result.rows, { location, timeOfDay: time, timezone: userTimezone });
     res.json(prioritized);
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
@@ -540,7 +551,7 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
   try {
     const userId = getUserId(req);
     const { rawTitle, title: directTitle, priority, context_location, context_time, x, y, is_subtask, is_recurring, echo_interval,
-            is_private, privacy_level, privacy_display } = req.body;
+      is_private, privacy_level, privacy_display } = req.body;
 
     // FIX 2026-01-06: Query user timezone and privacy defaults
     let userTimezone = 'UTC'; // default
@@ -912,7 +923,7 @@ app.patch('/api/tasks/:id', optionalAuth, async (req, res) => {
     if (updates.archived === true) fields.push(`archived_at = NOW()`);
     const query = `UPDATE tasks SET ${fields.join(', ')}, updated_at = NOW() WHERE user_id = $1 AND id = $2 RETURNING *`;
     const result = await req.dbClient.query(query, values);
-    
+
     if (result.rows.length > 0 && updates.completed === true) {
       const viaWidget = updates.source === 'widget' ? 1 : 0;
       const metricQuery = `
