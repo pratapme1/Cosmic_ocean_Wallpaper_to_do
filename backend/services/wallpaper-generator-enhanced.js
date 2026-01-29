@@ -466,19 +466,41 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now(), tim
     // CUSTOM WALLPAPER MODE (Epic 11)
     // =====================================
     if (user.wallpaper_mode === 'custom' && user.custom_wallpaper_path) {
-      const fs = require('fs');
-      if (fs.existsSync(user.custom_wallpaper_path)) {
+      let customImageLoaded = false;
+
+      try {
         console.log(`[Wallpaper] Using custom wallpaper: ${user.custom_wallpaper_path}`);
 
+        let imageBuffer;
+
+        // Check if it's a URL (Supabase Storage) or local path
+        if (user.custom_wallpaper_path.startsWith('http://') || user.custom_wallpaper_path.startsWith('https://')) {
+          // Fetch from URL (Supabase Storage)
+          const axios = require('axios');
+          const response = await axios.get(user.custom_wallpaper_path, {
+            responseType: 'arraybuffer',
+            timeout: 10000 // 10 second timeout
+          });
+          imageBuffer = Buffer.from(response.data);
+          console.log(`[Wallpaper] Fetched custom image from URL: ${imageBuffer.length} bytes`);
+        } else {
+          // Legacy: local file path (won't work on Vercel but kept for compatibility)
+          const fs = require('fs');
+          if (fs.existsSync(user.custom_wallpaper_path)) {
+            imageBuffer = fs.readFileSync(user.custom_wallpaper_path);
+          } else {
+            throw new Error('Local file not found');
+          }
+        }
+
         // Layer 1: Custom Image (resized/cropped to fit)
-        const customImage = await sharp(user.custom_wallpaper_path)
+        const customImage = await sharp(imageBuffer)
           .resize(width, height, { fit: 'cover' })
           .toBuffer();
 
         layers.push({ input: customImage, blend: 'over' });
 
         // Layer 2: Dark Overlay (for text readability)
-        // using simple rect SVG
         const overlaySvg = `
           <svg width="${width}" height="${height}">
             <rect width="${width}" height="${height}" fill="black" opacity="0.4" />
@@ -486,10 +508,13 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now(), tim
         `;
         layers.push({ input: Buffer.from(overlaySvg), blend: 'over' });
 
-        // Skip standard background/particle/transition generation
-      } else {
-        console.warn(`[Wallpaper] Custom wallpaper file missing: ${user.custom_wallpaper_path}, falling back to generated`);
-        // Fallback to generated if file missing
+        customImageLoaded = true;
+      } catch (err) {
+        console.warn(`[Wallpaper] Failed to load custom wallpaper: ${err.message}, falling back to generated`);
+      }
+
+      // Fallback to generated if custom image failed to load
+      if (!customImageLoaded) {
         const backgroundSvg = generateBackgroundLayer(layout, colors, animState);
         layers.push({ input: Buffer.from(backgroundSvg), blend: 'over' });
 
