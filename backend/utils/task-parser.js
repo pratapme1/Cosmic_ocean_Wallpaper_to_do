@@ -375,16 +375,29 @@ function inferPriority(text, dueDate) {
 /**
  * Detect category from keywords and context tags
  */
-function detectCategory(text, contexts) {
+function detectCategory(text, contexts = []) {
   const lowerText = text.toLowerCase();
   const scores = {};
+
+  // Tie-breaker priority (lower index = higher priority in case of tie)
+  const TIE_BREAKER_PRIORITY = ['health', 'work', 'finance', 'errands', 'social', 'learning', 'personal'];
 
   // Check each category's keywords
   for (const [category, keywords] of Object.entries(CATEGORY_PATTERNS)) {
     scores[category] = 0;
     for (const keyword of keywords) {
-      if (lowerText.includes(keyword.toLowerCase())) {
-        scores[category]++;
+      if (keyword.startsWith('@')) {
+        // Context tag match: HIGH WEIGHT (+5)
+        if (contexts.includes(keyword) || lowerText.includes(keyword)) {
+          scores[category] += 5;
+        }
+      } else {
+        // General keyword match: STANDARD WEIGHT (+1)
+        // Use word boundary to avoid partial matches (e.g., "ear" in "learning")
+        const regex = new RegExp(`\\b${keyword.toLowerCase()}\\b`, 'i');
+        if (regex.test(lowerText)) {
+          scores[category] += 1;
+        }
       }
     }
   }
@@ -393,14 +406,18 @@ function detectCategory(text, contexts) {
   let maxScore = 0;
   let detectedCategory = 'general';
 
-  for (const [category, score] of Object.entries(scores)) {
+  // Sort by tie-breaker priority so we visit preferred categories first in matches
+  for (const category of TIE_BREAKER_PRIORITY) {
+    const score = scores[category] || 0;
     if (score > maxScore) {
       maxScore = score;
       detectedCategory = category;
+    } else if (score === maxScore && score > 0) {
+      // It's a tie, but we already have the one with better tie-breaker priority 
+      // because we are iterating in priority order.
     }
   }
 
-  // Only return category if we have at least one match
   return maxScore > 0 ? detectedCategory : 'general';
 }
 

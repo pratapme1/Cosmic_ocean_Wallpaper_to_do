@@ -92,39 +92,42 @@ const CATEGORY_PATTERNS = {
     'meeting', 'email', 'report', 'presentation', 'project',
     'deadline', 'client', 'team', 'review', 'submit',
     'proposal', 'budget', 'invoice', 'contract', 'colleague',
-    'standup', 'scrum', 'sprint', 'deploy', 'code',
+    'standup', 'scrum', 'sprint', 'deploy', 'code', 'office',
+    'work', 'job', 'task', 'assignment', 'presentation',
     '@work', '@office'
   ],
   personal: [
     'family', 'home', 'house', 'clean', 'organize',
-    'pet', 'garden', 'laundry', 'cook',
+    'pet', 'garden', 'laundry', 'cook', 'personal',
+    'hobby', 'relax', 'vacation', 'trip', 'travel',
     '@home'
-    // Note: 'friend' moved to social to avoid conflict with "dinner with friends"
   ],
   health: [
     'workout', 'exercise', 'gym', 'run', 'yoga', 'meditate',
     'doctor', 'dentist', 'medicine', 'vitamin', 'sleep',
     'diet', 'nutrition', 'weight', 'health', 'fitness',
+    'sport', 'training', 'physical', 'mental', 'wellbeing',
     '@gym'
   ],
   finance: [
     'pay', 'bill', 'bank', 'budget', 'invest', 'tax',
     'insurance', 'credit', 'loan', 'save', 'money',
-    'expense', 'receipt', 'refund'
+    'expense', 'receipt', 'refund', 'payment', 'cost'
   ],
   learning: [
     'learn', 'study', 'read', 'book', 'course', 'class',
     'practice', 'tutorial', 'lesson', 'exam', 'test',
-    'research', 'skill', 'education'
+    'research', 'skill', 'education', 'workshop', 'study'
   ],
   social: [
     'call', 'meet', 'dinner', 'lunch', 'coffee', 'party',
     'event', 'birthday', 'anniversary', 'gift', 'visit',
-    'hangout', 'catch up', 'friend'
+    'hangout', 'catch up', 'friend', 'date', 'celebration'
   ],
   errands: [
     'buy', 'shop', 'store', 'pick up', 'drop off', 'return',
     'grocery', 'pharmacy', 'post office', 'dry clean',
+    'shopping', 'market', 'mall',
     '@errands'
   ]
 };
