@@ -256,7 +256,9 @@ router.get('/preferences', async (req, res) => {
          COALESCE(time_of_day_mode, 'auto') as time_of_day_mode,
          COALESCE(manual_time_period, 'morning') as manual_time_period,
          COALESCE(weather_overlay_enabled, true) as weather_overlay_enabled,
-         COALESCE(particle_intensity, 'medium') as particle_intensity
+         COALESCE(particle_intensity, 'medium') as particle_intensity,
+         COALESCE(wallpaper_mode, 'generated') as wallpaper_mode,
+         custom_wallpaper_path
        FROM users WHERE id = $1`,
       [userId]
     );
@@ -276,7 +278,9 @@ router.get('/preferences', async (req, res) => {
              theme, resolution, display_mode, timezone,
              default_privacy_level, auto_hide_work_tasks,
              work_hours_start, work_hours_end,
-             biometric_reveal_enabled, hide_all_tasks_mode
+             biometric_reveal_enabled, hide_all_tasks_mode,
+             COALESCE(wallpaper_mode, 'generated') as wallpaper_mode,
+             custom_wallpaper_path
            FROM users WHERE id = $1`,
           [req.user.userId]
         );
