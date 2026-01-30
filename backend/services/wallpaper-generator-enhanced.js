@@ -378,6 +378,10 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now(), tim
     // INTELLIGENCE LAYER INTEGRATION
     // =====================================
 
+    // Get user stats for intelligent messaging
+    const stats = statsAggregator.computeStats(allTasks);
+    console.log(`[Intelligence] Stats: streak=${stats.streakDays}, today=${stats.completedToday}`);
+
     // Get atmosphere state with urgency calculation and visual params
     const atmosphere = atmosphereController.calculateState(tasks, stats, timezone);
     const urgency = atmosphere.state;
@@ -385,10 +389,6 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now(), tim
 
     console.log(`[Intelligence] Atmosphere: ${urgency} (score: ${atmosphere.urgencyScore})`);
     console.log(`[Intelligence] Visual params: particles=${visualParams.particleCount}, speed=${visualParams.animationSpeed}`);
-
-    // Get user stats for intelligent messaging
-    const stats = statsAggregator.computeStats(allTasks);
-    console.log(`[Intelligence] Stats: streak=${stats.streakDays}, today=${stats.completedToday}`);
 
     // Generate intelligent message (Epic 8: LLM-powered with fallback)
     let intelligentMessage;
