@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.8] - 2026-01-30 (Backend Hotfix)
+
+### Fixed - Critical Database Performance Indexes 🚀
+- **Missing Indexes**: Identified that the `tasks` table lacked indexes on `user_id`, `completed`, and `due_date`, causing full table scans for every wallpaper generation.
+- **Migration 013**: Added `idx_tasks_user_status`, `idx_tasks_user_due`, and `idx_users_wallpaper_token` to make read queries practically instantaneous and dramatically reduce database load.
+
+---
+
 ## [2.2.7] - 2026-01-30 (Backend Hotfix)
 
 ### Fixed - Production Database Timeouts 🔥
