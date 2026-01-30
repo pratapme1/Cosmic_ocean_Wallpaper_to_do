@@ -222,7 +222,119 @@ async function getRecentMessages(userId, limit = 20) {
   }
 }
 
-// ... helper functions (selectNextVoice, selectNextIntent, buildFreshnessConstraints, buildMessagePrompt, validateMessages) remain unchanged ...
+// Helper functions
+
+function selectNextVoice(recentMessages, context) {
+  // Avoid recent voices (last 5)
+  const recentVoices = new Set(recentMessages.slice(0, 5).map(m => m.voice));
+  const availableVoices = Object.keys(VOICES).filter(v => !recentVoices.has(v));
+
+  // If all used, pick least recently used
+  if (availableVoices.length === 0) {
+    const counts = {};
+    recentMessages.forEach(m => {
+      counts[m.voice] = (counts[m.voice] || 0) + 1;
+    });
+    // Sort by usage (ascending)
+    const sorted = Object.keys(VOICES).sort((a, b) => (counts[a] || 0) - (counts[b] || 0));
+    return sorted[0];
+  }
+
+  // Randomly pick from available
+  return availableVoices[Math.floor(Math.random() * availableVoices.length)];
+}
+
+function selectNextIntent(context, recentMessages) {
+  // Logic based on context
+  const { pendingCount, completedToday, timeOfDay, urgentTask } = context;
+
+  // Potential intents
+  let candidates = [];
+
+  // Urgent task -> NUDGE or FOCUS_NEXT
+  if (urgentTask) {
+    candidates.push('NUDGE', 'FOCUS_NEXT');
+    if (urgentTask.priority <= 1) candidates.push('DIRECT'); // Very urgent
+  }
+
+  // Completed a lot -> CELEBRATE
+  if (completedToday > 3) {
+    candidates.push('CELEBRATE');
+  }
+
+  // Time of day logic
+  if (timeOfDay === 'MORNING') candidates.push('NUDGE', 'FOCUS_NEXT');
+  if (timeOfDay === 'EVENING' || timeOfDay === 'NIGHT') candidates.push('PERMISSION'); // Rest
+
+  // Default fallback
+  if (candidates.length === 0) {
+    candidates = Object.keys(INTENTS);
+  }
+
+  // Filter out recently used intents (last 3)
+  const recentIntents = new Set(recentMessages.slice(0, 3).map(m => m.intent));
+  const available = candidates.filter(i => !recentIntents.has(i));
+
+  if (available.length > 0) {
+    return available[Math.floor(Math.random() * available.length)];
+  }
+
+  // Fallback to random candidate
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function buildFreshnessConstraints(recentMessages) {
+  if (!recentMessages || recentMessages.length === 0) return '';
+
+  const recentTexts = recentMessages.slice(0, 10).map(m => `"${m.message}"`).join(', ');
+  return `\nCRITICAL CONSTRAINT: Do NOT repeat or paraphrase these recent messages: ${recentTexts}. Generate something new.`;
+}
+
+function buildMessagePrompt(context, voice, intent, recentMessages) {
+  const voiceDef = VOICES[voice];
+  const intentDef = INTENTS[intent];
+
+  let taskContext = `You have ${context.pendingCount} pending tasks.`;
+  if (context.urgentTask) {
+    taskContext += ` Most urgent: "${context.urgentTask.title}" (Priority ${context.urgentTask.priority}).`;
+  }
+  if (context.completedToday > 0) {
+    taskContext += ` You completed ${context.completedToday} tasks today.`;
+  }
+
+  const constraints = buildFreshnessConstraints(recentMessages);
+
+  return `
+    Context: ${taskContext}
+    Time of Day: ${context.timeOfDay}
+    
+    Role: You are a "Cosmic Companion" with the voice: "${voice}" (${voiceDef.description}).
+    Tone: ${voiceDef.tone}
+    Example: "${voiceDef.example}"
+
+    Goal: Generate 3 distinct, short wallpaper messages (max 10 words each).
+    Intent: "${intent}" (${intentDef}).
+    
+    ${constraints}
+
+    Output Format: return JSON only in this format:
+    {
+      "messages": ["message 1", "message 2", "message 3"]
+    }
+  `;
+}
+
+function validateMessages(messages, recentMessages) {
+  // Filter out empty, too long, or duplicates
+  const recentSet = new Set(recentMessages.map(m => m.message.toLowerCase()));
+
+  return messages.filter(msg => {
+    if (!msg || typeof msg !== 'string') return false;
+    if (msg.length > 60) return false; // Max length constraint
+    if (recentSet.has(msg.toLowerCase())) return false; // Exact duplicate
+    return true;
+  });
+}
 
 /**
  * Generate messages using LLM
