@@ -25,9 +25,9 @@ function sleep(ms) {
 async function retryOperation(operation, options = {}) {
   const {
     maxRetries = 3,
-    initialDelay = 100,
-    maxDelay = 5000,
-    backoffMultiplier = 2,
+    initialDelay = 500, // Wait longer before first retry during a storm
+    maxDelay = 10000,
+    backoffMultiplier = 2.5,
     shouldRetry = (err) => {
       // Retry on connection errors, timeouts, deadlocks
       const retryableErrors = [

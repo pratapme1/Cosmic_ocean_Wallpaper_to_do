@@ -15,12 +15,16 @@ function getDbPool() {
   }
 
   console.log('[DB] Initializing Singleton Connection Pool...');
+  const isVercel = process.env.VERCEL === 'true' || !!process.env.VERCEL;
+
   poolInstance = new Pool({
     connectionString: dbUrl,
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : { rejectUnauthorized: false },
-    max: 10,
+    ssl: { rejectUnauthorized: false },
+    // CRITICAL for Vercel: Single connection per lambda instance.
+    // This prevents "retry storms" from multiplying connections and hitting Supabase limits.
+    max: isVercel ? 1 : 10,
     idleTimeoutMillis: 10000,
-    connectionTimeoutMillis: 5000 // Fail fast if pool is full
+    connectionTimeoutMillis: isVercel ? 10000 : 5000 // Give pooler time to queue
   });
 
   poolInstance.on('connect', () => {
