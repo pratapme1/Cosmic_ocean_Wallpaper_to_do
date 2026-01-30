@@ -232,7 +232,7 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
     console.log(`❌ Cache MISS: ${cacheKey}`);
     res.set('X-Cache', 'MISS');
 
-    const userRes = await queryWithRetry(client, "SELECT * FROM users WHERE id = $1", [userId]);
+    const userRes = await queryWithRetry(req.dbClient, "SELECT * FROM users WHERE id = $1", [userId]);
     const userObj = userRes.rows[0];
 
     // CRITICAL: Use query params directly to match cache key
@@ -264,7 +264,7 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
     // This ensures achievements are shown correctly after task completion
     let allTasksForAchievements = [];
     if (useEnhanced) {
-      const allTasksResult = await queryWithRetry(client, `
+      const allTasksResult = await queryWithRetry(req.dbClient, `
         SELECT * FROM tasks
         WHERE user_id = $1
         AND (archived = false OR archived IS NULL)
@@ -286,7 +286,7 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
       }
     } else {
       // Get active tasks
-      const result = await queryWithRetry(client, `
+      const result = await queryWithRetry(req.dbClient, `
         SELECT * FROM tasks
         WHERE user_id = $1
         AND completed = false
