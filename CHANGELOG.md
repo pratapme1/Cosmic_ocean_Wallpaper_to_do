@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.6] - 2026-01-30 (Android + Backend)
+
+### Fixed - Wallpaper Disappearance & Race Condition 🛠️
+- **Android Race Condition**: Fixed a critical race condition where "Exploding" a star triggered both the Foreground Service and Background Worker simultaneously, causing the wallpaper to revert to default. The `WallpaperUpdateWorker` trigger has been removed in favor of the more robust `RealTimeWallpaperService`.
+- **Backend Transparency**: Enforced opaque background (`.flatten()`) for custom wallpapers to prevent potential "black screen" issues on some devices when handling transparent PNGs.
+
+#### Android
+- **Version**: 2.2.6 (versionCode 22)
+- **APK**: `CosmicOcean_V2.2.6.apk`
+
+---
+
 ## [2.2.5] - 2026-01-30 (Android + Backend)
 
 ### Added - Wallpaper Consent & Privacy Flow 🛡️

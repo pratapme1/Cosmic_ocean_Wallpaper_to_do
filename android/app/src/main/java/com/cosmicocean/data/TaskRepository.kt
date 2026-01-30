@@ -36,9 +36,11 @@ class TaskRepository(
             wallpaperUpdater(context)
             
             // 2. Schedule Worker as backup (reliable path)
-            val updateRequest = OneTimeWorkRequestBuilder<WallpaperUpdateWorker>().build()
-            WorkManager.getInstance(context).enqueue(updateRequest)
-            Log.d(TAG, "Triggered immediate wallpaper update (Service + Worker)")
+            // RACE CONDITION FIX: Disable WorkManager trigger to prevent double-hitter with Foreground Service
+            // The Foreground Service has its own retry logic and is sufficient.
+            // val updateRequest = OneTimeWorkRequestBuilder<WallpaperUpdateWorker>().build()
+            // WorkManager.getInstance(context).enqueue(updateRequest)
+            Log.d(TAG, "Triggered immediate wallpaper update (Service only)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to trigger wallpaper update: ${e.message}")
         }

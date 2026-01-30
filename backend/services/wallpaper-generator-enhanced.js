@@ -525,9 +525,14 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now(), tim
         }
 
         // Layer 1: Custom Image (resized/cropped to fit)
+        // FIX: Ensure opaque background to prevent transparency issues (black screen)
         const customImage = await sharp(imageBuffer)
           .resize(width, height, { fit: 'cover' })
+          .flatten({ background: '#000000' }) // Force opaque
           .toBuffer();
+
+        const metadata = await sharp(customImage).metadata();
+        console.log(`[Wallpaper] Custom image prepared: ${width}x${height}, channels=${metadata.channels}, size=${customImage.length}`);
 
         layers.push({ input: customImage, blend: 'over' });
 
@@ -541,7 +546,9 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now(), tim
 
         customImageLoaded = true;
       } catch (err) {
-        console.warn(`[Wallpaper] Failed to load custom wallpaper: ${err.message}, falling back to generated`);
+        console.error(`[Wallpaper] Failed to load custom wallpaper: ${err.message}, falling back to generated`);
+        // Log stack trace for deeper debugging
+        console.error(err.stack);
       }
 
       // Fallback to generated if custom image failed to load

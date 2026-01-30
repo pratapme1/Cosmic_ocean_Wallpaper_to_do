@@ -315,6 +315,7 @@ app.get('/api/wallpaper', wallpaperLimiter, verifyToken, async (req, res) => {
       await cacheService.setBuffer(cacheKey, imageBuffer, 60);
     }
 
+    console.log(`✅ Wallpaper generated: ${imageBuffer.length} bytes, sending response`);
     res.set('Content-Type', 'image/png');
     res.send(imageBuffer);
   } catch (err) {
