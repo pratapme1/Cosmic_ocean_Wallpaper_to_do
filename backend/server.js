@@ -1077,7 +1077,7 @@ app.get('/api/health', async (req, res) => {
     status: 'ok',
     version: '1.6.0', // Fix: Timezone - default to NOW when no date/time, fix 'in X min/hours'
     mode: dbClient instanceof MockClient ? 'mock' : 'postgres',
-    dbInitialized,
+    dbInitialized: true,
     debug: {
       serverUtcTime: now.toISOString(),
       serverLocalTime: now.toString(),
