@@ -104,7 +104,7 @@ async function buildMessageContext(userId) {
       FROM tasks
       WHERE user_id = $1;
     `;
-    const tasksResult = await client.query(tasksQuery, [userId]);
+    const tasksResult = await db.query(tasksQuery, [userId]);
     const tasks = tasksResult.rows[0];
 
     // Get most urgent task
@@ -115,7 +115,7 @@ async function buildMessageContext(userId) {
       ORDER BY priority ASC, due_date ASC NULLS LAST
       LIMIT 1;
     `;
-    const urgentResult = await client.query(urgentQuery, [userId]);
+    const urgentResult = await db.query(urgentQuery, [userId]);
     const urgentTask = urgentResult.rows[0] || null;
 
     // ENHANCEMENT: Get tasks for StatsAggregator
@@ -214,7 +214,7 @@ async function getRecentMessages(userId, limit = 20) {
       ORDER BY shown_at DESC
       LIMIT $2;
     `;
-    const result = await client.query(query, [userId, limit]);
+    const result = await db.query(query, [userId, limit]);
     return result.rows;
   } catch (error) {
     console.error('[MessageGen] Error fetching recent:', error.message);
