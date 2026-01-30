@@ -1,32 +1,48 @@
-/**
- * Database connection pool
- * Shared instance for all services
- */
-
 const { Pool } = require('pg');
+const { MockClient } = require('../utils/mock-client');
 
-// Extract Supabase connection URL from environment
-const dbUrl = process.env.DATABASE_URL;
+let poolInstance = null;
 
-if (!dbUrl) {
-  console.warn('[DB] DATABASE_URL not set - database features disabled');
-}
+function getDbPool() {
+  if (poolInstance) return poolInstance;
 
-// Create pool instance
-const pool = dbUrl ? new Pool({
-  connectionString: dbUrl,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
-  max: 10,  // Max connections
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000
-}) : null;
+  const dbUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
-if (pool) {
-  pool.on('error', (err) => {
-    console.error('[DB] Unexpected error on idle client', err);
+  if (!dbUrl) {
+    console.warn('[DB] DATABASE_URL not set - using Mock Client');
+    poolInstance = new MockClient();
+    return poolInstance;
+  }
+
+  console.log('[DB] Initializing Singleton Connection Pool...');
+  poolInstance = new Pool({
+    connectionString: dbUrl,
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : { rejectUnauthorized: false },
+    max: 10,
+    idleTimeoutMillis: 10000,
+    connectionTimeoutMillis: 5000 // Fail fast if pool is full
   });
 
-  console.log('[DB] Connection pool initialized');
+  poolInstance.on('connect', () => {
+    console.log('[DB] New client connected to database');
+  });
+
+  poolInstance.on('acquire', () => {
+    console.log('[DB] Client acquired from pool');
+  });
+
+  poolInstance.on('error', (err) => {
+    console.error('[DB] Unexpected error on idle client', err);
+    // Don't exit process in serverless, just log. 
+    // The pool might recover or next lambda invocation will create new one.
+  });
+
+  return poolInstance;
 }
 
-module.exports = pool;
+// Export singleton accessors
+module.exports = {
+  getDbPool,
+  // Helper for direct queries (auto-connect/release) - Safest way to query
+  query: (text, params) => getDbPool().query(text, params),
+};

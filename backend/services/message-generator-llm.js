@@ -87,12 +87,10 @@ const INTENTS = {
  * Build narrative context from user data
  * Enhanced with StatsAggregator for historical context and patterns
  */
-async function buildMessageContext(userId, client = null) {
-  const shouldRelease = !client;
-  if (!client) {
-    if (!pool) return null;
-    client = await pool.connect();
-  }
+async function buildMessageContext(userId) {
+  // Use Singleton Pool directly - no manual connect/release needed
+  // This ensures we get data and get out fast.
+  const db = pool;
 
   try {
     // Get tasks summary (basic counts)
@@ -144,8 +142,8 @@ async function buildMessageContext(userId, client = null) {
     `;
 
     const [recentCreated, recentCompleted] = await Promise.all([
-      client.query(recentCreatedQuery, [userId]),
-      client.query(recentCompletedQuery, [userId])
+      db.query(recentCreatedQuery, [userId]),
+      db.query(recentCompletedQuery, [userId])
     ]);
 
     // Merge and deduplicate by ID
@@ -196,20 +194,17 @@ async function buildMessageContext(userId, client = null) {
         patterns: stats.patterns  // peakPeriod, topCategory, mostProductiveDay
       }
     };
-  } finally {
-    if (shouldRelease) client.release();
+  } catch (error) {
+    console.error('[MessageGen] Error building context:', error);
+    throw error;
   }
 }
 
 /**
  * Get recent messages to avoid repetition
  */
-async function getRecentMessages(userId, limit = 20, client = null) {
-  const shouldRelease = !client;
-  if (!client) {
-    if (!pool) return [];
-    client = await pool.connect();
-  }
+async function getRecentMessages(userId, limit = 20) {
+  const db = pool;
 
   try {
     const query = `
@@ -221,8 +216,9 @@ async function getRecentMessages(userId, limit = 20, client = null) {
     `;
     const result = await client.query(query, [userId, limit]);
     return result.rows;
-  } finally {
-    if (shouldRelease) client.release();
+  } catch (error) {
+    console.error('[MessageGen] Error fetching recent:', error.message);
+    return [];
   }
 }
 
@@ -231,15 +227,15 @@ async function getRecentMessages(userId, limit = 20, client = null) {
 /**
  * Generate messages using LLM
  */
-async function generateMessagesLLM(userId, context, client = null) {
+async function generateMessagesLLM(userId, context) {
   if (!initializeClaude()) {
     console.log('[MessageGen] Claude not available, falling back to templates');
     return null;  // Fallback to templates
   }
 
   try {
-    // Get recent messages for freshness
-    const recentMessages = await getRecentMessages(userId, 20, client);
+    // Get recent messages for freshness (Auto-released pool query)
+    const recentMessages = await getRecentMessages(userId, 20);
 
     // Select voice and intent
     const voice = selectNextVoice(recentMessages, context);
@@ -350,23 +346,22 @@ function getFallbackMessage(context) {
 /**
  * Cache messages in database
  */
-async function cacheMessages(userId, messages, client = null) {
-  const shouldRelease = !client;
-  let useTransaction = shouldRelease; // Only use internal transaction if we own the connection
+async function cacheMessages(userId, messages) {
+  let client = null;
 
-  if (!client) {
-    if (!pool) return;
-    client = await pool.connect();
-  }
+  if (!pool) return;
+  // We need a transaction here for atomicity (Delete + Insert)
+  // So we MUST explicitly connect and release
+  client = await pool.connect();
 
   try {
-    if (useTransaction) await client.query('BEGIN');
+    await client.query('BEGIN');
 
     // FIX: Check if user still exists before caching (prevents race condition on user deletion)
     const userCheck = await client.query('SELECT 1 FROM users WHERE id = $1', [userId]);
     if (userCheck.rows.length === 0) {
       console.log(`[MessageGen] User ${userId} no longer exists, skipping cache`);
-      if (useTransaction) await client.query('ROLLBACK');
+      await client.query('ROLLBACK');
       return;
     }
 
@@ -385,14 +380,14 @@ async function cacheMessages(userId, messages, client = null) {
       );
     }
 
-    if (useTransaction) await client.query('COMMIT');
+    await client.query('COMMIT');
     console.log(`[MessageGen] Cached ${messages.length} messages for user ${userId}`);
   } catch (error) {
-    if (useTransaction) await client.query('ROLLBACK');
+    await client.query('ROLLBACK');
     console.error('[MessageGen] Error caching messages:', error.message);
     throw error;
   } finally {
-    if (shouldRelease) client.release();
+    client.release();
   }
 }
 
@@ -402,7 +397,7 @@ const generatingUsers = new Set();
 /**
  * Main entry point: Generate and cache messages
  */
-async function generateAndCacheMessages(userId, client = null) {
+async function generateAndCacheMessages(userId) {
   // Check lock
   if (generatingUsers.has(userId)) {
     console.log(`[MessageGen] Generation already in progress for ${userId}, skipping`);
@@ -413,11 +408,13 @@ async function generateAndCacheMessages(userId, client = null) {
     generatingUsers.add(userId);
     console.log(`[MessageGen] Generating messages for user ${userId}...`);
 
-    // Build context
-    const context = await buildMessageContext(userId, client);
+    // Build context (Auto-released pool query)
+    // STEP 1: DB ACCESS -> RELEASE
+    const context = await buildMessageContext(userId);
 
     // Generate messages with LLM
-    let messages = await generateMessagesLLM(userId, context, client);
+    // STEP 2: NET ACCESS (SLOW) -> NO DB LOCK
+    let messages = await generateMessagesLLM(userId, context);
 
     // Fallback to template if LLM failed
     if (!messages || messages.length === 0) {
@@ -432,7 +429,8 @@ async function generateAndCacheMessages(userId, client = null) {
     }
 
     // Cache messages
-    await cacheMessages(userId, messages, client);
+    // STEP 3: DB ACCESS (TRANSACTION) -> CONNECT -> RELEASE
+    await cacheMessages(userId, messages);
 
     return {
       success: true,

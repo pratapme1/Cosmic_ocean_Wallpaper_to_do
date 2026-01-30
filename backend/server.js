@@ -10,8 +10,10 @@ process.env.FONTCONFIG_PATH = fontsDir;
 process.env.FONTCONFIG_FILE = path.join(fontsDir, 'fonts.conf');
 
 const express = require('express');
-const { Pool, types } = require('pg');
+// Remove local Pool import, we use db/pool.js
+const { types } = require('pg');
 const cors = require('cors');
+const dbPool = require('./db/pool');
 
 // CRITICAL: Override PostgreSQL DATE type parser to avoid timezone issues
 // By default, pg creates Date objects at midnight in local timezone, causing date shifts
@@ -114,58 +116,15 @@ app.use((req, res, next) => {
   next();
 });
 
-// Database Connection Pool - Lazy initialization for serverless
-let client = null;
-let dbInitialized = false;
-
 /**
  * Get database client (lazy initialization for serverless environments)
  * This ensures env vars are available before creating the connection
  */
 async function getDbClient() {
-  if (dbInitialized) return client;
-
-  const dbUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
-  console.log('🔧 DB Init: DATABASE_URL set:', !!process.env.DATABASE_URL);
-  console.log('🔧 DB Init: DATABASE_URL value:', process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 30) + '...' : 'undefined');
-  console.log('🔧 DB Init: NODE_ENV:', process.env.NODE_ENV);
-  console.log('🔧 DB Init: All env keys:', Object.keys(process.env).filter(k => k.includes('DATABASE') || k.includes('POSTGRES') || k.includes('DB')));
-
-  if (!dbUrl) {
-    console.log('⚠️  No DATABASE_URL, using In-Memory Mock Database');
-    client = new MockClient();
-    client.connect();
-    dbInitialized = true;
-    return client;
-  }
-
-  try {
-    client = new Pool({
-      connectionString: dbUrl,
-      ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
-      max: 10, // Reduced for serverless
-      idleTimeoutMillis: 10000,
-      connectionTimeoutMillis: 5000,
-    });
-
-    // Test the connection
-    await client.query('SELECT NOW()');
-    console.log('✅ PostgreSQL pool connected');
-
-    client.on('error', (err) => {
-      console.error('Database pool error:', err);
-    });
-
-    dbInitialized = true;
-    return client;
-  } catch (err) {
-    console.error('❌ Failed to connect to PostgreSQL:', err.message);
-    console.log('⚠️  Falling back to In-Memory Mock Database');
-    client = new MockClient();
-    client.connect();
-    dbInitialized = true;
-    return client;
-  }
+  // Use the robust singleton pool
+  // In server.js, we return the POOL itself as the client, 
+  // because pg.Pool supports .query() just like a Client.
+  return dbPool.getDbPool();
 }
 
 // Middleware to ensure DB is initialized before handling requests
@@ -1174,8 +1133,9 @@ process.on('SIGTERM', async () => {
       }
 
       // Close database pool
-      if (client && !(client instanceof MockClient)) {
-        await client.end();
+      const pool = dbPool.getDbPool();
+      if (pool && !(pool instanceof MockClient)) {
+        await pool.end();
         console.log('Database pool closed');
       }
 
@@ -1195,8 +1155,9 @@ process.on('SIGINT', async () => {
       console.log('HTTP server closed');
 
       // Close database pool
-      if (client && !(client instanceof MockClient)) {
-        await client.end();
+      const pool = dbPool.getDbPool();
+      if (pool && !(pool instanceof MockClient)) {
+        await pool.end();
         console.log('Database pool closed');
       }
 

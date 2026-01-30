@@ -20,74 +20,43 @@ const { generateAndCacheMessages, getFallbackMessage } = require('./message-gene
  * Get next unshown message from cache
  */
 async function getNextCachedMessage(userId, client = null) {
-  const shouldRelease = !client;
-  if (!client) {
-    if (!pool) return null;
-    client = await pool.connect();
-  }
+  // Use client if provided (transactional context), otherwise singleton pool
+  const db = client || pool;
 
-  try {
-    const query = `
-      SELECT id, message, voice, intent
-      FROM message_cache
-      WHERE user_id = $1 AND shown = false
-      ORDER BY display_order ASC
-      LIMIT 1;
-    `;
+  const query = `
+    SELECT id, message, voice, intent
+    FROM message_cache
+    WHERE user_id = $1 AND shown = false
+    ORDER BY display_order ASC
+    LIMIT 1;
+  `;
 
-    const result = await client.query(query, [userId]);
-
-    if (result.rows.length === 0) {
-      return null;  // Cache empty
-    }
-
-    return result.rows[0];
-  } finally {
-    if (shouldRelease) client.release();
-  }
+  const result = await db.query(query, [userId]);
+  return result.rows[0] || null;
 }
 
 /**
  * Mark message as shown
  */
 async function markMessageShown(messageId, client = null) {
-  const shouldRelease = !client;
-  if (!client) {
-    if (!pool) return;
-    client = await pool.connect();
-  }
-
-  try {
-    await client.query(
-      'UPDATE message_cache SET shown = true, shown_at = NOW() WHERE id = $1',
-      [messageId]
-    );
-  } finally {
-    if (shouldRelease) client.release();
-  }
+  const db = client || pool;
+  const query = 'UPDATE message_cache SET shown = true, shown_at = NOW() WHERE id = $1';
+  await db.query(query, [messageId]);
 }
 
 /**
  * Log message to history
  */
 async function logToHistory(userId, message, voice, intent, context, client = null) {
-  const shouldRelease = !client;
-  if (!client) {
-    if (!pool) return;
-    client = await pool.connect();
-  }
+  const db = client || pool;
+  const query = `INSERT INTO message_history (user_id, message, voice, intent, context, shown_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`;
+  const params = [userId, message, voice, intent, context];
 
   try {
-    await client.query(
-      `INSERT INTO message_history (user_id, message, voice, intent, context, shown_at)
-       VALUES ($1, $2, $3, $4, $5, NOW())`,
-      [userId, message, voice, intent, context]
-    );
+    await db.query(query, params);
   } catch (error) {
     console.error('[MessageProvider] Error logging to history:', error.message);
-    // Non-critical, don't throw
-  } finally {
-    if (shouldRelease) client.release();
   }
 }
 
@@ -95,21 +64,10 @@ async function logToHistory(userId, message, voice, intent, context, client = nu
  * Get count of unshown messages in cache
  */
 async function getUnshownCount(userId, client = null) {
-  const shouldRelease = !client;
-  if (!client) {
-    if (!pool) return 0;
-    client = await pool.connect();
-  }
-
-  try {
-    const result = await client.query(
-      'SELECT COUNT(*) as count FROM message_cache WHERE user_id = $1 AND shown = false',
-      [userId]
-    );
-    return parseInt(result.rows[0].count) || 0;
-  } finally {
-    if (shouldRelease) client.release();
-  }
+  const db = client || pool;
+  const query = 'SELECT COUNT(*) as count FROM message_cache WHERE user_id = $1 AND shown = false';
+  const result = await db.query(query, [userId]);
+  return parseInt(result.rows[0].count) || 0;
 }
 
 /**
@@ -147,14 +105,13 @@ async function getCurrentMessage(userId, context = null, depth = 0) {
     };
   }
 
+  // ZERO-FAILURE ARCHITECTURE:
+  // Do NOT acquire a connection here. Use pool.query() for atomic ops
+  // or allow generateAndCacheMessages to handle its own short-lived connections.
   let client = null;
   try {
-    if (pool) {
-      client = await pool.connect();
-    }
-
-    // 1. Try to get from cache using shared client
-    const cached = await getNextCachedMessage(userId, client);
+    // 1. Try to get from cache using singleton pool
+    const cached = await getNextCachedMessage(userId);
 
     if (cached) {
       // Mark as shown
@@ -190,7 +147,8 @@ async function getCurrentMessage(userId, context = null, depth = 0) {
     // 2. Cache empty - generate immediately
     // Note: generateAndCacheMessages internally manages its own transaction/connection
     console.log('[MessageProvider] Cache empty, generating immediately...');
-    const generateResult = await generateAndCacheMessages(userId, client);
+    // IMPORTANT: Do NOT pass client here. Let generator manage split transaction.
+    const generateResult = await generateAndCacheMessages(userId);
 
     if (generateResult.success && generateResult.count > 0) {
       // Recursively get first message from newly populated cache
@@ -199,12 +157,10 @@ async function getCurrentMessage(userId, context = null, depth = 0) {
 
     // 3. Generation failed - use fallback template
     console.warn('[MessageProvider] Generation failed, using fallback template');
-    // ... remainder continues below
-
     const messageContext = context || { pendingCount: 0, completedToday: 0, timeOfDay: 'MORNING' };
     const fallbackMsg = getFallbackMessage(messageContext);
 
-    // Log fallback to history
+    // Log fallback to history (best effort)
     await logToHistory(userId, fallbackMsg, 'DIRECT', 'NUDGE', messageContext);
 
     return {
@@ -215,14 +171,13 @@ async function getCurrentMessage(userId, context = null, depth = 0) {
     };
 
   } catch (error) {
-    if (client) client.release();
-    console.error('[MessageProvider] Error getting message:', error.message);
+    console.error('[MessageProvider] CRITICAL Error in getCurrentMessage:', error.message);
 
-    // Ultimate fallback
-    const safeMessage = 'Tasks await';
+    // ZERO-FAILURE FAILSAFE:
+    // If DB is totally down or times out, return a safe static message without crashing.
     return {
-      message: safeMessage,
-      source: 'error_fallback',
+      message: 'Tasks await',
+      source: 'failsafe_fallback',
       voice: 'DIRECT',
       intent: 'NUDGE'
     };
