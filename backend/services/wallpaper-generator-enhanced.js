@@ -57,8 +57,13 @@ function calculateUrgency(tasks, doneForToday = false, timezone = 'UTC') {
     if (!t.due_date) return false;
 
     // Combine date and time if available for precise overdue check
-    const dueStr = t.due_time ? `${t.due_date}T${t.due_time}` : `${t.due_date}T23:59:59`;
-    const dueDate = toZonedTime(new Date(dueStr), timezone);
+    let dueDate;
+    if (t.due_date.includes('T')) {
+      dueDate = toZonedTime(new Date(t.due_date), timezone);
+    } else {
+      const dueStr = t.due_time ? `${t.due_date}T${t.due_time}` : `${t.due_date}T23:59:59`;
+      dueDate = toZonedTime(new Date(dueStr), timezone);
+    }
     return dueDate < now;
   });
 
@@ -66,15 +71,21 @@ function calculateUrgency(tasks, doneForToday = false, timezone = 'UTC') {
 
   const hasDueToday = tasks.some(t => {
     if (!t.due_date) return false;
-    return t.due_date === nowDateStr;
+    const taskDateStr = t.due_date.includes('T') ? t.due_date.split('T')[0] : t.due_date;
+    return taskDateStr === nowDateStr;
   });
 
   if (hasDueToday) return 'urgent';
 
   const hasDueWithin48h = tasks.some(t => {
     if (!t.due_date) return false;
-    const dueStr = t.due_time ? `${t.due_date}T${t.due_time}` : `${t.due_date}T23:59:59`;
-    const dueDate = toZonedTime(new Date(dueStr), timezone);
+    let dueDate;
+    if (t.due_date.includes('T')) {
+      dueDate = toZonedTime(new Date(t.due_date), timezone);
+    } else {
+      const dueStr = t.due_time ? `${t.due_date}T${t.due_time}` : `${t.due_date}T23:59:59`;
+      dueDate = toZonedTime(new Date(dueStr), timezone);
+    }
     const hoursUntil = (dueDate - now) / (1000 * 60 * 60);
     return hoursUntil > 0 && hoursUntil <= 48;
   });
