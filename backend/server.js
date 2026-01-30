@@ -1124,7 +1124,7 @@ runMigrations().then(() => {
   console.error('Failed to start server due to migration error:', err);
   process.exit(1);
 });
-}
+});
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {

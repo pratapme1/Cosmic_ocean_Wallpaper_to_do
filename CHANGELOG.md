@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.11] - 2026-01-30 (Hotfix)
+
+### Fixed - Application Startup Crash 🚑
+- **Fixed**: Removed a syntax error (extra `}`) in `server.js` that caused the application to crash on startup in v2.2.10.
+
+---
+
 ## [2.2.10] - 2026-01-30 (Migration Fix)
 
 ### Critical Infrastructure Fix 🛠️
