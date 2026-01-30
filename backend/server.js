@@ -777,15 +777,21 @@ app.post('/api/tasks', taskCreationLimiter, verifyToken, async (req, res) => {
 });
 
 // PATCH /api/tasks/:id
-app.patch('/api/tasks/:id', optionalAuth, async (req, res) => {
+app.patch('/api/tasks/:id', verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = getUserId(req);
+    const userId = req.user.userId;
     const updates = req.body;
 
-    // DEBUG: Log all PATCH requests
-    console.log(`[PATCH DEBUG] Task: ${id}`);
-    console.log(`[PATCH DEBUG] Body:`, JSON.stringify(updates));
+    // Validate UUID format to prevent DB errors with temporary IDs (e.g. star-123)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      console.warn(`[PATCH] Invalid UUID format: ${id}. Skipping DB update.`);
+      return res.status(400).json({ error: 'Invalid Task ID format' });
+    }
+
+    console.log(`[PATCH] Updating task ${id} for user ${userId}`);
+    console.log(`[PATCH] Body:`, JSON.stringify(updates));
 
     // FIX v1.4.8: Support rawTitle for NLP re-parsing on edit
     if (updates.rawTitle) {
