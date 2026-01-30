@@ -14,6 +14,7 @@ const express = require('express');
 const { types } = require('pg');
 const cors = require('cors');
 const dbPool = require('./db/pool');
+const { runMigrations } = require('./migrator');
 
 // CRITICAL: Override PostgreSQL DATE type parser to avoid timezone issues
 // By default, pg creates Date objects at midnight in local timezone, causing date shifts
@@ -98,6 +99,47 @@ function parseDateForDB(value) {
 }
 
 const app = express();
+
+// --- MIGRATION GUARD (STABILIZATION) ---
+let isMigrationFinished = false;
+const migrationPromise = runMigrations().then(() => {
+  isMigrationFinished = true;
+  console.log('[Startup] DB Migrations complete, traffic allowed.');
+}).catch(err => {
+  console.error('[Startup] CRITICAL: DB Migration failed:', err);
+});
+
+// Middleware to block traffic until migration is done
+app.use(async (req, res, next) => {
+  // Allow health calls or non-db calls if needed, but for now block all for safety
+  if (isMigrationFinished) return next();
+
+  if (req.path === '/api/health') return next();
+
+  console.log(`[MigrationGuard] PAUSING request ${req.path} - Waiting for migrations...`);
+
+  try {
+    // Wait for migration with a 60s timeout
+    await Promise.race([
+      migrationPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Migration initialization timeout (60s)')), 60000))
+    ]);
+
+    if (!isMigrationFinished) {
+      throw new Error('Migration failed to complete in time');
+    }
+
+    next();
+  } catch (err) {
+    console.error(`[MigrationGuard] REJECTING request ${req.path}: ${err.message}`);
+    res.status(503).set('Retry-After', '5').json({
+      error: 'System initializing',
+      message: 'Database optimizations are being applied. Please retry in 5 seconds.',
+      code: 'SYSTEM_INITIALIZING'
+    });
+  }
+});
+// ----------------------------------------
 const port = process.env.PORT || 3000;
 
 // Trust proxy for Vercel/cloud deployments (needed for rate limiting)
@@ -1102,29 +1144,26 @@ app.use(errorHandler);
 let server;
 let messageWorkerInterval;
 
-// Run migrations then start server
-const { runMigrations } = require('./migrator');
+// Run migrations then start server (for local dev / traditional servers)
+if (process.env.NODE_ENV !== 'test') {
+  migrationPromise.then(() => {
+    // Only listen if not on Vercel (Vercel handles listening)
+    if (!process.env.VERCEL) {
+      server = app.listen(port, () => {
+        console.log(`Backend running on http://localhost:${port}`);
+        console.log(`Environment: ${process.env.NODE_ENV}`);
 
-runMigrations().then(() => {
-  server = app.listen(port, () => {
-    console.log(`Backend running on http://localhost:${port}`);
-    console.log(`Environment: ${process.env.NODE_ENV}`);
-
-    // Start message generation worker (Epic 8)
-    if (process.env.ENABLE_LLM_MESSAGES === 'true' && !process.env.VERCEL) {
-      messageWorkerInterval = startWorker();
-      console.log('[Epic8] Message generation worker started (in-process)');
-    } else if (process.env.VERCEL) {
-      console.log('[Epic8] On Vercel - using cron job for message generation');
+        // Start message generation worker
+        if (process.env.ENABLE_LLM_MESSAGES === 'true') {
+          messageWorkerInterval = startWorker();
+          console.log('[Epic8] Message generation worker started');
+        }
+      });
     } else {
-      console.log('[Epic8] Message generation worker disabled');
+      console.log('[Startup] Running on Vercel, server startup managed by cloud adapter.');
     }
   });
-}).catch(err => {
-  console.error('Failed to start server due to migration error:', err);
-  process.exit(1);
-});
-
+}
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {

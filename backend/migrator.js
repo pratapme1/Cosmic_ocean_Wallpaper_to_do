@@ -30,7 +30,7 @@ async function runMigrations() {
             const check = await client.query('SELECT id FROM migrations WHERE name = $1', [file]);
 
             if (check.rows.length === 0) {
-                console.log(`[Migrator] Applying migration: ${file}`);
+                console.log(`[Migrator] Applying migration: ${file}...`);
                 const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
 
                 await client.query('BEGIN');
