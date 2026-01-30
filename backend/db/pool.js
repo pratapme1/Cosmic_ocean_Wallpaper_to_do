@@ -14,16 +14,21 @@ function getDbPool() {
     return poolInstance;
   }
 
+  // Cleanse URL (remove whitespace/newlines which can happen in Vercel UI)
+  const cleansedUrl = dbUrl.trim().replace(/[\r\n]/g, '');
+
   console.log('[DB] Initializing Singleton Connection Pool...');
   const isVercel = process.env.VERCEL === 'true' || !!process.env.VERCEL;
 
   poolInstance = new Pool({
-    connectionString: dbUrl,
+    connectionString: cleansedUrl,
     ssl: { rejectUnauthorized: false },
     // CRITICAL for Vercel: Single connection per lambda instance.
     // This prevents "retry storms" from multiplying connections and hitting Supabase limits.
     max: isVercel ? 1 : 10,
-    idleTimeoutMillis: 10000,
+    // CRITICAL for Vercel: Don't hold idle connections in warm lambdas.
+    // Release them to Supabase as soon as the request ends.
+    idleTimeoutMillis: isVercel ? 1000 : 10000,
     connectionTimeoutMillis: isVercel ? 10000 : 5000 // Give pooler time to queue
   });
 

@@ -66,7 +66,8 @@ async function retryOperation(operation, options = {}) {
 
       // Check if we should retry
       if (attempt < maxRetries && shouldRetry(err)) {
-        console.warn(`⚠️  Database operation failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms:`, err.message);
+        const isTimeout = err.message?.includes('timeout');
+        console.warn(`⚠️  Database ${isTimeout ? 'TIMEOUT' : 'FAIL'} (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms:`, err.message);
 
         // Wait before retrying
         await sleep(delay);
