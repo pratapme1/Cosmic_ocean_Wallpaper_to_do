@@ -8,6 +8,11 @@ const { optionalAuth } = require('../middleware/auth');
  * Deep diagnostics for database and infrastructure
  */
 router.get('/', optionalAuth, async (req, res) => {
+    const dbUrl = process.env.DATABASE_URL || '';
+    const isSupabase = dbUrl.includes('supabase.co');
+    const rawPort = dbUrl.match(/:(\d+)\//)?.[1] || 'unknown';
+    const needsPoolerTransform = isSupabase && rawPort === '5432';
+    
     const stats = {
         timestamp: new Date().toISOString(),
         environment: {
@@ -16,8 +21,11 @@ router.get('/', optionalAuth, async (req, res) => {
             region: process.env.VERCEL_REGION || 'unknown'
         },
         database: {
-            urlPresent: !!process.env.DATABASE_URL,
-            isPoolerUrl: process.env.DATABASE_URL?.includes('pooler.supabase.com') || process.env.DATABASE_URL?.includes(':6543'),
+            urlPresent: !!dbUrl,
+            rawPort: rawPort,
+            isSupabase: isSupabase,
+            needsPoolerTransform: needsPoolerTransform,
+            isPoolerUrl: dbUrl.includes('pooler.supabase.com') || rawPort === '6543',
             poolStatus: {
                 totalConnections: pool.getDbPool().totalCount,
                 idleConnections: pool.getDbPool().idleCount,
@@ -28,28 +36,19 @@ router.get('/', optionalAuth, async (req, res) => {
 
     try {
         const start = Date.now();
-        const result = await pool.query('SELECT version(), current_setting($1) as pgbouncer', ['session_replication_role']);
+        // Simple query to test connection
+        const result = await pool.query('SELECT version() as version, current_database() as database');
         stats.database.connectionSuccess = true;
         stats.database.latencyMs = Date.now() - start;
         stats.database.info = result.rows[0];
-
-        // Check if on port 6543
-        const urlParts = process.env.DATABASE_URL.match(/:(\d+)\//);
-        stats.database.port = urlParts ? urlParts[1] : 'unknown';
-
-        // Check pooler mode (Session vs Transaction)
-        // Transaction pooler usually doesn't support SHOW POOLS, so we check the port
-        if (stats.database.port === '6543') {
-            stats.database.mode = 'Transaction Pooler (Correct)';
-        } else if (stats.database.port === '5432') {
-            stats.database.mode = 'Direct Connection (Too brittle for serverless)';
-        }
+        stats.database.mode = needsPoolerTransform ? 'Using Pooler (port 6543)' : 'Direct Connection';
 
         res.json(stats);
     } catch (err) {
         stats.database.connectionSuccess = false;
         stats.database.error = err.message;
         stats.database.errorCode = err.code;
+        stats.database.mode = needsPoolerTransform ? 'Pooler Transform Failed' : 'Direct Connection Failed';
         res.status(500).json(stats);
     }
 });
