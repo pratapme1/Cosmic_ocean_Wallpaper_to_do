@@ -150,8 +150,14 @@ class AtmosphereController {
       }
 
       // Combine date and time if available for precise score calculation
-      const dueStr = task.due_time ? `${dueDate}T${task.due_time}` : `${dueDate}T23:59:59`;
-      const dueDateObj = toZonedTime(new Date(dueStr), timezone);
+      let dueDateObj;
+      if (dueDate.includes('T')) {
+        // Already a full ISO string
+        dueDateObj = toZonedTime(new Date(dueDate), timezone);
+      } else {
+        const dueStr = task.due_time ? `${dueDate}T${task.due_time}` : `${dueDate}T23:59:59`;
+        dueDateObj = toZonedTime(new Date(dueStr), timezone);
+      }
       const hoursUntilDue = (dueDateObj - now) / (1000 * 60 * 60);
 
       if (hoursUntilDue < 0) {

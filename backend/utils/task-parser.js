@@ -276,7 +276,7 @@ function extractDateTime(text, suggestedHour = null) {
     // "in 30 minutes" -> Chrono handles it (Due Date/Time).
     // "Friday" -> Chrono handles it (Due Date).
 
-    const isBareDuration = /^\d+(\.\d+)?\s*(m|min|minutes?|h|hours?|hrs?)$/i.test(matchedText);
+    const isBareDuration = /^(\d+(\.\d+)?\s*(m|min|minutes?|h|hours?|hrs?)\s*)+$/i.test(matchedText);
 
     // If it's a bare duration (no 'in', 'at'), ignore it here so extractDuration can grab it
     if (isBareDuration) {
