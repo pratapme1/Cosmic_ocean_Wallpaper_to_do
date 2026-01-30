@@ -45,4 +45,6 @@ module.exports = {
   getDbPool,
   // Helper for direct queries (auto-connect/release) - Safest way to query
   query: (text, params) => getDbPool().query(text, params),
+  // Helper for transactions - acquire a client manually
+  connect: () => getDbPool().connect(),
 };

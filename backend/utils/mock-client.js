@@ -10,7 +10,11 @@ class MockClient {
   }
 
   async connect() {
-    return true;
+    return this;
+  }
+
+  release() {
+    // No-op for mock client
   }
 
   async query(text, params = []) {
@@ -87,8 +91,8 @@ class MockClient {
       const userId = params[0];
       let rows = this.tasks.filter(t => !t.completed && t.user_id === userId);
       if (normalizedText.includes('SNOOZED_UNTIL')) {
-         const now = new Date();
-         rows = rows.filter(t => !t.snoozed_until || new Date(t.snoozed_until) < now);
+        const now = new Date();
+        rows = rows.filter(t => !t.snoozed_until || new Date(t.snoozed_until) < now);
       }
       return { rows };
     }
@@ -146,32 +150,32 @@ class MockClient {
 
     // UPDATE tasks (PATCH)
     if (normalizedText.startsWith('UPDATE TASKS SET')) {
-        const userId = params[0];
-        const id = params[1]; 
-        const task = this.tasks.find(t => t.id === id && t.user_id === userId);
-        if (task) {
-            task.completed = true;
-            task.completed_at = new Date();
-            return { rows: [task] };
-        }
-        return { rows: [] };
+      const userId = params[0];
+      const id = params[1];
+      const task = this.tasks.find(t => t.id === id && t.user_id === userId);
+      if (task) {
+        task.completed = true;
+        task.completed_at = new Date();
+        return { rows: [task] };
+      }
+      return { rows: [] };
     }
 
     // UPDATE tasks (Snooze)
     if (normalizedText.includes('UPDATE TASKS') && normalizedText.includes('ORIGINAL_DUE_DATE')) {
-       const userId = params[0];
-       const id = params[1]; 
-       const task = this.tasks.find(t => t.id === id && t.user_id === userId);
-       if (task) {
-           task.original_due_date = task.original_due_date || task.due_date;
-           const tomorrow = new Date();
-           tomorrow.setDate(tomorrow.getDate() + 1);
-           task.due_date = tomorrow;
-           task.snoozed_until = tomorrow;
-           task.times_rescheduled = (task.times_rescheduled || 0) + 1;
-           return { rows: [task] };
-       }
-       return { rows: [] };
+      const userId = params[0];
+      const id = params[1];
+      const task = this.tasks.find(t => t.id === id && t.user_id === userId);
+      if (task) {
+        task.original_due_date = task.original_due_date || task.due_date;
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        task.due_date = tomorrow;
+        task.snoozed_until = tomorrow;
+        task.times_rescheduled = (task.times_rescheduled || 0) + 1;
+        return { rows: [task] };
+      }
+      return { rows: [] };
     }
 
     // INSERT INTO user_stats
