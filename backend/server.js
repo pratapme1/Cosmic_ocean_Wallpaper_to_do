@@ -1102,22 +1102,28 @@ app.use(errorHandler);
 let server;
 let messageWorkerInterval;
 
-if (process.env.NODE_ENV !== 'test') {
+// Run migrations then start server
+const { runMigrations } = require('./migrator');
+
+runMigrations().then(() => {
   server = app.listen(port, () => {
     console.log(`Backend running on http://localhost:${port}`);
+    console.log(`Environment: ${process.env.NODE_ENV}`);
 
     // Start message generation worker (Epic 8)
-    // NOTE: On Vercel, use cron job instead (/api/cron/messages)
-    // In-process worker only works on traditional servers
     if (process.env.ENABLE_LLM_MESSAGES === 'true' && !process.env.VERCEL) {
       messageWorkerInterval = startWorker();
       console.log('[Epic8] Message generation worker started (in-process)');
     } else if (process.env.VERCEL) {
       console.log('[Epic8] On Vercel - using cron job for message generation');
     } else {
-      console.log('[Epic8] Message generation worker disabled (ENABLE_LLM_MESSAGES not set)');
+      console.log('[Epic8] Message generation worker disabled');
     }
   });
+}).catch(err => {
+  console.error('Failed to start server due to migration error:', err);
+  process.exit(1);
+});
 }
 
 // Graceful shutdown

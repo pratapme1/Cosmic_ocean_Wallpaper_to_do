@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.10] - 2026-01-30 (Migration Fix)
+
+### Critical Infrastructure Fix 🛠️
+- **Fixed**: Database migrations were NOT running automatically in production. This meant the performance indexes from v2.2.8 were never actually created.
+- **Added**: `migrator.js` which now runs automatically on server startup to ensure `013_add_performance_indexes.sql` is applied.
+
+---
+
 ## [2.2.8] - 2026-01-30 (Backend Hotfix)
 
 ### Fixed - Critical Database Performance Indexes 🚀
