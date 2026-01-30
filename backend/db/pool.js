@@ -15,7 +15,17 @@ function getDbPool() {
   }
 
   // Cleanse URL (remove whitespace/newlines which can happen in Vercel UI)
-  const cleansedUrl = dbUrl.trim().replace(/[\r\n]/g, '');
+  let cleansedUrl = dbUrl.trim().replace(/[\r\n]/g, '');
+
+  // CRITICAL: Use Supabase Connection Pooler instead of direct connection
+  // Port 5432 = direct PostgreSQL (limited to ~60 connections)
+  // Port 6543 = connection pooler (handles thousands via pooling)
+  // This prevents connection exhaustion on Vercel serverless
+  if (cleansedUrl.includes('supabase.co:5432')) {
+    console.log('[DB] Detected Supabase direct connection, switching to pooler...');
+    cleansedUrl = cleansedUrl.replace(':5432/', ':6543/');
+    console.log('[DB] Using connection pooler at port 6543');
+  }
 
   console.log('[DB] Initializing Singleton Connection Pool...');
   const isVercel = process.env.VERCEL === 'true' || !!process.env.VERCEL;
