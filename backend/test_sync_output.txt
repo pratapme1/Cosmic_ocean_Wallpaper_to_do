@@ -1,0 +1,1455 @@
+
+> backend@1.6.1 test
+> NODE_ENV=test jest --runInBand --detectOpenHandles --forceExit tests/sync.test.js
+
+  console.log
+    [dotenv@17.2.3] injecting env (10) from ../.env -- tip: ⚙️  override existing env vars with { override: true }
+
+      at _log (node_modules/dotenv/lib/main.js:142:11)
+
+  console.log
+    [DB] Connection pool initialized
+
+      at Object.log (db/pool.js:29:11)
+
+  console.warn
+    [Supabase Storage] Missing SUPABASE_URL or SUPABASE_SERVICE_KEY
+
+      16 |   console.log('[Supabase Storage] Client initialized');
+      17 | } else {
+    > 18 |   console.warn('[Supabase Storage] Missing SUPABASE_URL or SUPABASE_SERVICE_KEY');
+         |           ^
+      19 | }
+      20 |
+      21 | const BUCKET_NAME = 'wallpapers';
+
+      at Object.warn (services/supabase-storage.js:18:11)
+      at Object.require (routes/user.js:5:25)
+      at Object.require (server.js:40:20)
+      at Object.require (tests/sync.test.js:7:13)
+
+  console.log
+    [2026-01-30T09:31:47.236Z] POST /api/auth/register
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: none
+
+      at log (server.js:113:11)
+
+  console.log
+    🔧 DB Init: DATABASE_URL set: true
+
+      at log (server.js:129:11)
+
+  console.log
+    🔧 DB Init: DATABASE_URL value: postgresql://postgres:cThiDayw...
+
+      at log (server.js:130:11)
+
+  console.log
+    🔧 DB Init: NODE_ENV: test
+
+      at log (server.js:131:11)
+
+  console.log
+    🔧 DB Init: All env keys: [ 'DBUS_SESSION_BUS_ADDRESS', 'DATABASE_URL', 'DB_SSL' ]
+
+      at log (server.js:132:11)
+
+  console.log
+    ✅ Redis connected
+
+      at Class.log (services/cache.js:85:17)
+
+  console.log
+    ✅ PostgreSQL pool connected
+
+      at log (server.js:153:13)
+
+  console.log
+    [2026-01-30T09:31:49.066Z] POST /api/sync
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIyZTIzODIxMi05YmQ3LTQwNmItODY5MS0yZTdmMGNjYTI4ZGMiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUwNzExMl8zZzlkN2hAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MDgsImV4cCI6MTc3MDM3MDMwOH0.sSLY50TolcRKYtAX1fKv5cuiaZBC1iQOlRcPx6wnUFo
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:31:49.293Z] DELETE /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIyZTIzODIxMi05YmQ3LTQwNmItODY5MS0yZTdmMGNjYTI4ZGMiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUwNzExMl8zZzlkN2hAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MDgsImV4cCI6MTc3MDM3MDMwOH0.sSLY50TolcRKYtAX1fKv5cuiaZBC1iQOlRcPx6wnUFo
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:31:49.548Z] DELETE /api/user
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIyZTIzODIxMi05YmQ3LTQwNmItODY5MS0yZTdmMGNjYTI4ZGMiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUwNzExMl8zZzlkN2hAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MDgsImV4cCI6MTc3MDM3MDMwOH0.sSLY50TolcRKYtAX1fKv5cuiaZBC1iQOlRcPx6wnUFo
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:31:50.006Z] POST /api/auth/register
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: none
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:31:50.568Z] POST /api/sync
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJkZDYyNjJkZC01OWI2LTRiOGQtOTQ2Mi1lYmQ3YTlhM2U0MDkiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUwOTkzMF93Znd0cm1AZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MTAsImV4cCI6MTc3MDM3MDMxMH0.nLv0ZKuFXzHKCOLgPIvSaA930W8yGpEkLqmZriRu9kc
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:31:50.885Z] POST /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJkZDYyNjJkZC01OWI2LTRiOGQtOTQ2Mi1lYmQ3YTlhM2U0MDkiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUwOTkzMF93Znd0cm1AZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MTAsImV4cCI6MTc3MDM3MDMxMH0.nLv0ZKuFXzHKCOLgPIvSaA930W8yGpEkLqmZriRu9kc
+
+      at log (server.js:113:11)
+
+  console.log
+    [Task Creation] User timezone: UTC
+
+      at log (server.js:567:19)
+
+  console.log
+    [Task Creation] Default privacy level: public
+
+      at log (server.js:571:19)
+
+  console.log
+    [Task Creation] START - Input: "New task after sync"
+
+      at log (server.js:583:13)
+
+  console.log
+    [Task Creation] LLM enabled: false, Parsing: "New task after sync"
+
+      at log (server.js:593:15)
+
+  console.log
+    [NLP] Parsed task: {
+      input: 'New task after sync',
+      title: 'New task after sync',
+      category: 'work',
+      contextTags: [],
+      priority: 0,
+      energy: 'medium',
+      recurring: null,
+      confidence: 1,
+      source: 'local'
+    }
+
+      at log (server.js:634:15)
+
+  console.log
+    [FIX v1.6.0] No date/time provided - defaulting to NOW: 2026-01-30 09:31:51
+
+      at log (server.js:722:15)
+
+  console.log
+    [Task Created] userId=dd6262dd-59b6-4b8d-9462-ebd7a9a3e409, title="New task after sync", priority=0, category=work, cacheInvalidated=true
+
+      at log (server.js:770:13)
+
+  console.log
+    [2026-01-30T09:31:51.557Z] POST /api/sync
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJkZDYyNjJkZC01OWI2LTRiOGQtOTQ2Mi1lYmQ3YTlhM2U0MDkiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUwOTkzMF93Znd0cm1AZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MTAsImV4cCI6MTc3MDM3MDMxMH0.nLv0ZKuFXzHKCOLgPIvSaA930W8yGpEkLqmZriRu9kc
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:31:51.779Z] DELETE /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJkZDYyNjJkZC01OWI2LTRiOGQtOTQ2Mi1lYmQ3YTlhM2U0MDkiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUwOTkzMF93Znd0cm1AZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MTAsImV4cCI6MTc3MDM3MDMxMH0.nLv0ZKuFXzHKCOLgPIvSaA930W8yGpEkLqmZriRu9kc
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:31:52.025Z] DELETE /api/user
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJkZDYyNjJkZC01OWI2LTRiOGQtOTQ2Mi1lYmQ3YTlhM2U0MDkiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUwOTkzMF93Znd0cm1AZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MTAsImV4cCI6MTc3MDM3MDMxMH0.nLv0ZKuFXzHKCOLgPIvSaA930W8yGpEkLqmZriRu9kc
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:31:52.321Z] POST /api/auth/register
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: none
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:31:52.957Z] POST /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI5MjM5YjJlZS0xZThhLTRlNWItYmUzMC1iYTk3MWQyZDZjNjgiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUxMjI5OV82am80OEBleGFtcGxlLmNvbSIsImlhdCI6MTc2OTc2NTUxMiwiZXhwIjoxNzcwMzcwMzEyfQ.T4xtL3P0q88czYU4NgLUu1EYPTnspEIYXmhRNhoR7OA
+
+      at log (server.js:113:11)
+
+  console.log
+    [Task Creation] User timezone: UTC
+
+      at log (server.js:567:19)
+
+  console.log
+    [Task Creation] Default privacy level: public
+
+      at log (server.js:571:19)
+
+  console.log
+    [Task Creation] START - Input: "Old task"
+
+      at log (server.js:583:13)
+
+  console.log
+    [Task Creation] LLM enabled: false, Parsing: "Old task"
+
+      at log (server.js:593:15)
+
+  console.log
+    [NLP] Parsed task: {
+      input: 'Old task',
+      title: 'Old task',
+      category: 'work',
+      contextTags: [],
+      priority: 0,
+      energy: 'medium',
+      recurring: null,
+      confidence: 1,
+      source: 'local'
+    }
+
+      at log (server.js:634:15)
+
+  console.log
+    [FIX v1.6.0] No date/time provided - defaulting to NOW: 2026-01-30 09:31:54
+
+      at log (server.js:722:15)
+
+  console.log
+    [Task Created] userId=9239b2ee-1e8a-4e5b-be30-ba971d2d6c68, title="Old task", priority=0, category=work, cacheInvalidated=true
+
+      at log (server.js:770:13)
+
+  console.log
+    [2026-01-30T09:31:54.764Z] POST /api/sync
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI5MjM5YjJlZS0xZThhLTRlNWItYmUzMC1iYTk3MWQyZDZjNjgiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUxMjI5OV82am80OEBleGFtcGxlLmNvbSIsImlhdCI6MTc2OTc2NTUxMiwiZXhwIjoxNzcwMzcwMzEyfQ.T4xtL3P0q88czYU4NgLUu1EYPTnspEIYXmhRNhoR7OA
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:31:54.988Z] DELETE /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI5MjM5YjJlZS0xZThhLTRlNWItYmUzMC1iYTk3MWQyZDZjNjgiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUxMjI5OV82am80OEBleGFtcGxlLmNvbSIsImlhdCI6MTc2OTc2NTUxMiwiZXhwIjoxNzcwMzcwMzEyfQ.T4xtL3P0q88czYU4NgLUu1EYPTnspEIYXmhRNhoR7OA
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:31:55.202Z] DELETE /api/user
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI5MjM5YjJlZS0xZThhLTRlNWItYmUzMC1iYTk3MWQyZDZjNjgiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUxMjI5OV82am80OEBleGFtcGxlLmNvbSIsImlhdCI6MTc2OTc2NTUxMiwiZXhwIjoxNzcwMzcwMzEyfQ.T4xtL3P0q88czYU4NgLUu1EYPTnspEIYXmhRNhoR7OA
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:31:55.518Z] POST /api/auth/register
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: none
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:31:56.096Z] POST /api/sync
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzMzAxMzZhMS03N2EzLTQzNTQtYWZiMy1iYTE3NmY1M2Q1YWUiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUxNTQ4MF9vaTZtbHBAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MTYsImV4cCI6MTc3MDM3MDMxNn0.EmiT4VyaN3hDryNQPfaGwLumP2fNsXQkWEKuxgShhxI
+
+      at log (server.js:113:11)
+
+  console.error
+    Apply change error: error: invalid input syntax for type uuid: "client-vs7kpvxrb6"
+        at /home/vi/supernova/backend/node_modules/pg-pool/index.js:45:11
+        at processTicksAndRejections (node:internal/process/task_queues:95:5)
+        at createTask (/home/vi/supernova/backend/routes/sync.js:164:25)
+        at applyTaskChange (/home/vi/supernova/backend/routes/sync.js:142:16)
+        at /home/vi/supernova/backend/routes/sync.js:89:28 {
+      length: 149,
+      severity: 'ERROR',
+      code: '22P02',
+      detail: undefined,
+      hint: undefined,
+      position: undefined,
+      internalPosition: undefined,
+      internalQuery: undefined,
+      where: "unnamed portal parameter $1 = '...'",
+      schema: undefined,
+      table: undefined,
+      column: undefined,
+      dataType: undefined,
+      constraint: undefined,
+      file: 'uuid.c',
+      line: '138',
+      routine: 'string_to_uuid'
+    }
+
+      152 |     }
+      153 |   } catch (err) {
+    > 154 |     console.error('Apply change error:', err);
+          |             ^
+      155 |     return { success: false, reason: 'database_error', error: err.message };
+      156 |   }
+      157 | }
+
+      at error (routes/sync.js:154:13)
+      at routes/sync.js:89:28
+
+  console.log
+    [2026-01-30T09:31:58.270Z] DELETE /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzMzAxMzZhMS03N2EzLTQzNTQtYWZiMy1iYTE3NmY1M2Q1YWUiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUxNTQ4MF9vaTZtbHBAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MTYsImV4cCI6MTc3MDM3MDMxNn0.EmiT4VyaN3hDryNQPfaGwLumP2fNsXQkWEKuxgShhxI
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:31:58.481Z] DELETE /api/user
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzMzAxMzZhMS03N2EzLTQzNTQtYWZiMy1iYTE3NmY1M2Q1YWUiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUxNTQ4MF9vaTZtbHBAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MTYsImV4cCI6MTc3MDM3MDMxNn0.EmiT4VyaN3hDryNQPfaGwLumP2fNsXQkWEKuxgShhxI
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:31:58.782Z] POST /api/auth/register
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: none
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:31:59.246Z] POST /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI3NGU2MTAwZC04NjE5LTRmNTctOWYyOS0zMGUzMzc4MjM1Y2UiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUxODc1M19lNGdlYkBleGFtcGxlLmNvbSIsImlhdCI6MTc2OTc2NTUxOSwiZXhwIjoxNzcwMzcwMzE5fQ.Gxpfwyz5dA390iG5t-EhZL0wjp6jkCWVD0FD7RVmJio
+
+      at log (server.js:113:11)
+
+  console.log
+    [Task Creation] User timezone: UTC
+
+      at log (server.js:567:19)
+
+  console.log
+    [Task Creation] Default privacy level: public
+
+      at log (server.js:571:19)
+
+  console.log
+    [Task Creation] START - Input: "Task to update"
+
+      at log (server.js:583:13)
+
+  console.log
+    [Task Creation] LLM enabled: false, Parsing: "Task to update"
+
+      at log (server.js:593:15)
+
+  console.log
+    [NLP] Parsed task: {
+      input: 'Task to update',
+      title: 'Task to update',
+      category: 'work',
+      contextTags: [],
+      priority: 0,
+      energy: 'medium',
+      recurring: null,
+      confidence: 1,
+      source: 'local'
+    }
+
+      at log (server.js:634:15)
+
+  console.log
+    [FIX v1.6.0] No date/time provided - defaulting to NOW: 2026-01-30 09:31:59
+
+      at log (server.js:722:15)
+
+  console.log
+    [Task Created] userId=74e6100d-8619-4f57-9f29-30e3378235ce, title="Task to update", priority=0, category=work, cacheInvalidated=true
+
+      at log (server.js:770:13)
+
+  console.log
+    [2026-01-30T09:31:59.826Z] POST /api/sync
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI3NGU2MTAwZC04NjE5LTRmNTctOWYyOS0zMGUzMzc4MjM1Y2UiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUxODc1M19lNGdlYkBleGFtcGxlLmNvbSIsImlhdCI6MTc2OTc2NTUxOSwiZXhwIjoxNzcwMzcwMzE5fQ.Gxpfwyz5dA390iG5t-EhZL0wjp6jkCWVD0FD7RVmJio
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:00.223Z] GET /api/tasks/f14d5de3-bf52-44ac-9bb5-a92e51fb8c63
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI3NGU2MTAwZC04NjE5LTRmNTctOWYyOS0zMGUzMzc4MjM1Y2UiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUxODc1M19lNGdlYkBleGFtcGxlLmNvbSIsImlhdCI6MTc2OTc2NTUxOSwiZXhwIjoxNzcwMzcwMzE5fQ.Gxpfwyz5dA390iG5t-EhZL0wjp6jkCWVD0FD7RVmJio
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:00.383Z] DELETE /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI3NGU2MTAwZC04NjE5LTRmNTctOWYyOS0zMGUzMzc4MjM1Y2UiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUxODc1M19lNGdlYkBleGFtcGxlLmNvbSIsImlhdCI6MTc2OTc2NTUxOSwiZXhwIjoxNzcwMzcwMzE5fQ.Gxpfwyz5dA390iG5t-EhZL0wjp6jkCWVD0FD7RVmJio
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:00.651Z] DELETE /api/user
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI3NGU2MTAwZC04NjE5LTRmNTctOWYyOS0zMGUzMzc4MjM1Y2UiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUxODc1M19lNGdlYkBleGFtcGxlLmNvbSIsImlhdCI6MTc2OTc2NTUxOSwiZXhwIjoxNzcwMzcwMzE5fQ.Gxpfwyz5dA390iG5t-EhZL0wjp6jkCWVD0FD7RVmJio
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:00.970Z] POST /api/auth/register
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: none
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:01.471Z] POST /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxYjkzZDIwYS1mNDVlLTRlOGEtYjJiMC0wOTZkNzk4YmMwNWEiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyMDk0MV82OGljekBleGFtcGxlLmNvbSIsImlhdCI6MTc2OTc2NTUyMSwiZXhwIjoxNzcwMzcwMzIxfQ.TEzKcXVenex2Ql6avkVBGdi4PsoAesVVHQwcUsqDCzY
+
+      at log (server.js:113:11)
+
+  console.log
+    [Task Creation] User timezone: UTC
+
+      at log (server.js:567:19)
+
+  console.log
+    [Task Creation] Default privacy level: public
+
+      at log (server.js:571:19)
+
+  console.log
+    [Task Creation] START - Input: "Task to delete"
+
+      at log (server.js:583:13)
+
+  console.log
+    [Task Creation] LLM enabled: false, Parsing: "Task to delete"
+
+      at log (server.js:593:15)
+
+  console.log
+    [NLP] Parsed task: {
+      input: 'Task to delete',
+      title: 'Task to delete',
+      category: 'work',
+      contextTags: [],
+      priority: 0,
+      energy: 'medium',
+      recurring: null,
+      confidence: 1,
+      source: 'local'
+    }
+
+      at log (server.js:634:15)
+
+  console.log
+    [FIX v1.6.0] No date/time provided - defaulting to NOW: 2026-01-30 09:32:01
+
+      at log (server.js:722:15)
+
+  console.log
+    [Task Created] userId=1b93d20a-f45e-4e8a-b2b0-096d798bc05a, title="Task to delete", priority=0, category=work, cacheInvalidated=true
+
+      at log (server.js:770:13)
+
+  console.log
+    [2026-01-30T09:32:02.132Z] POST /api/sync
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxYjkzZDIwYS1mNDVlLTRlOGEtYjJiMC0wOTZkNzk4YmMwNWEiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyMDk0MV82OGljekBleGFtcGxlLmNvbSIsImlhdCI6MTc2OTc2NTUyMSwiZXhwIjoxNzcwMzcwMzIxfQ.TEzKcXVenex2Ql6avkVBGdi4PsoAesVVHQwcUsqDCzY
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:02.682Z] GET /api/tasks/54699090-caff-4b11-945b-aff97e0a302b
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxYjkzZDIwYS1mNDVlLTRlOGEtYjJiMC0wOTZkNzk4YmMwNWEiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyMDk0MV82OGljekBleGFtcGxlLmNvbSIsImlhdCI6MTc2OTc2NTUyMSwiZXhwIjoxNzcwMzcwMzIxfQ.TEzKcXVenex2Ql6avkVBGdi4PsoAesVVHQwcUsqDCzY
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:02.854Z] DELETE /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxYjkzZDIwYS1mNDVlLTRlOGEtYjJiMC0wOTZkNzk4YmMwNWEiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyMDk0MV82OGljekBleGFtcGxlLmNvbSIsImlhdCI6MTc2OTc2NTUyMSwiZXhwIjoxNzcwMzcwMzIxfQ.TEzKcXVenex2Ql6avkVBGdi4PsoAesVVHQwcUsqDCzY
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:03.040Z] DELETE /api/user
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxYjkzZDIwYS1mNDVlLTRlOGEtYjJiMC0wOTZkNzk4YmMwNWEiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyMDk0MV82OGljekBleGFtcGxlLmNvbSIsImlhdCI6MTc2OTc2NTUyMSwiZXhwIjoxNzcwMzcwMzIxfQ.TEzKcXVenex2Ql6avkVBGdi4PsoAesVVHQwcUsqDCzY
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:03.376Z] POST /api/auth/register
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: none
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:03.818Z] POST /api/sync
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxOGIyNjAxNy00OGI3LTQ2OGMtOGVkMy0zN2JiMmQ2ODRiMGIiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyMzMyOV9mbWIwdWVAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MjMsImV4cCI6MTc3MDM3MDMyM30.LO4Xi4I9aqYgpYKtN9z5a-EPDZDwBYvEa4vDbbHnwuA
+
+      at log (server.js:113:11)
+
+  console.error
+    Apply change error: error: invalid input syntax for type uuid: "client-1"
+        at /home/vi/supernova/backend/node_modules/pg-pool/index.js:45:11
+        at processTicksAndRejections (node:internal/process/task_queues:95:5)
+        at createTask (/home/vi/supernova/backend/routes/sync.js:164:25)
+        at applyTaskChange (/home/vi/supernova/backend/routes/sync.js:142:16)
+        at /home/vi/supernova/backend/routes/sync.js:89:28 {
+      length: 140,
+      severity: 'ERROR',
+      code: '22P02',
+      detail: undefined,
+      hint: undefined,
+      position: undefined,
+      internalPosition: undefined,
+      internalQuery: undefined,
+      where: "unnamed portal parameter $1 = '...'",
+      schema: undefined,
+      table: undefined,
+      column: undefined,
+      dataType: undefined,
+      constraint: undefined,
+      file: 'uuid.c',
+      line: '138',
+      routine: 'string_to_uuid'
+    }
+
+      152 |     }
+      153 |   } catch (err) {
+    > 154 |     console.error('Apply change error:', err);
+          |             ^
+      155 |     return { success: false, reason: 'database_error', error: err.message };
+      156 |   }
+      157 | }
+
+      at error (routes/sync.js:154:13)
+      at routes/sync.js:89:28
+
+  console.error
+    Apply change error: error: invalid input syntax for type uuid: "client-2"
+        at /home/vi/supernova/backend/node_modules/pg-pool/index.js:45:11
+        at processTicksAndRejections (node:internal/process/task_queues:95:5)
+        at createTask (/home/vi/supernova/backend/routes/sync.js:164:25)
+        at applyTaskChange (/home/vi/supernova/backend/routes/sync.js:142:16)
+        at /home/vi/supernova/backend/routes/sync.js:89:28 {
+      length: 140,
+      severity: 'ERROR',
+      code: '22P02',
+      detail: undefined,
+      hint: undefined,
+      position: undefined,
+      internalPosition: undefined,
+      internalQuery: undefined,
+      where: "unnamed portal parameter $1 = '...'",
+      schema: undefined,
+      table: undefined,
+      column: undefined,
+      dataType: undefined,
+      constraint: undefined,
+      file: 'uuid.c',
+      line: '138',
+      routine: 'string_to_uuid'
+    }
+
+      152 |     }
+      153 |   } catch (err) {
+    > 154 |     console.error('Apply change error:', err);
+          |             ^
+      155 |     return { success: false, reason: 'database_error', error: err.message };
+      156 |   }
+      157 | }
+
+      at error (routes/sync.js:154:13)
+      at routes/sync.js:89:28
+
+  console.error
+    Apply change error: error: invalid input syntax for type uuid: "client-3"
+        at /home/vi/supernova/backend/node_modules/pg-pool/index.js:45:11
+        at processTicksAndRejections (node:internal/process/task_queues:95:5)
+        at createTask (/home/vi/supernova/backend/routes/sync.js:164:25)
+        at applyTaskChange (/home/vi/supernova/backend/routes/sync.js:142:16)
+        at /home/vi/supernova/backend/routes/sync.js:89:28 {
+      length: 140,
+      severity: 'ERROR',
+      code: '22P02',
+      detail: undefined,
+      hint: undefined,
+      position: undefined,
+      internalPosition: undefined,
+      internalQuery: undefined,
+      where: "unnamed portal parameter $1 = '...'",
+      schema: undefined,
+      table: undefined,
+      column: undefined,
+      dataType: undefined,
+      constraint: undefined,
+      file: 'uuid.c',
+      line: '138',
+      routine: 'string_to_uuid'
+    }
+
+      152 |     }
+      153 |   } catch (err) {
+    > 154 |     console.error('Apply change error:', err);
+          |             ^
+      155 |     return { success: false, reason: 'database_error', error: err.message };
+      156 |   }
+      157 | }
+
+      at error (routes/sync.js:154:13)
+      at routes/sync.js:89:28
+
+  console.log
+    [2026-01-30T09:32:07.006Z] DELETE /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxOGIyNjAxNy00OGI3LTQ2OGMtOGVkMy0zN2JiMmQ2ODRiMGIiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyMzMyOV9mbWIwdWVAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MjMsImV4cCI6MTc3MDM3MDMyM30.LO4Xi4I9aqYgpYKtN9z5a-EPDZDwBYvEa4vDbbHnwuA
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:07.193Z] DELETE /api/user
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxOGIyNjAxNy00OGI3LTQ2OGMtOGVkMy0zN2JiMmQ2ODRiMGIiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyMzMyOV9mbWIwdWVAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MjMsImV4cCI6MTc3MDM3MDMyM30.LO4Xi4I9aqYgpYKtN9z5a-EPDZDwBYvEa4vDbbHnwuA
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:07.473Z] POST /api/auth/register
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: none
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:07.990Z] POST /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJiMWZmYjA0YS0zMzcxLTQ1NTYtODcyNC1iNzBlZjkzMmExYWIiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyNzQ2MV91dGJwdG9AZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MjcsImV4cCI6MTc3MDM3MDMyN30.OiMPryBp8iaAnU2bbutkrKD-Yalk59pgxNCm6alxwtE
+
+      at log (server.js:113:11)
+
+  console.log
+    [Task Creation] User timezone: UTC
+
+      at log (server.js:567:19)
+
+  console.log
+    [Task Creation] Default privacy level: public
+
+      at log (server.js:571:19)
+
+  console.log
+    [Task Creation] START - Input: "Task"
+
+      at log (server.js:583:13)
+
+  console.log
+    [Task Creation] LLM enabled: false, Parsing: "Task"
+
+      at log (server.js:593:15)
+
+  console.log
+    [NLP] Parsed task: {
+      input: 'Task',
+      title: 'Task',
+      category: 'work',
+      contextTags: [],
+      priority: 0,
+      energy: 'medium',
+      recurring: null,
+      confidence: 1,
+      source: 'local'
+    }
+
+      at log (server.js:634:15)
+
+  console.log
+    [FIX v1.6.0] No date/time provided - defaulting to NOW: 2026-01-30 09:32:08
+
+      at log (server.js:722:15)
+
+  console.log
+    [Task Created] userId=b1ffb04a-3371-4556-8724-b70ef932a1ab, title="Task", priority=0, category=work, cacheInvalidated=true
+
+      at log (server.js:770:13)
+
+  console.log
+    [2026-01-30T09:32:08.620Z] PATCH /api/tasks/bc97b541-fd11-4f5d-a707-d2b75b6e83cb
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJiMWZmYjA0YS0zMzcxLTQ1NTYtODcyNC1iNzBlZjkzMmExYWIiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyNzQ2MV91dGJwdG9AZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MjcsImV4cCI6MTc3MDM3MDMyN30.OiMPryBp8iaAnU2bbutkrKD-Yalk59pgxNCm6alxwtE
+
+      at log (server.js:113:11)
+
+  console.log
+    [PATCH DEBUG] Task: bc97b541-fd11-4f5d-a707-d2b75b6e83cb
+
+      at log (server.js:787:13)
+
+  console.log
+    [PATCH DEBUG] Body: {"title":"Server update","priority":2}
+
+      at log (server.js:788:13)
+
+  console.log
+    [2026-01-30T09:32:08.831Z] POST /api/sync
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJiMWZmYjA0YS0zMzcxLTQ1NTYtODcyNC1iNzBlZjkzMmExYWIiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyNzQ2MV91dGJwdG9AZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MjcsImV4cCI6MTc3MDM3MDMyN30.OiMPryBp8iaAnU2bbutkrKD-Yalk59pgxNCm6alxwtE
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:09.231Z] DELETE /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJiMWZmYjA0YS0zMzcxLTQ1NTYtODcyNC1iNzBlZjkzMmExYWIiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyNzQ2MV91dGJwdG9AZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MjcsImV4cCI6MTc3MDM3MDMyN30.OiMPryBp8iaAnU2bbutkrKD-Yalk59pgxNCm6alxwtE
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:09.423Z] DELETE /api/user
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJiMWZmYjA0YS0zMzcxLTQ1NTYtODcyNC1iNzBlZjkzMmExYWIiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyNzQ2MV91dGJwdG9AZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MjcsImV4cCI6MTc3MDM3MDMyN30.OiMPryBp8iaAnU2bbutkrKD-Yalk59pgxNCm6alxwtE
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:09.710Z] POST /api/auth/register
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: none
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:10.141Z] POST /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4ZmViZDZkYS0yOTlkLTQ5NWQtYWEzZC1jNmE5Mjk1NGVhNWYiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyOTY4NV91NmluY2FAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzAsImV4cCI6MTc3MDM3MDMzMH0.vDc5oIeGAvoiFALX8QYoeFeeRN5ocCi_IzOkuzdyb90
+
+      at log (server.js:113:11)
+
+  console.log
+    [Task Creation] User timezone: UTC
+
+      at log (server.js:567:19)
+
+  console.log
+    [Task Creation] Default privacy level: public
+
+      at log (server.js:571:19)
+
+  console.log
+    [Task Creation] START - Input: "Old task"
+
+      at log (server.js:583:13)
+
+  console.log
+    [Task Creation] LLM enabled: false, Parsing: "Old task"
+
+      at log (server.js:593:15)
+
+  console.log
+    [NLP] Parsed task: {
+      input: 'Old task',
+      title: 'Old task',
+      category: 'work',
+      contextTags: [],
+      priority: 0,
+      energy: 'medium',
+      recurring: null,
+      confidence: 1,
+      source: 'local'
+    }
+
+      at log (server.js:634:15)
+
+  console.log
+    [FIX v1.6.0] No date/time provided - defaulting to NOW: 2026-01-30 09:32:10
+
+      at log (server.js:722:15)
+
+  console.log
+    [Task Created] userId=8febd6da-299d-495d-aa3d-c6a92954ea5f, title="Old task", priority=0, category=work, cacheInvalidated=true
+
+      at log (server.js:770:13)
+
+  console.log
+    [2026-01-30T09:32:10.768Z] POST /api/sync
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4ZmViZDZkYS0yOTlkLTQ5NWQtYWEzZC1jNmE5Mjk1NGVhNWYiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyOTY4NV91NmluY2FAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzAsImV4cCI6MTc3MDM3MDMzMH0.vDc5oIeGAvoiFALX8QYoeFeeRN5ocCi_IzOkuzdyb90
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:11.165Z] GET /api/tasks/4b9290a2-d50e-43c9-82e3-32ab09bc199a
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4ZmViZDZkYS0yOTlkLTQ5NWQtYWEzZC1jNmE5Mjk1NGVhNWYiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyOTY4NV91NmluY2FAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzAsImV4cCI6MTc3MDM3MDMzMH0.vDc5oIeGAvoiFALX8QYoeFeeRN5ocCi_IzOkuzdyb90
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:11.338Z] DELETE /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4ZmViZDZkYS0yOTlkLTQ5NWQtYWEzZC1jNmE5Mjk1NGVhNWYiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyOTY4NV91NmluY2FAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzAsImV4cCI6MTc3MDM3MDMzMH0.vDc5oIeGAvoiFALX8QYoeFeeRN5ocCi_IzOkuzdyb90
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:11.548Z] DELETE /api/user
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4ZmViZDZkYS0yOTlkLTQ5NWQtYWEzZC1jNmE5Mjk1NGVhNWYiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUyOTY4NV91NmluY2FAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzAsImV4cCI6MTc3MDM3MDMzMH0.vDc5oIeGAvoiFALX8QYoeFeeRN5ocCi_IzOkuzdyb90
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:11.809Z] POST /api/auth/register
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: none
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:12.222Z] POST /api/sync
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzZGI5NjJhZC0wZWQ0LTQxMGUtOTQxZi0yNTU1MjkyYTg2NDQiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUzMTc5OF80bjA5NmNAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzIsImV4cCI6MTc3MDM3MDMzMn0.RF8olNxeemDa_-EEba1HgGEPBZKjfozY8iZ6VAfInwQ
+
+      at log (server.js:113:11)
+
+  console.error
+    Apply change error: error: invalid input syntax for type uuid: "99999"
+        at /home/vi/supernova/backend/node_modules/pg-pool/index.js:45:11
+        at processTicksAndRejections (node:internal/process/task_queues:95:5)
+        at updateTask (/home/vi/supernova/backend/routes/sync.js:219:23)
+        at applyTaskChange (/home/vi/supernova/backend/routes/sync.js:145:16)
+        at /home/vi/supernova/backend/routes/sync.js:89:28 {
+      length: 137,
+      severity: 'ERROR',
+      code: '22P02',
+      detail: undefined,
+      hint: undefined,
+      position: undefined,
+      internalPosition: undefined,
+      internalQuery: undefined,
+      where: "unnamed portal parameter $1 = '...'",
+      schema: undefined,
+      table: undefined,
+      column: undefined,
+      dataType: undefined,
+      constraint: undefined,
+      file: 'uuid.c',
+      line: '138',
+      routine: 'string_to_uuid'
+    }
+
+      152 |     }
+      153 |   } catch (err) {
+    > 154 |     console.error('Apply change error:', err);
+          |             ^
+      155 |     return { success: false, reason: 'database_error', error: err.message };
+      156 |   }
+      157 | }
+
+      at error (routes/sync.js:154:13)
+      at routes/sync.js:89:28
+
+  console.log
+    [2026-01-30T09:32:13.349Z] DELETE /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzZGI5NjJhZC0wZWQ0LTQxMGUtOTQxZi0yNTU1MjkyYTg2NDQiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUzMTc5OF80bjA5NmNAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzIsImV4cCI6MTc3MDM3MDMzMn0.RF8olNxeemDa_-EEba1HgGEPBZKjfozY8iZ6VAfInwQ
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:13.555Z] DELETE /api/user
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzZGI5NjJhZC0wZWQ0LTQxMGUtOTQxZi0yNTU1MjkyYTg2NDQiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUzMTc5OF80bjA5NmNAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzIsImV4cCI6MTc3MDM3MDMzMn0.RF8olNxeemDa_-EEba1HgGEPBZKjfozY8iZ6VAfInwQ
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:13.947Z] POST /api/auth/register
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: none
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:14.440Z] POST /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJmNTE0NmEwYS02NThjLTQ2ZTgtOWM1MC0zMTFmZWNlOWQ4MzEiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUzMzkxNF9xdHgweTVAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzQsImV4cCI6MTc3MDM3MDMzNH0.PI2yioasiBd-Qa_F0vILhKGznnl_DV5xVVzz02w3FWg
+
+      at log (server.js:113:11)
+
+  console.log
+    [Task Creation] User timezone: UTC
+
+      at log (server.js:567:19)
+
+  console.log
+    [Task Creation] Default privacy level: public
+
+      at log (server.js:571:19)
+
+  console.log
+    [Task Creation] START - Input: "Task"
+
+      at log (server.js:583:13)
+
+  console.log
+    [Task Creation] LLM enabled: false, Parsing: "Task"
+
+      at log (server.js:593:15)
+
+  console.log
+    [NLP] Parsed task: {
+      input: 'Task',
+      title: 'Task',
+      category: 'work',
+      contextTags: [],
+      priority: 0,
+      energy: 'medium',
+      recurring: null,
+      confidence: 1,
+      source: 'local'
+    }
+
+      at log (server.js:634:15)
+
+  console.log
+    [FIX v1.6.0] No date/time provided - defaulting to NOW: 2026-01-30 09:32:14
+
+      at log (server.js:722:15)
+
+  console.log
+    [Task Created] userId=f5146a0a-658c-46e8-9c50-311fece9d831, title="Task", priority=0, category=work, cacheInvalidated=true
+
+      at log (server.js:770:13)
+
+  console.log
+    [2026-01-30T09:32:15.027Z] PATCH /api/tasks/23717e63-328f-403d-8fa0-0bfa7080dedf
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJmNTE0NmEwYS02NThjLTQ2ZTgtOWM1MC0zMTFmZWNlOWQ4MzEiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUzMzkxNF9xdHgweTVAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzQsImV4cCI6MTc3MDM3MDMzNH0.PI2yioasiBd-Qa_F0vILhKGznnl_DV5xVVzz02w3FWg
+
+      at log (server.js:113:11)
+
+  console.log
+    [PATCH DEBUG] Task: 23717e63-328f-403d-8fa0-0bfa7080dedf
+
+      at log (server.js:787:13)
+
+  console.log
+    [PATCH DEBUG] Body: {"title":"Server update"}
+
+      at log (server.js:788:13)
+
+  console.log
+    [2026-01-30T09:32:15.284Z] POST /api/sync
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJmNTE0NmEwYS02NThjLTQ2ZTgtOWM1MC0zMTFmZWNlOWQ4MzEiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUzMzkxNF9xdHgweTVAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzQsImV4cCI6MTc3MDM3MDMzNH0.PI2yioasiBd-Qa_F0vILhKGznnl_DV5xVVzz02w3FWg
+
+      at log (server.js:113:11)
+
+  console.error
+    Apply change error: error: invalid input syntax for type uuid: "client-good"
+        at /home/vi/supernova/backend/node_modules/pg-pool/index.js:45:11
+        at processTicksAndRejections (node:internal/process/task_queues:95:5)
+        at createTask (/home/vi/supernova/backend/routes/sync.js:164:25)
+        at applyTaskChange (/home/vi/supernova/backend/routes/sync.js:142:16)
+        at /home/vi/supernova/backend/routes/sync.js:89:28 {
+      length: 143,
+      severity: 'ERROR',
+      code: '22P02',
+      detail: undefined,
+      hint: undefined,
+      position: undefined,
+      internalPosition: undefined,
+      internalQuery: undefined,
+      where: "unnamed portal parameter $1 = '...'",
+      schema: undefined,
+      table: undefined,
+      column: undefined,
+      dataType: undefined,
+      constraint: undefined,
+      file: 'uuid.c',
+      line: '138',
+      routine: 'string_to_uuid'
+    }
+
+      152 |     }
+      153 |   } catch (err) {
+    > 154 |     console.error('Apply change error:', err);
+          |             ^
+      155 |     return { success: false, reason: 'database_error', error: err.message };
+      156 |   }
+      157 | }
+
+      at error (routes/sync.js:154:13)
+      at routes/sync.js:89:28
+
+  console.log
+    [2026-01-30T09:32:16.822Z] DELETE /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJmNTE0NmEwYS02NThjLTQ2ZTgtOWM1MC0zMTFmZWNlOWQ4MzEiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUzMzkxNF9xdHgweTVAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzQsImV4cCI6MTc3MDM3MDMzNH0.PI2yioasiBd-Qa_F0vILhKGznnl_DV5xVVzz02w3FWg
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:17.098Z] DELETE /api/user
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJmNTE0NmEwYS02NThjLTQ2ZTgtOWM1MC0zMTFmZWNlOWQ4MzEiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUzMzkxNF9xdHgweTVAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzQsImV4cCI6MTc3MDM3MDMzNH0.PI2yioasiBd-Qa_F0vILhKGznnl_DV5xVVzz02w3FWg
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:17.555Z] POST /api/auth/register
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: none
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:18.086Z] POST /api/sync
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: none
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:18.126Z] DELETE /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJmMzExY2Q2Yy0xMDM0LTRjYjEtODRlOC1jZWJmZGE3NzM0MTciLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUzNzUxMV8yenI2MjdAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzgsImV4cCI6MTc3MDM3MDMzOH0.p3RsGSvJU8atYFA_RDyQaakA4efAh91Ap5rHHyivTg0
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:18.334Z] DELETE /api/user
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJmMzExY2Q2Yy0xMDM0LTRjYjEtODRlOC1jZWJmZGE3NzM0MTciLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUzNzUxMV8yenI2MjdAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzgsImV4cCI6MTc3MDM3MDMzOH0.p3RsGSvJU8atYFA_RDyQaakA4efAh91Ap5rHHyivTg0
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:18.637Z] POST /api/auth/register
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: none
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:19.299Z] POST /api/sync
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI3YTk2MTNmMy01Y2JkLTQ0NmItOWU1YS1kYjYyMTlkNWJjM2IiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUzODYxMl82eWdlaTJAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzksImV4cCI6MTc3MDM3MDMzOX0.PSfHwJbTO96S9Un1Fzu01FJysUoJDUYtDcrKp7626QQ
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:19.534Z] DELETE /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI3YTk2MTNmMy01Y2JkLTQ0NmItOWU1YS1kYjYyMTlkNWJjM2IiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUzODYxMl82eWdlaTJAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzksImV4cCI6MTc3MDM3MDMzOX0.PSfHwJbTO96S9Un1Fzu01FJysUoJDUYtDcrKp7626QQ
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:19.841Z] DELETE /api/user
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI3YTk2MTNmMy01Y2JkLTQ0NmItOWU1YS1kYjYyMTlkNWJjM2IiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTUzODYxMl82eWdlaTJAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1MzksImV4cCI6MTc3MDM3MDMzOX0.PSfHwJbTO96S9Un1Fzu01FJysUoJDUYtDcrKp7626QQ
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:20.328Z] POST /api/auth/register
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: none
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:21.024Z] POST /api/sync
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJlYTZlNGE1Yi1mZWNiLTQ4MzQtYTZhYi0xNDczYzE1ZTMxNDIiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTU0MDI5Ml80YnBtZ2NAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1NDAsImV4cCI6MTc3MDM3MDM0MH0.hxoWnORQd9lle3b1aGyW2AQIClETjWkkZ1f8llLhjUY
+
+      at log (server.js:113:11)
+
+  console.warn
+    [Sync] Skipping invalid change type: invalid-action
+
+      80 |         // Validate action type
+      81 |         if (!['create', 'update', 'delete'].includes(change.type)) {
+    > 82 |           console.warn(`[Sync] Skipping invalid change type: ${change.type}`);
+         |                   ^
+      83 |           syncResults.skipped++;
+      84 |           continue;
+      85 |         }
+
+      at warn (routes/sync.js:82:19)
+      at Layer.handleRequest (node_modules/router/lib/layer.js:152:17)
+      at next (node_modules/router/lib/route.js:157:13)
+      at middleware (node_modules/express-validator/lib/middlewares/check.js:16:13)
+
+  console.log
+    [2026-01-30T09:32:21.272Z] DELETE /api/tasks
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJlYTZlNGE1Yi1mZWNiLTQ4MzQtYTZhYi0xNDczYzE1ZTMxNDIiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTU0MDI5Ml80YnBtZ2NAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1NDAsImV4cCI6MTc3MDM3MDM0MH0.hxoWnORQd9lle3b1aGyW2AQIClETjWkkZ1f8llLhjUY
+
+      at log (server.js:113:11)
+
+  console.log
+    [2026-01-30T09:32:21.540Z] DELETE /api/user
+
+      at log (server.js:112:11)
+
+  console.log
+    Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJlYTZlNGE1Yi1mZWNiLTQ4MzQtYTZhYi0xNDczYzE1ZTMxNDIiLCJlbWFpbCI6InRlc3RfMTc2OTc2NTU0MDI5Ml80YnBtZ2NAZXhhbXBsZS5jb20iLCJpYXQiOjE3Njk3NjU1NDAsImV4cCI6MTc3MDM3MDM0MH0.hxoWnORQd9lle3b1aGyW2AQIClETjWkkZ1f8llLhjUY
+
+      at log (server.js:113:11)
+
+FAIL tests/sync.test.js (42.925 s)
+  Offline Sync with Conflict Resolution
+    POST /api/sync - Basic Sync
+      ✓ should sync successfully with no pending changes (2796 ms)
+      ✓ should return tasks created after lastSyncAt (2380 ms)
+      ✓ should not return tasks created before lastSyncAt (3177 ms)
+    POST /api/sync - Pushing Changes
+      ✕ should create new task from pending changes (3266 ms)
+      ✓ should update existing task from pending changes (2195 ms)
+      ✓ should delete task from pending changes (2388 ms)
+      ✕ should handle multiple pending changes in order (4127 ms)
+    POST /api/sync - Conflict Resolution (Last-Write-Wins)
+      ✕ should detect conflict when client change is older than server (2223 ms)
+      ✓ should apply client change when it is newer than server (2113 ms)
+      ✕ should handle conflict on non-existent task (2109 ms)
+      ✓ should return conflicts and applied changes separately (3596 ms)
+    POST /api/sync - Error Handling
+      ✓ should require authentication (1101 ms)
+      ✕ should validate lastSyncAt parameter (1665 ms)
+      ✓ should handle invalid pending changes gracefully (1637 ms)
+
+  ● Offline Sync with Conflict Resolution › POST /api/sync - Pushing Changes › should create new task from pending changes
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1
+    Received: 0
+
+      127 |
+      128 |       expect(response.body.results).toBeTruthy();
+    > 129 |       expect(response.body.results.applied).toBe(1);
+          |                                             ^
+      130 |       expect(response.body.results.conflicts.length).toBe(0);
+      131 |
+      132 |       // Verify task was created
+
+      at Object.toBe (tests/sync.test.js:129:45)
+
+  ● Offline Sync with Conflict Resolution › POST /api/sync - Pushing Changes › should handle multiple pending changes in order
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 3
+    Received: 0
+
+      251 |         .expect(200);
+      252 |
+    > 253 |       expect(response.body.results.applied).toBe(3);
+          |                                             ^
+      254 |
+      255 |       // Verify all tasks were created
+      256 |       const tasks = await request(app)
+
+      at Object.toBe (tests/sync.test.js:253:45)
+
+  ● Offline Sync with Conflict Resolution › POST /api/sync - Conflict Resolution (Last-Write-Wins) › should detect conflict when client change is older than server
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1
+    Received: 0
+
+      295 |
+      296 |       // Should have a conflict
+    > 297 |       expect(response.body.results.conflicts.length).toBe(1);
+          |                                                      ^
+      298 |       expect(response.body.results.conflicts[0].reason).toBe('stale_data');
+      299 |       expect(response.body.results.conflicts[0].serverData).toBeTruthy();
+      300 |
+
+      at Object.toBe (tests/sync.test.js:297:54)
+
+  ● Offline Sync with Conflict Resolution › POST /api/sync - Conflict Resolution (Last-Write-Wins) › should handle conflict on non-existent task
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "task_not_found"
+    Received: "database_error"
+
+      371 |       // Should have a conflict
+      372 |       expect(response.body.results.conflicts.length).toBe(1);
+    > 373 |       expect(response.body.results.conflicts[0].reason).toBe('task_not_found');
+          |                                                         ^
+      374 |     });
+      375 |
+      376 |     it('should return conflicts and applied changes separately', async () => {
+
+      at Object.toBe (tests/sync.test.js:373:57)
+
+  ● Offline Sync with Conflict Resolution › POST /api/sync - Error Handling › should validate lastSyncAt parameter
+
+    expected 400 "Bad Request", got 200 "OK"
+
+      435 |           pendingChanges: []
+      436 |         })
+    > 437 |         .expect(400);
+          |          ^
+      438 |
+      439 |       expect(response.body).toHaveProperty('errors');
+      440 |     });
+
+      at Object.expect (tests/sync.test.js:437:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:309:14)
+      at node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (node_modules/supertest/lib/test.js:195:23)
+      at localAssert (node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (node_modules/supertest/lib/test.js:152:11)
+
+Test Suites: 1 failed, 1 total
+Tests:       5 failed, 9 passed, 14 total
+Snapshots:   0 total
+Time:        43.117 s, estimated 64 s
+Ran all test suites matching tests/sync.test.js.
+
+Jest has detected the following 1 open handle potentially keeping Jest from exiting:
+
+  ●  Timeout
+
+      216 |
+      217 | // Run cleanup every hour
+    > 218 | setInterval(cleanup, 3600000);
+          | ^
+      219 |
+      220 | // Export middleware and utility functions
+      221 | module.exports = {
+
+      at Object.setInterval (middleware/rate-limiter.js:218:1)
+      at Object.require (server.js:32:28)
+      at Object.require (tests/sync.test.js:7:13)
+

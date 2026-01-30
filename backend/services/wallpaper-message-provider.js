@@ -16,12 +16,15 @@ const { generateAndCacheMessages, getFallbackMessage } = require('./message-gene
 /**
  * Get next unshown message from cache
  */
-async function getNextCachedMessage(userId) {
-  if (!pool) {
-    return null;
+/**
+ * Get next unshown message from cache
+ */
+async function getNextCachedMessage(userId, client = null) {
+  const shouldRelease = !client;
+  if (!client) {
+    if (!pool) return null;
+    client = await pool.connect();
   }
-
-  const client = await pool.connect();
 
   try {
     const query = `
@@ -40,19 +43,19 @@ async function getNextCachedMessage(userId) {
 
     return result.rows[0];
   } finally {
-    client.release();
+    if (shouldRelease) client.release();
   }
 }
 
 /**
  * Mark message as shown
  */
-async function markMessageShown(messageId) {
-  if (!pool) {
-    return;
+async function markMessageShown(messageId, client = null) {
+  const shouldRelease = !client;
+  if (!client) {
+    if (!pool) return;
+    client = await pool.connect();
   }
-
-  const client = await pool.connect();
 
   try {
     await client.query(
@@ -60,19 +63,19 @@ async function markMessageShown(messageId) {
       [messageId]
     );
   } finally {
-    client.release();
+    if (shouldRelease) client.release();
   }
 }
 
 /**
  * Log message to history
  */
-async function logToHistory(userId, message, voice, intent, context) {
-  if (!pool) {
-    return;
+async function logToHistory(userId, message, voice, intent, context, client = null) {
+  const shouldRelease = !client;
+  if (!client) {
+    if (!pool) return;
+    client = await pool.connect();
   }
-
-  const client = await pool.connect();
 
   try {
     await client.query(
@@ -84,19 +87,19 @@ async function logToHistory(userId, message, voice, intent, context) {
     console.error('[MessageProvider] Error logging to history:', error.message);
     // Non-critical, don't throw
   } finally {
-    client.release();
+    if (shouldRelease) client.release();
   }
 }
 
 /**
  * Get count of unshown messages in cache
  */
-async function getUnshownCount(userId) {
-  if (!pool) {
-    return 0;
+async function getUnshownCount(userId, client = null) {
+  const shouldRelease = !client;
+  if (!client) {
+    if (!pool) return 0;
+    client = await pool.connect();
   }
-
-  const client = await pool.connect();
 
   try {
     const result = await client.query(
@@ -105,7 +108,7 @@ async function getUnshownCount(userId) {
     );
     return parseInt(result.rows[0].count) || 0;
   } finally {
-    client.release();
+    if (shouldRelease) client.release();
   }
 }
 
@@ -144,19 +147,24 @@ async function getCurrentMessage(userId, context = null, depth = 0) {
     };
   }
 
+  let client = null;
   try {
-    // 1. Try to get from cache
-    const cached = await getNextCachedMessage(userId);
+    if (pool) {
+      client = await pool.connect();
+    }
+
+    // 1. Try to get from cache using shared client
+    const cached = await getNextCachedMessage(userId, client);
 
     if (cached) {
       // Mark as shown
-      await markMessageShown(cached.id);
+      await markMessageShown(cached.id, client);
 
       // Log to history
-      await logToHistory(userId, cached.message, cached.voice, cached.intent, context);
+      await logToHistory(userId, cached.message, cached.voice, cached.intent, context, client);
 
       // Check if cache running low (trigger refresh)
-      const remaining = await getUnshownCount(userId);
+      const remaining = await getUnshownCount(userId, client);
       console.log(`[MessageProvider] Cache remaining for user ${userId}: ${remaining}`);
 
       if (remaining <= 2) {
@@ -173,10 +181,16 @@ async function getCurrentMessage(userId, context = null, depth = 0) {
       };
     }
 
-    // 2. Cache empty - generate immediately
-    console.log('[MessageProvider] Cache empty, generating immediately...');
+    // Release client before potentially long generation step
+    if (client) {
+      client.release();
+      client = null;
+    }
 
-    const generateResult = await generateAndCacheMessages(userId);
+    // 2. Cache empty - generate immediately
+    // Note: generateAndCacheMessages internally manages its own transaction/connection
+    console.log('[MessageProvider] Cache empty, generating immediately...');
+    const generateResult = await generateAndCacheMessages(userId, client);
 
     if (generateResult.success && generateResult.count > 0) {
       // Recursively get first message from newly populated cache
@@ -185,6 +199,7 @@ async function getCurrentMessage(userId, context = null, depth = 0) {
 
     // 3. Generation failed - use fallback template
     console.warn('[MessageProvider] Generation failed, using fallback template');
+    // ... remainder continues below
 
     const messageContext = context || { pendingCount: 0, completedToday: 0, timeOfDay: 'MORNING' };
     const fallbackMsg = getFallbackMessage(messageContext);
@@ -200,6 +215,7 @@ async function getCurrentMessage(userId, context = null, depth = 0) {
     };
 
   } catch (error) {
+    if (client) client.release();
     console.error('[MessageProvider] Error getting message:', error.message);
 
     // Ultimate fallback
