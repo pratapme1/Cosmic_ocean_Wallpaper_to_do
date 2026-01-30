@@ -40,13 +40,6 @@ router.post(
     body('lastSyncAt').optional().isInt(),
     body('pendingChanges').optional().isArray(),
     // Accept both 'action' and 'type' for backward compatibility
-    body('pendingChanges.*').custom((change) => {
-      const actionType = change.action || change.type;
-      if (!actionType || !['create', 'update', 'delete'].includes(actionType)) {
-        throw new Error('Invalid action/type. Must be create, update, or delete');
-      }
-      return true;
-    }),
     body('pendingChanges.*.data').optional().isObject(),
     body('pendingChanges.*.clientId').isString(),
     body('pendingChanges.*.timestamp').isInt()
@@ -60,7 +53,7 @@ router.post(
       }
 
       const userId = req.user.userId;
-      const client = req.app.locals.dbClient;
+      const client = req.dbClient;
       let { lastSyncAt, pendingChanges = [] } = req.body;
 
       // Normalize pending changes (map action->type, taskId->data.id, add entity)
@@ -78,11 +71,19 @@ router.post(
       const syncResults = {
         applied: 0,
         rejected: 0,
+        skipped: 0,
         conflicts: []
       };
 
       // Process pending changes in order
       for (const change of pendingChanges) {
+        // Validate action type
+        if (!['create', 'update', 'delete'].includes(change.type)) {
+          console.warn(`[Sync] Skipping invalid change type: ${change.type}`);
+          syncResults.skipped++;
+          continue;
+        }
+
         try {
           if (change.entity === 'task') {
             const result = await applyTaskChange(client, userId, change);
@@ -223,7 +224,7 @@ async function updateTask(client, userId, data, clientId, timestamp) {
   if (currentTask.rows.length === 0) {
     return {
       success: false,
-      reason: 'not_found'
+      reason: 'task_not_found'
     };
   }
 

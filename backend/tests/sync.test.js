@@ -7,6 +7,13 @@ const request = require('supertest');
 const app = require('../server');
 const { createTestUser, createTestTask, updateTask, cleanupTestUser } = require('./helpers');
 
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 describe('Offline Sync with Conflict Resolution', () => {
   let accessToken;
   let userId;
@@ -102,7 +109,7 @@ describe('Offline Sync with Conflict Resolution', () => {
 
   describe('POST /api/sync - Pushing Changes', () => {
     it('should create new task from pending changes', async () => {
-      const clientId = 'client-' + global.testUtils.randomString();
+      const clientId = generateUUID();
       const timestamp = Date.now();
 
       const response = await request(app)
@@ -148,7 +155,7 @@ describe('Offline Sync with Conflict Resolution', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       // Sync with update
-      const clientId = 'client-' + global.testUtils.randomString();
+      const clientId = generateUUID();
       const timestamp = Date.now();
 
       const response = await request(app)
@@ -191,7 +198,7 @@ describe('Offline Sync with Conflict Resolution', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       // Sync with delete
-      const clientId = 'client-' + global.testUtils.randomString();
+      const clientId = generateUUID();
       const timestamp = Date.now();
 
       const response = await request(app)
@@ -230,19 +237,19 @@ describe('Offline Sync with Conflict Resolution', () => {
           pendingChanges: [
             {
               action: 'create',
-              clientId: 'client-1',
+              clientId: generateUUID(),
               timestamp: baseTimestamp,
               data: { title: 'Task 1', priority: 0 }
             },
             {
               action: 'create',
-              clientId: 'client-2',
+              clientId: generateUUID(),
               timestamp: baseTimestamp + 1,
               data: { title: 'Task 2', priority: 1 }
             },
             {
               action: 'create',
-              clientId: 'client-3',
+              clientId: generateUUID(),
               timestamp: baseTimestamp + 2,
               data: { title: 'Task 3', priority: 2 }
             }
@@ -284,7 +291,7 @@ describe('Offline Sync with Conflict Resolution', () => {
           pendingChanges: [
             {
               action: 'update',
-              clientId: 'client-old',
+              clientId: generateUUID(),
               timestamp: oldTimestamp,
               taskId: task.id,
               data: { title: 'Client update', priority: 1 }
@@ -326,7 +333,7 @@ describe('Offline Sync with Conflict Resolution', () => {
           pendingChanges: [
             {
               action: 'update',
-              clientId: 'client-new',
+              clientId: generateUUID(),
               timestamp: newTimestamp,
               taskId: task.id,
               data: { title: 'Newer client update', priority: 2 }
@@ -359,7 +366,7 @@ describe('Offline Sync with Conflict Resolution', () => {
           pendingChanges: [
             {
               action: 'update',
-              clientId: 'client-1',
+              clientId: generateUUID(),
               timestamp: Date.now(),
               taskId: fakeTaskId,
               data: { title: 'Update to non-existent task' }
@@ -395,14 +402,14 @@ describe('Offline Sync with Conflict Resolution', () => {
           pendingChanges: [
             {
               action: 'update',
-              clientId: 'client-conflict',
+              clientId: generateUUID(),
               timestamp: oldTimestamp,
               taskId: task.id,
               data: { title: 'Conflicting update' }
             },
             {
               action: 'create',
-              clientId: 'client-good',
+              clientId: generateUUID(),
               timestamp: newTimestamp,
               data: { title: 'Good new task', priority: 1 }
             }
@@ -448,7 +455,7 @@ describe('Offline Sync with Conflict Resolution', () => {
           pendingChanges: [
             {
               action: 'invalid-action',
-              clientId: 'client-1',
+              clientId: generateUUID(),
               timestamp: Date.now()
             }
           ]
