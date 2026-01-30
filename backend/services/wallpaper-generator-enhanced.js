@@ -27,6 +27,7 @@ const { AchievementService } = require('./achievement-service');
 const { renderAchievementsToSvg, generateStreakDisplay } = require('./achievement-renderer');
 const { getEnvironment } = require('./environment-system');
 const { getWeatherOverlay, blendWithEnvironment } = require('./weather-overlay');
+const cacheService = require('./cache');
 
 // Initialize intelligence layer components
 const messageEngine = new MessageEngine();

@@ -132,7 +132,18 @@ function triggerBackgroundRefresh(userId) {
  * 2. If cache empty, generate immediately
  * 3. If generation fails, use fallback template
  */
-async function getCurrentMessage(userId, context = null) {
+async function getCurrentMessage(userId, context = null, depth = 0) {
+  // Prevent infinite recursion
+  if (depth > 1) {
+    console.warn('[MessageProvider] Max recursion depth reached, using hard fallback');
+    return {
+      message: 'Tasks await',
+      source: 'depth_fallback',
+      voice: 'DIRECT',
+      intent: 'NUDGE'
+    };
+  }
+
   try {
     // 1. Try to get from cache
     const cached = await getNextCachedMessage(userId);
@@ -169,7 +180,7 @@ async function getCurrentMessage(userId, context = null) {
 
     if (generateResult.success && generateResult.count > 0) {
       // Recursively get first message from newly populated cache
-      return await getCurrentMessage(userId, context);
+      return await getCurrentMessage(userId, context, depth + 1);
     }
 
     // 3. Generation failed - use fallback template
