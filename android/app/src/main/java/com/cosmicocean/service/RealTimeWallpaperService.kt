@@ -269,11 +269,15 @@ class RealTimeWallpaperService : Service() {
         }
     }
 
-    // FIX 2: Retry logic with exponential backoff
+    // FIX 2: Retry logic with aggressive exponential backoff to prevent server spam
     private fun scheduleRetry(reason: String) {
         if (retryCount < MAX_RETRY_COUNT) {
             retryCount++
-            val delay = INITIAL_RETRY_DELAY_MS * retryCount // 5s, 10s, 15s
+            // Increase initial delay to 10s, max 60s
+            // Sequence: 10s, 30s, 60s
+            val multiplier = if (retryCount == 1) 1 else if (retryCount == 2) 3 else 6
+            val delay = 10_000L * multiplier
+            
             Log.w(TAG, "Scheduling retry #$retryCount in ${delay}ms (reason: $reason)")
             handler.postDelayed({
                 if (isUpdating) {
@@ -281,7 +285,7 @@ class RealTimeWallpaperService : Service() {
                 }
             }, delay)
         } else {
-            Log.e(TAG, "Max retries ($MAX_RETRY_COUNT) reached. Will try again at next scheduled interval.")
+            Log.e(TAG, "Max retries ($MAX_RETRY_COUNT) reached. Will try again at next scheduled interval (60s).")
             retryCount = 0 // Reset for next interval
         }
     }
@@ -296,14 +300,24 @@ class RealTimeWallpaperService : Service() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 when (intent?.action) {
                     Intent.ACTION_SCREEN_OFF -> {
-                        Log.d(TAG, "Screen OFF - triggering immediate update for fresh lock screen")
-                        // Immediate update when screen turns off for fresh lock screen
-                        updateWallpaper()
+                        Log.d(TAG, "Screen OFF - scheduling update (debounced 2s)")
+                        // Debounce updates to prevent spamming while toggling screen
+                        handler.removeCallbacks(updateRunnable) 
+                        handler.postDelayed({ 
+                             updateWallpaper() 
+                             // Restart periodic timer from this point
+                             handler.postDelayed(updateRunnable, UPDATE_INTERVAL_MS)
+                        }, 2000)
                     }
                     Intent.ACTION_SCREEN_ON -> {
-                        Log.d(TAG, "Screen ON - triggering update for latest task state")
-                        // FIX 1: Also update when screen turns on to show latest state
-                        updateWallpaper()
+                         // Optional: Might skip update on SCREEN_ON if we trust background updates
+                         // But for now, just debounce it too
+                         Log.d(TAG, "Screen ON - scheduling update (debounced 2s)")
+                         handler.removeCallbacks(updateRunnable)
+                         handler.postDelayed({ 
+                             updateWallpaper()
+                             handler.postDelayed(updateRunnable, UPDATE_INTERVAL_MS)
+                         }, 2000)
                     }
                 }
             }
