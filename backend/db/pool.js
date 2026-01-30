@@ -37,20 +37,17 @@ function getDbPool() {
   poolInstance = new Pool({
     connectionString: cleansedUrl,
     ssl: { rejectUnauthorized: false },
-    // CRITICAL for Vercel: Limited connections per lambda instance.
-    // Supabase free tier allows ~60 connections. With Vercel's serverless nature,
-    // we need a balance: enough for concurrent requests within one lambda,
-    // but not so many that we exhaust Supabase limits across all lambdas.
-    max: isVercel ? 3 : 10,
-    // CRITICAL for Vercel: Release idle connections quickly to prevent
-    // connection accumulation across lambda instances.
-    idleTimeoutMillis: isVercel ? 500 : 10000,
-    // Connection timeout: How long to wait for a connection from the pool
-    connectionTimeoutMillis: isVercel ? 15000 : 5000,
+    // Using Supabase Connection Pooler (port 6543) which handles thousands of connections
+    // So we can safely have more connections per Lambda instance
+    max: isVercel ? 10 : 20,
+    // Keep connections alive longer to avoid reconnection overhead
+    idleTimeoutMillis: isVercel ? 30000 : 60000,
+    // Connection timeout: How long to wait for a new connection
+    connectionTimeoutMillis: isVercel ? 10000 : 5000,
     // Acquire timeout: How long to wait when all connections are in use
-    acquireTimeoutMillis: isVercel ? 15000 : 5000,
-    // Cancel pending requests if they wait too long (prevents queue buildup)
-    allowExitOnIdle: isVercel ? true : false
+    acquireTimeoutMillis: isVercel ? 10000 : 5000,
+    // Statement timeout: Max time for any query
+    statement_timeout: 30000
   });
 
   poolInstance.on('connect', () => {
