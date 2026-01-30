@@ -24,21 +24,9 @@ function getDbPool() {
   if (cleansedUrl.includes('supabase.co:5432')) {
     console.log('[DB] Detected Supabase direct connection, switching to pooler...');
     
-    // Extract project ref from hostname (e.g., db.abc123.supabase.co -> abc123)
-    const match = cleansedUrl.match(/db\.([^.]+)\.supabase\.co/);
-    const projectRef = match ? match[1] : null;
-    
-    // Change port from 5432 to 6543
+    // Change port from 5432 to 6543 (pooler port)
+    // The pooler uses same username/password as direct connection
     cleansedUrl = cleansedUrl.replace(':5432/', ':6543/');
-    
-    // Pooler requires username format: postgres.[project-ref]
-    if (projectRef) {
-      cleansedUrl = cleansedUrl.replace(
-        /postgresql:\/\/([^:]+):/,
-        `postgresql://postgres.${projectRef}:`
-      );
-      console.log(`[DB] Using connection pooler for project: ${projectRef}`);
-    }
     
     console.log('[DB] Connection pooler configured at port 6543');
   }
