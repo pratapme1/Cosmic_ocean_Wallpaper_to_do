@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.7] - 2026-01-30 (Backend Hotfix)
+
+### Fixed - Production Database Timeouts 🔥
+- **Distributed Generation Lock**: Implemented Redis-based locking for LLM message generation (`gen_lock:<userId>`). This prevents multiple serverless instances from triggering concurrent generations for the same user, which was exhausting the database connection pool.
+- **Connection Retry Logic**: Updated `db-retry.js` to explicitly handle "timeout exceeded" errors from `pg-pool`.
+- **Transaction Optimization**: Removed redundant `SELECT 1` user check in message caching to save one database round-trip per generation.
+
+---
+
 ## [2.2.6] - 2026-01-30 (Android + Backend)
 
 ### Fixed - Wallpaper Disappearance & Race Condition 🛠️

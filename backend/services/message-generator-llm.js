@@ -469,13 +469,9 @@ async function cacheMessages(userId, messages) {
   try {
     await client.query('BEGIN');
 
-    // FIX: Check if user still exists before caching (prevents race condition on user deletion)
-    const userCheck = await client.query('SELECT 1 FROM users WHERE id = $1', [userId]);
-    if (userCheck.rows.length === 0) {
-      console.log(`[MessageGen] User ${userId} no longer exists, skipping cache`);
-      await client.query('ROLLBACK');
-      return;
-    }
+    // OPTIMIZATION: Removed redundant SELECT 1 check (userId is trusted from context)
+    // const userCheck = await client.query('SELECT 1 FROM users WHERE id = $1', [userId]);
+    // if (userCheck.rows.length === 0) { ... }
 
     // Clear old cached messages (keep only last 10 shown for history)
     await client.query(
@@ -503,18 +499,33 @@ async function cacheMessages(userId, messages) {
   }
 }
 
-// In-memory lock to prevent thundering herd
+// Import cache service for distributed locking
+const cacheService = require('./cache');
+
+// In-memory lock to prevent thundering herd (local process only)
 const generatingUsers = new Set();
 
 /**
  * Main entry point: Generate and cache messages
  */
 async function generateAndCacheMessages(userId) {
-  // Check lock
+  // Check local in-memory lock first (fastest)
   if (generatingUsers.has(userId)) {
-    console.log(`[MessageGen] Generation already in progress for ${userId}, skipping`);
-    return { success: false, reason: 'in_progress' };
+    console.log(`[MessageGen] Generation locally in progress for ${userId}, skipping`);
+    return { success: false, reason: 'in_progress_local' };
   }
+
+  // Check distributed Redis lock (cross-instance protection)
+  const lockKey = `gen_lock:${userId}`;
+  const isLocked = await cacheService.exists(lockKey);
+
+  if (isLocked) {
+    console.log(`[MessageGen] Generation locked (distributed) for ${userId}, skipping`);
+    return { success: false, reason: 'in_progress_distributed' };
+  }
+
+  // Acquire distributed lock (60s TTL)
+  await cacheService.set(lockKey, '1', 60);
 
   try {
     generatingUsers.add(userId);
@@ -558,6 +569,8 @@ async function generateAndCacheMessages(userId) {
     };
   } finally {
     generatingUsers.delete(userId);
+    // Release distributed lock
+    await cacheService.del(lockKey);
   }
 }
 

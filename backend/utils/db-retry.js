@@ -37,7 +37,8 @@ async function retryOperation(operation, options = {}) {
         'ENOTFOUND',
         'Connection terminated',
         'deadlock detected',
-        'could not serialize access'
+        'could not serialize access',
+        'timeout exceeded'  // pg-pool connection timeout
       ];
 
       return retryableErrors.some(msg =>
