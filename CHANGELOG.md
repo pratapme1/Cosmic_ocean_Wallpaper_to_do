@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.5] - 2026-01-30 (Android + Backend)
+
+### Added - Wallpaper Consent & Privacy Flow 🛡️
+- **Explicit Consent**: Implemented a one-time "Cosmic Wallpaper Setup" dialog for mandatory user opt-in before system wallpaper modification.
+- **Privacy Controls**: Added "Live Wallpaper Sync" toggle in Environment Settings with real-time status indication.
+- **Permission Enforcement**: Both Foreground Service and WorkManager now perform strict local validation of the consent flag before any API calls.
+
+### Improved - Efficiency & Robustness ⚡
+- **Wallpaper Compression**: High-res uploads are now compressed to JPEG (80%) and resized to 1920x1080 bounding box, reducing OOM errors and server load.
+- **Redis Caching**: Custom backgrounds are cached for 1 hour on the backend, drastically reducing Supabase bandwidth.
+- **Timezone-Aware Visuals**: Aura colors and urgency levels now reflect the user's local "Today" boundary using `date-fns-tz`.
+- **Battery Optimization**: Implemented `ClockOverlay.kt` for local lock screen clock rendering, eliminating the need for minute-by-minute high-res bitmap downloads.
+
+### Refactored - UI Architecture 🏗️
+- **MVVM Transition**: Migrated `EnvironmentSettingsScreen` and `QuickAddActivity` to a pure ViewModel-based architecture.
+- **TDD Verification**: 100% test coverage for new ViewModel logic and state management.
+
+#### Android
+- **Version**: 2.2.5 (versionCode 21)
+- **APK**: `CosmicOcean_V2.2.5.apk`
+
+---
+
 ## [2.2.4] - 2026-01-30 (Android + Backend)
 
 ### Fixed - Auth Security & Logic Consolidation 🔐

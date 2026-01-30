@@ -262,6 +262,18 @@ class CacheService {
   }
 
   /**
+   * Generate cache key for custom raw wallpaper images
+   * @param {string} path - URL or path of the custom wallpaper
+   * @returns {string}
+   */
+  customWallpaperKey(path) {
+    // Generate a simple hash or base64 of the path to keep key length reasonable
+    const crypto = require('crypto');
+    const hash = crypto.createHash('md5').update(path).digest('hex');
+    return `custom_wp:${hash}`;
+  }
+
+  /**
    * Invalidate all wallpaper cache for a user
    * @param {string} userId
    */

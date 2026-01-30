@@ -24,6 +24,12 @@ class WallpaperUpdateWorker(
 
             // 1. Get user preferences
             val prefsManager = WallpaperPreferencesManager(applicationContext)
+            
+            if (!prefsManager.isWallpaperEnabled()) {
+                Log.d(TAG, "Wallpaper update skipped in Worker: Consent not granted.")
+                return Result.success()
+            }
+
             val theme = prefsManager.getTheme()
             val resolution = prefsManager.getResolution()
 

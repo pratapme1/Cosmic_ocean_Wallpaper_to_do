@@ -41,6 +41,7 @@ import com.cosmicocean.ui.components.*
 import com.cosmicocean.utils.WallpaperPreferencesManager
 import com.cosmicocean.viewmodel.MainViewModel
 import com.cosmicocean.viewmodel.MainViewModelFactory
+import com.cosmicocean.viewmodel.EnvironmentSettingsViewModel
 import com.cosmicocean.service.RealTimeWallpaperService
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -129,6 +130,7 @@ class MainActivity : ComponentActivity() {
                 var lastTapOffset by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
                 var isInteracting by remember { mutableStateOf(false) }
                 var currentTheme by remember { mutableStateOf(wallpaperPreferences.getTheme()) }
+                var showWallpaperConsent by remember { mutableStateOf(!wallpaperPreferences.hasSetWallpaperPreference()) }
                 var isUploadingWallpaper by remember { mutableStateOf(false) }
                 val context = LocalContext.current
                 val contentResolver = context.contentResolver
@@ -143,15 +145,16 @@ class MainActivity : ComponentActivity() {
                             isUploadingWallpaper = true
                             Toast.makeText(context, "Uploading wallpaper...", Toast.LENGTH_SHORT).show()
                             try {
-                                // Create temporary file from URI
-                                val inputStream = contentResolver.openInputStream(selectedUri)
-                                val tempFile = File.createTempFile("wallpaper", ".jpg", context.cacheDir)
-                                tempFile.outputStream().use { output ->
-                                    inputStream?.copyTo(output)
+                                // Compress and Resize image before upload to prevent OOM and timeouts
+                                val tempFile = com.cosmicocean.utils.ImageUtils.compressAndResizeImage(context, selectedUri)
+                                
+                                if (tempFile == null || !tempFile.exists()) {
+                                    Toast.makeText(context, "Failed to prepare image", Toast.LENGTH_SHORT).show()
+                                    return@launch
                                 }
 
                                 // Prepare Multipart body
-                                val requestFile = tempFile.asRequestBody("image/*".toMediaTypeOrNull())
+                                val requestFile = tempFile.asRequestBody("image/jpeg".toMediaTypeOrNull())
                                 val body = MultipartBody.Part.createFormData("image", tempFile.name, requestFile)
 
                                 // Upload to API
@@ -175,6 +178,43 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                }
+
+                if (showWallpaperConsent) {
+                    AlertDialog(
+                        onDismissRequest = { /* Don't dismiss without choice */ },
+                        title = { Text("Cosmic Wallpaper Setup", color = Color.White) },
+                        text = {
+                            Text(
+                                "To fully experience the Cosmic Ocean, can we update your system wallpaper every minute? This allows your lock screen to reflect your current cosmic tasks and urgency levels.",
+                                color = Color.LightGray
+                            )
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    wallpaperPreferences.setWallpaperEnabled(true)
+                                    showWallpaperConsent = false
+                                    schedulePeriodicWallpaperUpdates()
+                                    Toast.makeText(context, "Cosmic sync enabled!", Toast.LENGTH_SHORT).show()
+                                }
+                            ) {
+                                Text("Enable Sync")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    wallpaperPreferences.setWallpaperEnabled(false)
+                                    showWallpaperConsent = false
+                                    Toast.makeText(context, "Manual mode only.", Toast.LENGTH_SHORT).show()
+                                }
+                            ) {
+                                Text("Not Now", color = Color.Gray)
+                            }
+                        },
+                        containerColor = Color(0xFF14141E)
+                    )
                 }
 
                 LaunchedEffect(isInteracting) {
@@ -388,8 +428,23 @@ class MainActivity : ComponentActivity() {
                         // Epic 10 Phase 3: Environment Settings Screen
                         if (showEnvironmentSettings) {
                             EnvironmentSettingsWrapper(
-                                apiService = NetworkModule.getApi(this@MainActivity),
-                                onNavigateBack = { showEnvironmentSettings = false }
+                                viewModel = viewModel(
+                                    factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+                                        @Suppress("UNCHECKED_CAST")
+                                        override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                                            return EnvironmentSettingsViewModel(NetworkModule.getApi(applicationContext), wallpaperPreferences) as T
+                                        }
+                                    }
+                                ),
+                                onNavigateBack = { showEnvironmentSettings = false },
+                                onWallpaperEnabledChanged = { enabled: Boolean ->
+                                    // Re-start or stop service when toggled
+                                    if (enabled) {
+                                        com.cosmicocean.service.RealTimeWallpaperService.start(this@MainActivity)
+                                    } else {
+                                        com.cosmicocean.service.RealTimeWallpaperService.stop(this@MainActivity)
+                                    }
+                                }
                             )
                         }
 
@@ -546,6 +601,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun schedulePeriodicWallpaperUpdates() {
+        // Only proceed if wallpaper integration is explicitly enabled by the user
+        if (!wallpaperPreferences.isWallpaperEnabled()) {
+            android.util.Log.d("MainActivity", "Wallpaper updates skipped: Consent not granted.")
+            return
+        }
+
         // Start real-time wallpaper service (1-minute updates)
         if (tokenManager.isLoggedIn()) {
             RealTimeWallpaperService.start(this)

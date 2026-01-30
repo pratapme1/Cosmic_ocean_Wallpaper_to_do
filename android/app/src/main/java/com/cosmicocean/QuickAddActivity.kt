@@ -21,12 +21,37 @@ import com.cosmicocean.network.NetworkModule
 import kotlinx.coroutines.launch
 import java.util.Random
 
+import androidx.compose.runtime.collectAsState
+import com.cosmicocean.viewmodel.QuickAddViewModel
+
 class QuickAddActivity : ComponentActivity() {
+    private lateinit var viewModel: QuickAddViewModel
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // Manual DI for simplicity in this project
+        val database = CosmicDatabase.getDatabase(this)
+        val repository = TaskRepository(database.starDao(), NetworkModule.getApi(this), applicationContext)
+        viewModel = QuickAddViewModel(repository)
+        
         setContent {
             var text by remember { mutableStateOf("") }
+            val uiState by viewModel.uiState.collectAsState()
+            
+            // Handle success/error side-effects
+            LaunchedEffect(uiState.isSuccess) {
+                if (uiState.isSuccess) {
+                    Toast.makeText(this@QuickAddActivity, "Task added to Cosmic Ocean", Toast.LENGTH_SHORT).show()
+                    finish()
+                }
+            }
+            
+            LaunchedEffect(uiState.errorMessage) {
+                uiState.errorMessage?.let {
+                    Toast.makeText(this@QuickAddActivity, "Failed: $it", Toast.LENGTH_SHORT).show()
+                }
+            }
             
             Box(
                 modifier = Modifier
@@ -51,6 +76,7 @@ class QuickAddActivity : ComponentActivity() {
                             onValueChange = { text = it },
                             placeholder = { Text("e.g. Call mom 10m", color = Color.Gray) },
                             modifier = Modifier.fillMaxWidth(),
+                            enabled = !uiState.isSaving,
                             colors = TextFieldDefaults.colors(
                                 focusedContainerColor = Color(0xFF1E1E2A),
                                 unfocusedContainerColor = Color(0xFF1E1E2A),
@@ -58,55 +84,32 @@ class QuickAddActivity : ComponentActivity() {
                                 unfocusedTextColor = Color.White
                             )
                         )
+                        if (uiState.isSaving) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+                        }
                         Spacer(modifier = Modifier.height(16.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            TextButton(onClick = { finish() }) {
+                            TextButton(onClick = { finish() }, enabled = !uiState.isSaving) {
                                 Text("Cancel", color = Color.Gray)
                             }
-                            Button(onClick = {
-                                if (text.isNotBlank()) {
-                                    saveTask(text)
-                                }
-                            }) {
-                                Text("Add")
+                            Button(
+                                onClick = {
+                                    if (text.isNotBlank()) {
+                                        val displayMetrics = resources.displayMetrics
+                                        viewModel.addTask(
+                                            text, 
+                                            displayMetrics.widthPixels.toFloat(), 
+                                            displayMetrics.heightPixels.toFloat()
+                                        )
+                                    }
+                                },
+                                enabled = !uiState.isSaving
+                            ) {
+                                Text(if (uiState.isSaving) "Adding..." else "Add")
                             }
                         }
                     }
                 }
-            }
-        }
-    }
-
-    private fun saveTask(title: String) {
-        val database = CosmicDatabase.getDatabase(this)
-        val repository = TaskRepository(database.starDao(), NetworkModule.getApi(this), applicationContext)
-        
-        lifecycleScope.launch {
-            try {
-                // Calculate random position (similar to MainActivity)
-                val random = Random()
-                val displayMetrics = resources.displayMetrics
-                val screenWidth = displayMetrics.widthPixels.toFloat()
-                val screenHeight = displayMetrics.heightPixels.toFloat()
-                
-                val horizontalPadding = screenWidth * 0.15f
-                val verticalPadding = screenHeight * 0.1f
-                
-                val x = horizontalPadding + random.nextFloat() * (screenWidth - 2 * horizontalPadding)
-                val y = verticalPadding + random.nextFloat() * (screenHeight - 2 * verticalPadding)
-                
-                // Create star
-                val star = Star(x, y, title, 2, null)
-                
-                // Save to local DB and sync to backend
-                repository.addStar(star)
-                
-                Toast.makeText(this@QuickAddActivity, "Task added to Cosmic Ocean", Toast.LENGTH_SHORT).show()
-                finish()
-            } catch (e: Exception) {
-                android.util.Log.e("QuickAddActivity", "Error adding task", e)
-                Toast.makeText(this@QuickAddActivity, "Failed to add task: ${e.message}", Toast.LENGTH_SHORT).show()
-                finish()
             }
         }
     }

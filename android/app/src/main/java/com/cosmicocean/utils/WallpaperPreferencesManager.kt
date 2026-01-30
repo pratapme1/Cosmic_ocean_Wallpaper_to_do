@@ -14,6 +14,7 @@ class WallpaperPreferencesManager(private val context: Context) {
         private const val KEY_THEME = "theme"
         private const val KEY_RESOLUTION = "resolution"
         private const val KEY_LAST_SYNC = "last_sync"
+        private const val KEY_WALLPAPER_ENABLED = "wallpaper_enabled"
 
         const val DEFAULT_THEME = "cosmic"
         const val DEFAULT_RESOLUTION = "1080x1920"
@@ -94,6 +95,19 @@ class WallpaperPreferencesManager(private val context: Context) {
 
     fun clearAll() {
         prefs.edit().clear().apply()
+    }
+
+    fun isWallpaperEnabled(): Boolean {
+        // Return null (not set) or actual value
+        return prefs.getBoolean(KEY_WALLPAPER_ENABLED, false)
+    }
+
+    fun hasSetWallpaperPreference(): Boolean {
+        return prefs.contains(KEY_WALLPAPER_ENABLED)
+    }
+
+    fun setWallpaperEnabled(enabled: Boolean): Boolean {
+        return prefs.edit().putBoolean(KEY_WALLPAPER_ENABLED, enabled).commit()
     }
 
     fun needsSync(): Boolean {

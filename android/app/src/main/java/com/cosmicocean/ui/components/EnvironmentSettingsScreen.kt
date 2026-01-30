@@ -28,22 +28,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
-
-private const val TAG = "EnvironmentSettings"
-
-data class EnvironmentPreferences(
-    val timeOfDayMode: TimeOfDayMode = TimeOfDayMode.AUTO,
-    val manualTimePeriod: String = "morning",  // Used when mode is MANUAL
-    val weatherOverlayEnabled: Boolean = true,
-    val particleIntensity: ParticleIntensity = ParticleIntensity.MEDIUM,
-    val wallpaperMode: String = "generated" // generated, custom
-)
-
-enum class TimeOfDayMode(val displayName: String, val description: String) {
-    AUTO("Automatic", "Environment changes based on your local time"),
-    MANUAL("Manual", "Choose a fixed time-of-day environment")
-}
+import com.cosmicocean.ui.state.*
+import com.cosmicocean.viewmodel.EnvironmentSettingsViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 enum class TimePeriod(
     val id: String,
@@ -54,15 +41,9 @@ enum class TimePeriod(
 ) {
     DAWN("dawn", "Dawn", "🌅", "5-7 AM • Warm sunrise rays", listOf(Color(0xFF4a1942), Color(0xFFf2994a))),
     MORNING("morning", "Morning", "☀️", "7 AM-12 PM • Bright and clear", listOf(Color(0xFF87ceeb), Color(0xFFe0f4ff))),
-    AFTERNOON("afternoon", "Afternoon", "🌤️", "12-5 PM • Deep blue sky", listOf(Color(0xFF1e3c72), Color(0xFF87ceeb))),
+    AFTERNOON("afternoon", "afternoon", "🌤️", "12-5 PM • Deep blue sky", listOf(Color(0xFF1e3c72), Color(0xFF87ceeb))),
     EVENING("evening", "Evening", "🌆", "5-8 PM • Sunset glow", listOf(Color(0xFF614385), Color(0xFFf8b500))),
     NIGHT("night", "Night", "🌙", "8 PM-5 AM • Starry sky", listOf(Color(0xFF0d1b2a), Color(0xFF3a506b)))
-}
-
-enum class ParticleIntensity(val displayName: String, val description: String, val multiplier: Float) {
-    LOW("Low", "Subtle particles for minimal distraction", 0.5f),
-    MEDIUM("Medium", "Balanced particle effects", 1.0f),
-    HIGH("High", "Rich particle atmosphere", 1.5f)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -74,6 +55,7 @@ fun EnvironmentSettingsScreen(
     onWeatherOverlayChanged: (Boolean) -> Unit,
     onParticleIntensityChanged: (ParticleIntensity) -> Unit,
     onWallpaperModeChanged: (String) -> Unit,
+    onWallpaperEnabledChanged: (Boolean) -> Unit,
     onUploadWallpaperClick: () -> Unit,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
@@ -228,6 +210,34 @@ fun EnvironmentSettingsScreen(
                     ParticleIntensity.HIGH -> "✨ Rich particles - immersive cosmic experience"
                 },
                 color = Color(0xFF3A1E5F)
+            )
+
+            Divider(color = Color.White.copy(alpha = 0.1f))
+
+            // ===== WALLPAPER INTEGRATION SECTION =====
+            EnvironmentSectionHeader(title = "System Integration", icon = "🖼️")
+
+            EnvironmentSettingCard(
+                title = "Live Wallpaper Sync",
+                subtitle = if (preferences.isWallpaperEnabled) "Enabled • Updating every minute" else "Disabled • Manual use only",
+                icon = "⚙️"
+            ) {
+                Switch(
+                    checked = preferences.isWallpaperEnabled,
+                    onCheckedChange = onWallpaperEnabledChanged,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color(0xFF00E5FF),
+                        checkedTrackColor = Color(0xFF00E5FF).copy(alpha = 0.5f)
+                    )
+                )
+            }
+
+            EnvironmentInfoCard(
+                text = if (preferences.isWallpaperEnabled)
+                    "✅ Your system wallpaper is being updated automatically to reflect your cosmic ocean state."
+                else
+                    "❌ Automatic wallpaper updates are disabled. You can still manually refresh from the home screen.",
+                color = if (preferences.isWallpaperEnabled) Color(0xFF1A5F5F) else Color(0xFF5F1A1A)
             )
 
             // Footer
@@ -403,7 +413,7 @@ private fun TimePeriodDialog(
         title = { Text("Choose Environment", color = Color.White) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                TimePeriod.values().forEach { period ->
+                for (period in TimePeriod.values()) {
                     TimePeriodOption(
                         period = period,
                         isSelected = period.id == currentPeriod,
@@ -495,7 +505,7 @@ private fun ParticleIntensityDialog(
         title = { Text("Particle Intensity", color = Color.White) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ParticleIntensity.values().forEach { intensity ->
+                for (intensity in ParticleIntensity.values()) {
                     ParticleIntensityOption(
                         intensity = intensity,
                         isSelected = intensity == currentIntensity,
@@ -580,102 +590,28 @@ private fun ParticleIntensityOption(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EnvironmentSettingsWrapper(
-    apiService: ApiService,
-    onNavigateBack: () -> Unit
+    viewModel: EnvironmentSettingsViewModel,
+    onNavigateBack: () -> Unit,
+    onWallpaperEnabledChanged: (Boolean) -> Unit
 ) {
-    val scope = rememberCoroutineScope()
-    var preferences by remember { mutableStateOf(EnvironmentPreferences()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var successMessage by remember { mutableStateOf<String?>(null) }
-    var loadedFromApi by remember { mutableStateOf(false) }
+    val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
-    val contentResolver = context.contentResolver
 
-    // Load preferences from API on first composition
+    // Trigger loading on first composition
     LaunchedEffect(Unit) {
-        Log.d(TAG, "Loading environment preferences from API...")
-        try {
-            val response = apiService.getPreferences()
-            Log.d(TAG, "API Response: ${response.code()} - isSuccessful: ${response.isSuccessful}")
-
-            if (response.isSuccessful && response.body() != null) {
-                val apiPrefs = response.body()!!
-                Log.d(TAG, "Loaded from API:")
-                Log.d(TAG, "   time_of_day_mode: ${apiPrefs.timeOfDayMode}")
-                Log.d(TAG, "   manual_time_period: ${apiPrefs.manualTimePeriod}")
-                Log.d(TAG, "   weather_overlay_enabled: ${apiPrefs.weatherOverlayEnabled}")
-                Log.d(TAG, "   particle_intensity: ${apiPrefs.particleIntensity}")
-                Log.d(TAG, "   wallpaper_mode: ${apiPrefs.wallpaperMode}")
-
-                preferences = EnvironmentPreferences(
-                    timeOfDayMode = when (apiPrefs.timeOfDayMode?.lowercase()) {
-                        "manual" -> TimeOfDayMode.MANUAL
-                        else -> TimeOfDayMode.AUTO
-                    },
-                    manualTimePeriod = apiPrefs.manualTimePeriod ?: "morning",
-                    weatherOverlayEnabled = apiPrefs.weatherOverlayEnabled ?: true,
-                    particleIntensity = when (apiPrefs.particleIntensity?.lowercase()) {
-                        "low" -> ParticleIntensity.LOW
-                        "high" -> ParticleIntensity.HIGH
-                        else -> ParticleIntensity.MEDIUM
-                    },
-                    wallpaperMode = apiPrefs.wallpaperMode ?: "generated"
-                )
-                loadedFromApi = true
-                successMessage = "Settings loaded"
-            } else {
-                val errorBody = response.errorBody()?.string()
-                Log.e(TAG, "API Error: ${response.code()} - $errorBody")
-                loadedFromApi = true
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Exception loading preferences", e)
-            loadedFromApi = true
-        } finally {
-            isLoading = false
-        }
-    }
-
-    // Helper function to save preferences to API
-    fun savePreference(key: String, value: Any) {
-        Log.d(TAG, "Saving to API: $key = $value")
-        scope.launch {
-            try {
-                val body = mapOf(key to value)
-                val response = apiService.updatePreferences(body)
-
-                if (response.isSuccessful) {
-                    Log.d(TAG, "Saved successfully: $key")
-                    successMessage = "Saved"
-                    // Trigger immediate wallpaper update
-                    try {
-                        com.cosmicocean.service.RealTimeWallpaperService.updateNow(context)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to trigger update: ${e.message}")
-                    }
-                } else {
-                    val errorBody = response.errorBody()?.string()
-                    Log.e(TAG, "Save failed: ${response.code()} - $errorBody")
-                    errorMessage = "Save failed"
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Exception saving preference", e)
-                errorMessage = "Save error: ${e.message}"
-            }
-        }
+        viewModel.loadPreferences()
     }
 
     // Show snackbar for messages
-    LaunchedEffect(errorMessage, successMessage) {
-        errorMessage?.let {
+    LaunchedEffect(uiState.errorMessage, uiState.successMessage) {
+        uiState.errorMessage?.let {
             snackbarHostState.showSnackbar(it, duration = SnackbarDuration.Short)
-            errorMessage = null
+            viewModel.clearMessages()
         }
-        successMessage?.let {
+        uiState.successMessage?.let {
             snackbarHostState.showSnackbar(it, duration = SnackbarDuration.Short)
-            successMessage = null
+            viewModel.clearMessages()
         }
     }
 
@@ -684,7 +620,7 @@ fun EnvironmentSettingsWrapper(
         containerColor = Color(0xFF0F0F1E)
     ) { scaffoldPadding ->
         Box(modifier = Modifier.padding(scaffoldPadding)) {
-            if (isLoading && !loadedFromApi) {
+            if (uiState.isLoading) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -702,57 +638,30 @@ fun EnvironmentSettingsWrapper(
                     }
                 }
             } else {
-                Column {
-                    // Connection status banner
-                    if (loadedFromApi) {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(8.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = Color(0xFF1B5E20).copy(alpha = 0.3f)
-                            )
-                        ) {
-                            Text(
-                                "Connected - changes sync automatically",
-                                modifier = Modifier.padding(8.dp),
-                                color = Color(0xFF81C784),
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-
-                    EnvironmentSettingsScreen(
-                        preferences = preferences,
-                        onTimeOfDayModeChanged = { mode ->
-                            Log.d(TAG, "Time of day mode changed: $mode")
-                            preferences = preferences.copy(timeOfDayMode = mode)
-                            savePreference("time_of_day_mode", mode.name.lowercase())
-                        },
-                        onManualTimePeriodChanged = { period ->
-                            Log.d(TAG, "Manual time period changed: $period")
-                            preferences = preferences.copy(manualTimePeriod = period)
-                            savePreference("manual_time_period", period)
-                        },
-                        onWeatherOverlayChanged = { enabled ->
-                            Log.d(TAG, "Weather overlay changed: $enabled")
-                            preferences = preferences.copy(weatherOverlayEnabled = enabled)
-                            savePreference("weather_overlay_enabled", enabled)
-                        },
-                        onParticleIntensityChanged = { intensity ->
-                            Log.d(TAG, "Particle intensity changed: $intensity")
-                            preferences = preferences.copy(particleIntensity = intensity)
-                            savePreference("particle_intensity", intensity.name.lowercase())
-                        },
-                        onWallpaperModeChanged = { mode ->
-                            Log.d(TAG, "Wallpaper mode changed: $mode")
-                            preferences = preferences.copy(wallpaperMode = mode)
-                            savePreference("wallpaper_mode", mode)
-                        },
-                        onUploadWallpaperClick = {}, // No-op as UI is removed
-                        onNavigateBack = onNavigateBack
-                    )
-                }
+                EnvironmentSettingsScreen(
+                    preferences = uiState.preferences,
+                    onTimeOfDayModeChanged = { mode ->
+                        viewModel.updatePreference("time_of_day_mode", mode.name.lowercase(), context)
+                    },
+                    onManualTimePeriodChanged = { period ->
+                        viewModel.updatePreference("manual_time_period", period, context)
+                    },
+                    onWeatherOverlayChanged = { enabled ->
+                        viewModel.updatePreference("weather_overlay_enabled", enabled, context)
+                    },
+                    onParticleIntensityChanged = { intensity ->
+                        viewModel.updatePreference("particle_intensity", intensity.name.lowercase(), context)
+                    },
+                    onWallpaperModeChanged = { mode ->
+                        viewModel.updatePreference("wallpaper_mode", mode, context)
+                    },
+                    onWallpaperEnabledChanged = { enabled ->
+                        viewModel.setWallpaperEnabled(enabled, context)
+                        onWallpaperEnabledChanged(enabled)
+                    },
+                    onUploadWallpaperClick = {},
+                    onNavigateBack = onNavigateBack
+                )
             }
         }
     }

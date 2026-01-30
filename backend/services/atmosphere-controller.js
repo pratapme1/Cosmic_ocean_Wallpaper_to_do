@@ -98,10 +98,11 @@ class AtmosphereController {
    * Calculate the complete atmosphere state
    * @param {Array} tasks - Array of task objects
    * @param {Object} stats - Optional user statistics
+   * @param {string} timezone - User's timezone
    * @returns {Object} Atmosphere state with urgency score, state, and visual params
    */
-  calculateState(tasks, stats = null) {
-    const urgencyScore = this.calculateUrgencyScore(tasks);
+  calculateState(tasks, stats = null, timezone = 'UTC') {
+    const urgencyScore = this.calculateUrgencyScore(tasks, timezone);
     const state = this.scoreToState(urgencyScore);
     const visualParams = this.getVisualParams(state, urgencyScore);
 
@@ -110,7 +111,7 @@ class AtmosphereController {
       state,
       stateName: state,
       visualParams,
-      taskCounts: this.getTaskCounts(tasks),
+      taskCounts: this.getTaskCounts(tasks, timezone),
       timestamp: new Date().toISOString()
     };
   }
@@ -118,14 +119,16 @@ class AtmosphereController {
   /**
    * Calculate urgency score based on tasks
    * @param {Array} tasks - Array of task objects
+   * @param {string} timezone - User's timezone
    * @returns {number} Score from 0-100
    */
-  calculateUrgencyScore(tasks) {
+  calculateUrgencyScore(tasks, timezone = 'UTC') {
     if (!tasks || tasks.length === 0) {
       return 0; // No tasks = clear state
     }
 
-    const now = new Date();
+    const { toZonedTime } = require('date-fns-tz');
+    const now = toZonedTime(new Date(), timezone);
     let score = 0;
 
     // Filter to active tasks only
@@ -146,7 +149,9 @@ class AtmosphereController {
         continue;
       }
 
-      const dueDateObj = new Date(dueDate);
+      // Combine date and time if available for precise score calculation
+      const dueStr = task.due_time ? `${dueDate}T${task.due_time}` : `${dueDate}T23:59:59`;
+      const dueDateObj = toZonedTime(new Date(dueStr), timezone);
       const hoursUntilDue = (dueDateObj - now) / (1000 * 60 * 60);
 
       if (hoursUntilDue < 0) {

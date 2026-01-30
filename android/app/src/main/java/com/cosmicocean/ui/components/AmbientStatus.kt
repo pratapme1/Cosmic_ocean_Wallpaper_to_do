@@ -2,6 +2,7 @@ package com.cosmicocean.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -56,11 +57,15 @@ fun AmbientStatusHUD(stars: List<Star>, isInteracting: Boolean) {
             .padding(top = 40.dp),
         contentAlignment = Alignment.TopCenter
     ) {
-        Text(
-            text = currentMessage,
-            color = Color.White,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.alpha(animatedAlpha)
-        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            ClockOverlay(modifier = Modifier.padding(bottom = 8.dp))
+            
+            Text(
+                text = currentMessage,
+                color = Color.White,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.alpha(animatedAlpha)
+            )
+        }
     }
 }

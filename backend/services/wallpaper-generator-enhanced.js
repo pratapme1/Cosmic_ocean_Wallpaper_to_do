@@ -36,19 +36,28 @@ const statsAggregator = new StatsAggregator();
 // since task state can change between wallpaper requests
 const achievementService = new AchievementService({ cacheEnabled: false });
 
+const { toZonedTime, formatInTimeZone } = require('date-fns-tz');
+
 /**
  * Determine urgency level from tasks
  * @param {array} tasks - Array of tasks
  * @param {boolean} doneForToday - User marked as done
+ * @param {string} timezone - User's timezone
  * @returns {string} Urgency level
  */
-function calculateUrgency(tasks, doneForToday = false) {
+function calculateUrgency(tasks, doneForToday = false, timezone = 'UTC') {
   if (doneForToday || tasks.length === 0) return 'clear';
 
-  const now = new Date();
+  // FIX: Use user's local time for urgency calculation
+  const now = toZonedTime(new Date(), timezone);
+  const nowDateStr = formatInTimeZone(new Date(), timezone, 'yyyy-MM-dd');
+
   const hasOverdue = tasks.some(t => {
     if (!t.due_date) return false;
-    const dueDate = new Date(t.due_date);
+
+    // Combine date and time if available for precise overdue check
+    const dueStr = t.due_time ? `${t.due_date}T${t.due_time}` : `${t.due_date}T23:59:59`;
+    const dueDate = toZonedTime(new Date(dueStr), timezone);
     return dueDate < now;
   });
 
@@ -56,15 +65,15 @@ function calculateUrgency(tasks, doneForToday = false) {
 
   const hasDueToday = tasks.some(t => {
     if (!t.due_date) return false;
-    const dueDate = new Date(t.due_date);
-    return dueDate.toDateString() === now.toDateString();
+    return t.due_date === nowDateStr;
   });
 
   if (hasDueToday) return 'urgent';
 
   const hasDueWithin48h = tasks.some(t => {
     if (!t.due_date) return false;
-    const dueDate = new Date(t.due_date);
+    const dueStr = t.due_time ? `${t.due_date}T${t.due_time}` : `${t.due_date}T23:59:59`;
+    const dueDate = toZonedTime(new Date(dueStr), timezone);
     const hoursUntil = (dueDate - now) / (1000 * 60 * 60);
     return hoursUntil > 0 && hoursUntil <= 48;
   });
@@ -273,11 +282,6 @@ function generateTextLayer(layout, tasks, colors, doneForToday) {
     `;
   }
 
-  // Current time at bottom
-  const currentTime = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  svgContent += `
-    <text x="50%" y="${height - margins.vertical - typography.labelLarge}" class="time">${currentTime}</text>
-  `;
 
   return `
     <svg width="${width}" height="${height}">
@@ -375,7 +379,7 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now(), tim
     // =====================================
 
     // Get atmosphere state with urgency calculation and visual params
-    const atmosphere = atmosphereController.calculateState(tasks);
+    const atmosphere = atmosphereController.calculateState(tasks, stats, timezone);
     const urgency = atmosphere.state;
     const visualParams = atmosphere.visualParams;
 
@@ -477,14 +481,27 @@ async function generateEnhancedWallpaper(user, data, timestamp = Date.now(), tim
 
         // Check if it's a URL (Supabase Storage) or local path
         if (user.custom_wallpaper_path.startsWith('http://') || user.custom_wallpaper_path.startsWith('https://')) {
-          // Fetch from URL (Supabase Storage)
-          const axios = require('axios');
-          const response = await axios.get(user.custom_wallpaper_path, {
-            responseType: 'arraybuffer',
-            timeout: 10000 // 10 second timeout
-          });
-          imageBuffer = Buffer.from(response.data);
-          console.log(`[Wallpaper] Fetched custom image from URL: ${imageBuffer.length} bytes`);
+          // TDD: Check cache first to prevent redundant remote fetches
+          const cacheKey = cacheService.customWallpaperKey(user.custom_wallpaper_path);
+          const cachedImage = await cacheService.getBuffer(cacheKey);
+
+          if (cachedImage) {
+            console.log(`[Wallpaper] Cache HIT for custom background: ${cacheKey}`);
+            imageBuffer = cachedImage;
+          } else {
+            console.log(`[Wallpaper] Cache MISS for custom background, fetching from URL...`);
+            // Fetch from URL (Supabase Storage)
+            const axios = require('axios');
+            const response = await axios.get(user.custom_wallpaper_path, {
+              responseType: 'arraybuffer',
+              timeout: 10000 // 10 second timeout
+            });
+            imageBuffer = Buffer.from(response.data);
+
+            // Save to cache for 1 hour
+            await cacheService.setBuffer(cacheKey, imageBuffer, 3600);
+            console.log(`[Wallpaper] Fetched and cached custom image: ${imageBuffer.length} bytes`);
+          }
         } else {
           // Legacy: local file path (won't work on Vercel but kept for compatibility)
           const fs = require('fs');
