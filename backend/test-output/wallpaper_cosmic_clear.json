@@ -1,0 +1,16 @@
+{
+  "type": "mock",
+  "width": 1080,
+  "height": 1920,
+  "theme": "cosmic",
+  "urgency": "clear",
+  "colors": {
+    "bg1": "#0a0a2e",
+    "bg2": "#1a1a4e",
+    "accent": "#4a9eff",
+    "text": "#ffffff"
+  },
+  "task": null,
+  "dueText": null,
+  "generatedAt": "2026-02-01T08:36:01.355Z"
+}

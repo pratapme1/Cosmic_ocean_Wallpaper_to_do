@@ -1,0 +1,16 @@
+{
+  "type": "mock",
+  "width": 1080,
+  "height": 1920,
+  "theme": "ocean",
+  "urgency": "clear",
+  "colors": {
+    "bg1": "#0077b6",
+    "bg2": "#023e8a",
+    "accent": "#90e0ef",
+    "text": "#ffffff"
+  },
+  "task": null,
+  "dueText": null,
+  "generatedAt": "2026-02-01T08:36:01.357Z"
+}

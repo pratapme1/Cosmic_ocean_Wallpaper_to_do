@@ -1,0 +1,19 @@
+{
+  "type": "mock",
+  "width": 1080,
+  "height": 1920,
+  "theme": "fantasy",
+  "urgency": "critical",
+  "colors": {
+    "bg1": "#7f0000",
+    "bg2": "#4a0000",
+    "accent": "#ff0000",
+    "text": "#ffffff"
+  },
+  "task": {
+    "id": "e436730e-72d4-4fed-95ce-48c2daca7966",
+    "title": "Submit quarterly report"
+  },
+  "dueText": "Overdue by 1d",
+  "generatedAt": "2026-02-01T08:36:01.357Z"
+}
