@@ -9,6 +9,11 @@ import com.cosmicocean.effects.OrbitalSystem
 import com.cosmicocean.model.Star
 import com.cosmicocean.physics.VerletEngine
 import com.cosmicocean.systems.CommandHistory
+import com.cosmicocean.sync.ConflictResolution
+import com.cosmicocean.sync.SyncManager
+import com.cosmicocean.sync.SyncState
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -17,11 +22,20 @@ class MainViewModel(
     val engine: VerletEngine,
     val constellationSystem: ConstellationSystem,
     val orbitalSystem: OrbitalSystem,
-    val commandHistory: CommandHistory
+    val commandHistory: CommandHistory,
+    private val syncManager: SyncManager
 ) : ViewModel() {
 
     val stars = mutableStateListOf<Star>()
     val completedStars = mutableStateListOf<Star>()
+    
+    // CRITICAL FIX: Expose sync state for UI (Issue #10)
+    val syncState: StateFlow<SyncState> = syncManager.syncState
+    val pendingCount: StateFlow<Int> = syncManager.pendingCount
+    val conflicts: StateFlow<List<ConflictResolution>> = syncManager.conflicts
+    
+    private val _syncIndicatorVisible = MutableStateFlow(false)
+    val syncIndicatorVisible: StateFlow<Boolean> = _syncIndicatorVisible
 
     init {
         viewModelScope.launch {

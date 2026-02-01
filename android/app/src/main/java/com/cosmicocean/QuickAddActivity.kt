@@ -18,6 +18,7 @@ import com.cosmicocean.data.CosmicDatabase
 import com.cosmicocean.data.TaskRepository
 import com.cosmicocean.model.Star
 import com.cosmicocean.network.NetworkModule
+import com.cosmicocean.sync.SyncManager
 import kotlinx.coroutines.launch
 import java.util.Random
 
@@ -32,7 +33,22 @@ class QuickAddActivity : ComponentActivity() {
         
         // Manual DI for simplicity in this project
         val database = CosmicDatabase.getDatabase(this)
-        val repository = TaskRepository(database.starDao(), NetworkModule.getApi(this), applicationContext)
+        val apiService = NetworkModule.getApi(this)
+        
+        // Initialize SyncManager for local-first architecture
+        val syncManager = SyncManager.getInstance(
+            database.syncQueueDao(),
+            database.starDao(),
+            apiService,
+            applicationContext
+        )
+        
+        val repository = TaskRepository(
+            starDao = database.starDao(),
+            apiService = apiService,
+            context = applicationContext,
+            syncManager = syncManager
+        )
         viewModel = QuickAddViewModel(repository)
         
         setContent {

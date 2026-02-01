@@ -3,9 +3,26 @@ package com.cosmicocean.data
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
+/**
+ * Star Entity with Local-First Architecture
+ * 
+ * CRITICAL FIX: Separate localId (never changes) from serverId (assigned by backend)
+ * This prevents broken relationships after sync.
+ */
 @Entity(tableName = "stars")
 data class StarEntity(
-    @PrimaryKey val id: String,
+    /**
+     * LOCAL ID: Generated locally, never changes
+     * Used for: local relationships (constellations, orbits), sync queue references
+     */
+    @PrimaryKey val localId: String,
+    
+    /**
+     * SERVER ID: Assigned by backend after first sync
+     * Null until synced, then contains backend UUID
+     */
+    val serverId: String? = null,
+    
     val title: String,
     val urgency: Int,
     val dueDate: Long?,
@@ -19,27 +36,39 @@ data class StarEntity(
     val completedAt: Long?,
     val isArchived: Boolean,
     val archivedAt: Long?,
+    
     // Local-first sync fields
-    val syncStatus: String = "synced",  // synced, pending, conflict, error
+    val syncStatus: String = "pending",  // pending, synced, conflict, error
     val syncVersion: Long = 0,
     val updatedAt: Long = System.currentTimeMillis(),
-    val isDeleted: Boolean = false  // Soft delete for sync
+    val isDeleted: Boolean = false,  // Soft delete for sync
+    
+    // Server timestamp for conflict resolution (CRITICAL FIX: Use server time)
+    val serverUpdatedAt: Long? = null
 )
 
+/**
+ * Constellation Link Entity
+ * Uses localId for stable relationships
+ */
 @Entity(tableName = "constellation_links")
 data class ConstellationLinkEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val starA: String,
-    val starB: String,
+    val starA: String,  // localId of star A
+    val starB: String,  // localId of star B
     val createdAt: Long,
     val strength: Float,
     val fadeDirection: String
 )
 
+/**
+ * Orbit Entity
+ * Uses localId for stable parent-child relationships
+ */
 @Entity(tableName = "orbital_relationships")
 data class OrbitEntity(
-    @PrimaryKey val childId: String,
-    val parentId: String,
+    @PrimaryKey val childId: String,  // localId of child star
+    val parentId: String,             // localId of parent star
     val orbitRadius: Float,
     val orbitAngle: Float,
     val angularVelocity: Float,
@@ -58,26 +87,24 @@ data class PatinaEntity(
     val color: Int,
     val vx: Float,
     val vy: Float,
-    val fromStar: String
+    val fromStar: String  // localId
 )
 
 /**
  * Trophy/Achievement Entity
- * Tracks milestone unlocks (1, 10, 25, 50, 100, 250, 500, 1000 completions)
  */
 @Entity(tableName = "trophies")
 data class TrophyEntity(
     @PrimaryKey val id: String,
     val userId: String,
-    val milestone: Int,              // 1, 10, 25, 50, 100, 250, 500, 1000
-    val tier: String,                // bronze, silver, gold, platinum, cosmic
+    val milestone: Int,
+    val tier: String,
     val unlockedAt: Long,
     val shareCount: Int = 0
 )
 
 /**
  * Achievement Statistics Entity
- * Tracks user's achievement progress and stats
  */
 @Entity(tableName = "achievement_stats")
 data class AchievementStatsEntity(
@@ -86,22 +113,23 @@ data class AchievementStatsEntity(
     val dailyMaxCompletions: Int = 0,
     val currentStreak: Int = 0,
     val longestStreak: Int = 0,
-    val fastestCompletion: Long = 0,    // milliseconds
+    val fastestCompletion: Long = 0,
     val lastCompletionDate: Long = 0
 )
 
 /**
  * Sync Queue Entity
- * Tracks pending operations for background sync
- * Part of local-first architecture
+ * Uses localId for task reference (never changes)
  */
 @Entity(tableName = "sync_queue")
 data class SyncQueueEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val taskId: String,
+    val localTaskId: String,  // CRITICAL FIX: Use localId, not serverId
     val operation: String,  // create, update, delete, complete
     val payload: String,    // JSON serialized data
     val createdAt: Long = System.currentTimeMillis(),
     val retryCount: Int = 0,
-    val lastError: String? = null
+    val lastError: String? = null,
+    // CRITICAL FIX: Track server timestamp for conflict resolution
+    val clientTimestamp: Long = System.currentTimeMillis()
 )

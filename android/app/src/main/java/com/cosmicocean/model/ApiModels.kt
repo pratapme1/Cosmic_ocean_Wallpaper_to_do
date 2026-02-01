@@ -238,12 +238,15 @@ data class UserPreferencesResponse(
 /**
  * Request for POST /api/sync
  * Sends pending local changes to server
+ * CRITICAL FIX: Includes deviceTime for reference (server is source of truth)
  */
 data class SyncRequest(
     @SerializedName("lastSyncAt")
-    val lastSyncAt: Long?,
+    val lastSyncAt: Long?,  // CRITICAL FIX: Server timestamp, not device
     @SerializedName("pendingChanges")
-    val pendingChanges: List<SyncChange>
+    val pendingChanges: List<SyncChange>,
+    @SerializedName("deviceTime")
+    val deviceTime: Long? = null  // For debugging/logging only
 )
 
 /**

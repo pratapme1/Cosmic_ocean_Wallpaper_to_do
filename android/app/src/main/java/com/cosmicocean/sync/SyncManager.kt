@@ -8,12 +8,12 @@ import com.cosmicocean.data.StarDao
 import com.cosmicocean.data.StarEntity
 import com.cosmicocean.data.SyncQueueDao
 import com.cosmicocean.data.SyncQueueEntity
+// import com.cosmicocean.model.ConflictInfo  // Not used - using SyncConflict instead
 import com.cosmicocean.model.SyncChange
 import com.cosmicocean.model.SyncRequest
 import com.cosmicocean.model.SyncResponse
 import com.cosmicocean.model.TaskResponse
 import com.cosmicocean.network.ApiService
-import com.cosmicocean.utils.WallpaperPreferencesManager
 import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,18 +27,17 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.UUID
 
 /**
- * SyncManager - Local-First Sync Engine
- *
- * Coordinates background synchronization between local Room database and backend API.
- * Uses the existing backend/routes/sync.js endpoint.
- *
- * Key features:
- * - Debounced sync (waits 1 second for batch changes)
- * - Retry with exponential backoff
- * - Conflict resolution (last-write-wins)
- * - Offline queue persistence
+ * CRITICAL FIX: SyncManager - Unified Local-First Sync Engine
+ * 
+ * Architecture Changes:
+ * 1. ALL operations go through SyncManager (no direct API calls)
+ * 2. Server timestamps used for conflict resolution (not device time)
+ * 3. localId is stable, serverId assigned after sync
+ * 4. Conflict tracking exposed for UI
+ * 5. Automatic cleanup of old error entries
  */
 class SyncManager(
     private val syncQueueDao: SyncQueueDao,
@@ -52,7 +51,8 @@ class SyncManager(
         private const val MAX_RETRY_COUNT = 3
         private const val INITIAL_RETRY_DELAY_MS = 5000L
         private const val LAST_SYNC_KEY = "last_sync_timestamp"
-
+        private const val SYNC_THROTTLE_MS = 5000L  // Min 5s between syncs
+        
         @Volatile
         private var INSTANCE: SyncManager? = null
 
@@ -73,18 +73,24 @@ class SyncManager(
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val syncMutex = Mutex()
     private val gson = Gson()
-    private val prefsManager = WallpaperPreferencesManager(context)
-
+    
     // Debounced sync trigger channel
     private val syncTriggerChannel = Channel<Unit>(Channel.CONFLATED)
-
+    
     // Sync state observable
     private val _syncState = MutableStateFlow<SyncState>(SyncState.Idle)
     val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
-
+    
     // Pending count observable
     private val _pendingCount = MutableStateFlow(0)
     val pendingCount: StateFlow<Int> = _pendingCount.asStateFlow()
+    
+    // CRITICAL FIX: Conflict tracking for UI
+    private val _conflicts = MutableStateFlow<List<ConflictResolution>>(emptyList())
+    val conflicts: StateFlow<List<ConflictResolution>> = _conflicts.asStateFlow()
+    
+    // Throttling
+    private var lastSyncTime = 0L
 
     init {
         // Start debounced sync listener
@@ -100,13 +106,75 @@ class SyncManager(
         scope.launch {
             updatePendingCount()
         }
+        
+        // CRITICAL FIX: Cleanup old errors on init
+        scope.launch {
+            cleanupOldErrors()
+        }
 
-        Log.d(TAG, "SyncManager initialized")
+        Log.d(TAG, "SyncManager initialized (v2.0 - Unified)")
+    }
+
+    /**
+     * CRITICAL FIX: Create operation - ALWAYS goes through sync queue
+     * TaskRepository should call this, not direct API
+     */
+    suspend fun queueCreate(
+        localTaskId: String,
+        data: Map<String, Any?>,
+        priority: Int = 0
+    ) {
+        val entity = SyncQueueEntity(
+            localTaskId = localTaskId,
+            operation = "create",
+            payload = gson.toJson(data),
+            clientTimestamp = System.currentTimeMillis()
+        )
+        syncQueueDao.insert(entity)
+        updatePendingCount()
+        triggerSync()
+        Log.d(TAG, "Queued CREATE for task: $localTaskId")
+    }
+
+    /**
+     * CRITICAL FIX: Update operation - ALWAYS goes through sync queue
+     * Don't merge with pending creates (Issue #5)
+     */
+    suspend fun queueUpdate(localTaskId: String, data: Map<String, Any?>) {
+        // CRITICAL FIX: Don't merge with creates - let server handle it
+        val entity = SyncQueueEntity(
+            localTaskId = localTaskId,
+            operation = "update",
+            payload = gson.toJson(data),
+            clientTimestamp = System.currentTimeMillis()
+        )
+        syncQueueDao.insert(entity)
+        updatePendingCount()
+        triggerSync()
+        Log.d(TAG, "Queued UPDATE for task: $localTaskId")
+    }
+
+    /**
+     * CRITICAL FIX: Delete operation
+     */
+    suspend fun queueDelete(localTaskId: String) {
+        // CRITICAL FIX: Remove ALL pending operations for this task
+        syncQueueDao.deleteByLocalTaskId(localTaskId)
+
+        val entity = SyncQueueEntity(
+            localTaskId = localTaskId,
+            operation = "delete",
+            payload = "{}",
+            clientTimestamp = System.currentTimeMillis()
+        )
+        syncQueueDao.insert(entity)
+        updatePendingCount()
+        triggerSync()
+        Log.d(TAG, "Queued DELETE for task: $localTaskId")
     }
 
     /**
      * Trigger a sync (debounced)
-     * Call this after any local change to queue a background sync
      */
     fun triggerSync() {
         syncTriggerChannel.trySend(Unit)
@@ -123,67 +191,16 @@ class SyncManager(
     }
 
     /**
-     * Queue a create operation
-     */
-    suspend fun queueCreate(taskId: String, data: Map<String, Any?>) {
-        val entity = SyncQueueEntity(
-            taskId = taskId,
-            operation = "create",
-            payload = gson.toJson(data)
-        )
-        syncQueueDao.insert(entity)
-        updatePendingCount()
-        triggerSync()
-        Log.d(TAG, "Queued CREATE for task: $taskId")
-    }
-
-    /**
-     * Queue an update operation
-     */
-    suspend fun queueUpdate(taskId: String, data: Map<String, Any?>) {
-        // Check if there's already a pending create for this task
-        val existing = syncQueueDao.getLatestForTask(taskId)
-        if (existing?.operation == "create") {
-            // Merge update into create
-            val existingData = gson.fromJson(existing.payload, Map::class.java) as MutableMap<String, Any?>
-            existingData.putAll(data)
-            syncQueueDao.deleteById(existing.id)
-            syncQueueDao.insert(existing.copy(payload = gson.toJson(existingData)))
-        } else {
-            val entity = SyncQueueEntity(
-                taskId = taskId,
-                operation = "update",
-                payload = gson.toJson(data)
-            )
-            syncQueueDao.insert(entity)
-        }
-        updatePendingCount()
-        triggerSync()
-        Log.d(TAG, "Queued UPDATE for task: $taskId")
-    }
-
-    /**
-     * Queue a delete operation
-     */
-    suspend fun queueDelete(taskId: String) {
-        // Remove any pending operations for this task first
-        syncQueueDao.deleteByTaskId(taskId)
-
-        val entity = SyncQueueEntity(
-            taskId = taskId,
-            operation = "delete",
-            payload = "{}"
-        )
-        syncQueueDao.insert(entity)
-        updatePendingCount()
-        triggerSync()
-        Log.d(TAG, "Queued DELETE for task: $taskId")
-    }
-
-    /**
-     * Perform the actual sync
+     * CRITICAL FIX: Perform sync with throttling and server timestamps
      */
     private suspend fun performSync() {
+        // CRITICAL FIX: Throttle syncs (Issue #9)
+        val now = System.currentTimeMillis()
+        if (now - lastSyncTime < SYNC_THROTTLE_MS) {
+            Log.d(TAG, "Sync throttled - too soon since last sync")
+            return
+        }
+        
         if (!isOnline()) {
             _syncState.value = SyncState.Offline
             Log.d(TAG, "Sync skipped: offline")
@@ -192,15 +209,19 @@ class SyncManager(
 
         syncMutex.withLock {
             try {
+                lastSyncTime = System.currentTimeMillis()
                 _syncState.value = SyncState.Syncing
 
                 // Get pending changes
                 val pendingChanges = syncQueueDao.getAllPending()
+                
+                // CRITICAL FIX: Get last SERVER sync timestamp (not client)
+                val lastServerSync = starDao.getLastServerSyncTimestamp()
+
                 if (pendingChanges.isEmpty()) {
                     // Nothing to push, just pull latest
-                    pullFromServer()
+                    pullFromServer(lastServerSync)
                     _syncState.value = SyncState.Synced(System.currentTimeMillis())
-                    Log.d(TAG, "Sync complete: no pending changes, pulled latest")
                     return
                 }
 
@@ -208,16 +229,17 @@ class SyncManager(
                 val syncChanges = pendingChanges.map { entity ->
                     SyncChange(
                         type = entity.operation,
-                        clientId = entity.taskId,
+                        clientId = entity.localTaskId,
                         data = gson.fromJson(entity.payload, Map::class.java) as Map<String, Any?>,
-                        timestamp = entity.createdAt
+                        timestamp = entity.clientTimestamp
                     )
                 }
 
-                // Build request
+                // Build request with server timestamp
                 val request = SyncRequest(
-                    lastSyncAt = getLastSyncTimestamp(),
-                    pendingChanges = syncChanges
+                    lastSyncAt = lastServerSync,
+                    pendingChanges = syncChanges,
+                    deviceTime = System.currentTimeMillis()  // For reference only
                 )
 
                 // Call sync API
@@ -233,13 +255,12 @@ class SyncManager(
                     _syncState.value = SyncState.Error(error)
                     Log.e(TAG, "Sync failed: $error")
 
-                    // Increment retry count for failed items, mark as error if max reached
+                    // Increment retry count for failed items
                     pendingChanges.forEach { entity ->
                         if (entity.retryCount + 1 >= MAX_RETRY_COUNT) {
-                            // Max retries reached - mark task as error and remove from queue
-                            starDao.markSyncError(entity.taskId)
+                            starDao.markSyncError(entity.localTaskId)
                             syncQueueDao.deleteById(entity.id)
-                            Log.w(TAG, "Max retries reached for task ${entity.taskId}, marked as error")
+                            Log.w(TAG, "Max retries reached for task ${entity.localTaskId}")
                         } else {
                             syncQueueDao.incrementRetry(entity.id, error)
                         }
@@ -249,8 +270,6 @@ class SyncManager(
                 val error = e.message ?: "Unknown error"
                 _syncState.value = SyncState.Error(error)
                 Log.e(TAG, "Sync exception: $error", e)
-
-                // Schedule retry with exponential backoff
                 scheduleRetry()
             } finally {
                 updatePendingCount()
@@ -259,15 +278,14 @@ class SyncManager(
     }
 
     /**
-     * Handle sync response from server
+     * CRITICAL FIX: Handle sync response with server timestamps
      */
     private suspend fun handleSyncResponse(response: SyncResponse, pendingChanges: List<SyncQueueEntity>) {
-        // Save last sync timestamp
-        setLastSyncTimestamp(response.syncedAt)
-
+        val newConflicts = mutableListOf<ConflictResolution>()
+        
         // Process returned tasks (merge from server)
         response.tasks.forEach { serverTask ->
-            mergeServerTask(serverTask)
+            mergeServerTask(serverTask, response.syncedAt)
         }
 
         // Handle conflicts
@@ -276,30 +294,45 @@ class SyncManager(
 
             when (conflict.reason) {
                 "already_exists" -> {
-                    // Task exists on server, remove from queue
-                    syncQueueDao.deleteByTaskId(conflict.clientId)
-                    // Merge server version
-                    conflict.serverData?.let { mergeServerTask(it) }
+                    syncQueueDao.deleteByLocalTaskId(conflict.clientId)
+                    conflict.serverData?.let { 
+                        mergeServerTask(it, response.syncedAt)
+                        // CRITICAL FIX: Track conflict for UI
+                        val localTask = starDao.getByLocalId(conflict.clientId)
+                        if (localTask != null) {
+                            newConflicts.add(ConflictResolution.AutoResolved(
+                                localId = conflict.clientId,
+                                reason = "Task already exists on server",
+                                localData = localTask,
+                                serverData = it
+                            ))
+                        }
+                    }
                 }
                 "stale_data" -> {
-                    // Server has newer data, accept server version
-                    syncQueueDao.deleteByTaskId(conflict.clientId)
-                    conflict.serverData?.let { mergeServerTask(it) }
+                    // CRITICAL FIX: Track conflict requiring user attention
+                    val localTask = starDao.getByLocalId(conflict.clientId)
+                    if (localTask != null && conflict.serverData != null) {
+                        newConflicts.add(ConflictResolution.RequiresUserChoice(
+                            localId = conflict.clientId,
+                            localData = localTask,
+                            serverData = conflict.serverData
+                        ))
+                    }
+                    
+                    syncQueueDao.deleteByLocalTaskId(conflict.clientId)
+                    conflict.serverData?.let { mergeServerTask(it, response.syncedAt) }
                 }
                 "task_not_found" -> {
-                    // Task deleted on server, remove local
-                    syncQueueDao.deleteByTaskId(conflict.clientId)
-                    starDao.deleteStarById(conflict.clientId)
+                    syncQueueDao.deleteByLocalTaskId(conflict.clientId)
+                    starDao.deleteStarByLocalId(conflict.clientId)
                 }
                 else -> {
-                    // Unknown conflict, increment retry or mark as error
-                    val entity = pendingChanges.find { it.taskId == conflict.clientId }
+                    val entity = pendingChanges.find { it.localTaskId == conflict.clientId }
                     entity?.let {
                         if (it.retryCount + 1 >= MAX_RETRY_COUNT) {
-                            // Max retries reached - mark task as error and remove from queue
-                            starDao.markSyncError(it.taskId)
+                            starDao.markSyncError(it.localTaskId)
                             syncQueueDao.deleteById(it.id)
-                            Log.w(TAG, "Max retries reached for task ${it.taskId}, marked as error")
                         } else {
                             syncQueueDao.incrementRetry(it.id, conflict.reason)
                         }
@@ -308,77 +341,75 @@ class SyncManager(
             }
         }
 
+        // Update conflict flow
+        if (newConflicts.isNotEmpty()) {
+            _conflicts.value = _conflicts.value + newConflicts
+        }
+
         // Remove successfully synced items from queue
         val successfulIds = pendingChanges
-            .filter { entity -> response.conflicts.none { it.clientId == entity.taskId } }
+            .filter { entity -> response.conflicts.none { it.clientId == entity.localTaskId } }
             .map { it.id }
 
         if (successfulIds.isNotEmpty()) {
             syncQueueDao.deleteByIds(successfulIds)
         }
-
-        // Update sync status on local tasks
-        pendingChanges
-            .filter { entity -> response.conflicts.none { it.clientId == entity.taskId } }
-            .forEach { entity ->
-                starDao.updateSyncStatus(entity.taskId, "synced")
-            }
     }
 
     /**
-     * Merge a task from server into local database
+     * CRITICAL FIX: Merge server task with local preservation
      */
-    private suspend fun mergeServerTask(serverTask: TaskResponse) {
-        val localTask = starDao.getById(serverTask.id)
-
+    private suspend fun mergeServerTask(serverTask: TaskResponse, serverTimestamp: Long) {
+        // Try to find by serverId first, then by localId
+        var localTask = serverTask.id?.let { starDao.getByServerId(it) }
+        
         if (localTask == null) {
-            // New task from server, insert
-            starDao.insertStar(serverTask.toStarEntity())
-        } else if (localTask.syncStatus == "error") {
-            // Don't overwrite error status - user needs to see this error
-            Log.d(TAG, "Skipping merge for task ${serverTask.id}: local has error status")
-        } else if (localTask.syncStatus == "synced") {
-            // Local is synced, safe to update
-            starDao.insertStar(serverTask.toStarEntity().copy(
-                // Preserve local-only fields
-                x = localTask.x,
-                y = localTask.y
-            ))
+            // New task from server
+            val newLocalId = UUID.randomUUID().toString()
+            starDao.insertStar(serverTask.toStarEntity(newLocalId, serverTimestamp))
+            Log.d(TAG, "Inserted new server task with localId: $newLocalId")
         } else {
-            // Check if there's a pending change in the queue
-            val hasPendingChange = syncQueueDao.getLatestForTask(serverTask.id) != null
-            if (!hasPendingChange) {
-                // No pending change, safe to apply server version (server is source of truth)
-                starDao.insertStar(serverTask.toStarEntity().copy(
-                    x = localTask.x,
-                    y = localTask.y
-                ))
-            }
-            // If local has pending changes, don't overwrite (will sync on next push)
+            // CRITICAL FIX: Smart merge preserving local-only fields
+            val mergedEntity = localTask.copy(
+                serverId = serverTask.id,
+                title = serverTask.title ?: localTask.title,
+                urgency = serverTask.priority ?: localTask.urgency,
+                dueDate = parseDueDate(serverTask.dueDate, serverTask.dueTime) ?: localTask.dueDate,
+                // CRITICAL FIX: Preserve local position (Issue #11)
+                x = if (localTask.syncStatus == "pending") localTask.x else serverTask.x?.toFloat() ?: localTask.x,
+                y = if (localTask.syncStatus == "pending") localTask.y else serverTask.y?.toFloat() ?: localTask.y,
+                isCompleted = serverTask.completed ?: localTask.isCompleted,
+                completedAt = serverTask.completedAt?.let { parseTimestamp(it) } ?: localTask.completedAt,
+                isArchived = serverTask.archived ?: localTask.isArchived,
+                archivedAt = serverTask.archivedAt?.let { parseTimestamp(it) } ?: localTask.archivedAt,
+                syncStatus = "synced",
+                serverUpdatedAt = serverTimestamp
+            )
+            
+            starDao.insertStar(mergedEntity)
+            Log.d(TAG, "Merged server task: ${localTask.localId}")
         }
     }
 
     /**
      * Pull latest changes from server
      */
-    private suspend fun pullFromServer() {
+    private suspend fun pullFromServer(lastServerSync: Long?) {
         try {
-            val lastSync = getLastSyncTimestamp()
-
             val request = SyncRequest(
-                lastSyncAt = lastSync,
-                pendingChanges = emptyList()
+                lastSyncAt = lastServerSync,
+                pendingChanges = emptyList(),
+                deviceTime = System.currentTimeMillis()
             )
 
             val response = apiService.sync(request)
 
             if (response.isSuccessful && response.body() != null) {
                 val syncResponse = response.body()!!
-                setLastSyncTimestamp(syncResponse.syncedAt)
 
                 // Merge server tasks
                 syncResponse.tasks.forEach { serverTask ->
-                    mergeServerTask(serverTask)
+                    mergeServerTask(serverTask, syncResponse.syncedAt)
                 }
 
                 Log.d(TAG, "Pulled ${syncResponse.tasks.size} tasks from server")
@@ -386,6 +417,45 @@ class SyncManager(
         } catch (e: Exception) {
             Log.e(TAG, "Pull from server failed: ${e.message}")
         }
+    }
+
+    /**
+     * CRITICAL FIX: Cleanup old error entries (Issue #7)
+     */
+    private suspend fun cleanupOldErrors(olderThanDays: Int = 7) {
+        try {
+            val cutoff = System.currentTimeMillis() - (olderThanDays * 24 * 60 * 60 * 1000)
+            val oldErrors = starDao.getOldErrorTasks(cutoff)
+            
+            oldErrors.forEach { task ->
+                starDao.deleteStarByLocalId(task.localId)
+                syncQueueDao.deleteByLocalTaskId(task.localId)
+                Log.d(TAG, "Cleaned up old error task: ${task.localId}")
+            }
+            
+            if (oldErrors.isNotEmpty()) {
+                Log.d(TAG, "Cleaned up ${oldErrors.size} old error tasks")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Cleanup failed: ${e.message}")
+        }
+    }
+
+    /**
+     * User resolved a conflict
+     */
+    suspend fun resolveConflict(localId: String, useLocalVersion: Boolean) {
+        val conflict = _conflicts.value.find { it.localId == localId }
+        if (conflict == null) return
+        
+        if (useLocalVersion && conflict is ConflictResolution.RequiresUserChoice) {
+            // Force re-sync of local version
+            starDao.updateSyncStatus(localId, "pending")
+            queueUpdate(localId, conflict.localData.toSyncPayload())
+        }
+        
+        // Remove from conflicts list
+        _conflicts.value = _conflicts.value.filter { it.localId != localId }
     }
 
     /**
@@ -411,93 +481,81 @@ class SyncManager(
     }
 
     /**
-     * Get last sync timestamp from preferences
-     */
-    private fun getLastSyncTimestamp(): Long? {
-        val prefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
-        val timestamp = prefs.getLong(LAST_SYNC_KEY, -1)
-        return if (timestamp == -1L) null else timestamp
-    }
-
-    /**
-     * Save last sync timestamp to preferences
-     */
-    private fun setLastSyncTimestamp(timestamp: Long) {
-        val prefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
-        prefs.edit().putLong(LAST_SYNC_KEY, timestamp).apply()
-    }
-
-    /**
      * Update pending count
      */
     private suspend fun updatePendingCount() {
         _pendingCount.value = syncQueueDao.getPendingCount()
     }
 
-    /**
-     * Convert TaskResponse to StarEntity
-     */
-    private fun TaskResponse.toStarEntity(): StarEntity {
-        // Parse due date
-        val dueDateMs = dueDate?.let { dateStr ->
-            try {
-                if (dateStr.contains("T")) {
-                    java.time.Instant.parse(dateStr).toEpochMilli()
+    // Helper functions
+    private fun parseDueDate(dateStr: String?, timeStr: String?): Long? {
+        if (dateStr.isNullOrEmpty()) return null
+        
+        return try {
+            if (dateStr.contains("T")) {
+                java.time.Instant.parse(dateStr).toEpochMilli()
+            } else {
+                val datePart = java.time.LocalDate.parse(dateStr)
+                val timePart = if (!timeStr.isNullOrEmpty()) {
+                    if (timeStr.count { it == ':' } == 1) {
+                        java.time.LocalTime.parse("$timeStr:00")
+                    } else {
+                        java.time.LocalTime.parse(timeStr)
+                    }
                 } else {
-                    val datePart = java.time.LocalDate.parse(dateStr)
-                    val timePart = dueTime?.let { timeStr ->
-                        if (timeStr.count { it == ':' } == 1) {
-                            java.time.LocalTime.parse("$timeStr:00")
-                        } else {
-                            java.time.LocalTime.parse(timeStr)
-                        }
-                    } ?: java.time.LocalTime.of(23, 59, 59)
-                    java.time.LocalDateTime.of(datePart, timePart)
-                        .atZone(java.time.ZoneId.systemDefault())
-                        .toInstant()
-                        .toEpochMilli()
+                    java.time.LocalTime.of(23, 59, 59)
                 }
-            } catch (e: Exception) {
-                null
+                java.time.LocalDateTime.of(datePart, timePart)
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toInstant()
+                    .toEpochMilli()
             }
+        } catch (e: Exception) {
+            null
         }
+    }
 
-        // Parse timestamps
-        val createdAtMs = createdAt?.let {
-            try { java.time.Instant.parse(it).toEpochMilli() } catch (e: Exception) { System.currentTimeMillis() }
-        } ?: System.currentTimeMillis()
-
-        val updatedAtMs = updatedAt?.let {
-            try { java.time.Instant.parse(it).toEpochMilli() } catch (e: Exception) { System.currentTimeMillis() }
-        } ?: System.currentTimeMillis()
-
-        val completedAtMs = completedAt?.let {
-            try { java.time.Instant.parse(it).toEpochMilli() } catch (e: Exception) { null }
+    private fun parseTimestamp(timestamp: String): Long? {
+        return try {
+            java.time.Instant.parse(timestamp).toEpochMilli()
+        } catch (e: Exception) {
+            null
         }
+    }
 
-        val archivedAtMs = archivedAt?.let {
-            try { java.time.Instant.parse(it).toEpochMilli() } catch (e: Exception) { null }
-        }
-
+    private fun TaskResponse.toStarEntity(localId: String, serverTimestamp: Long): StarEntity {
         return StarEntity(
-            id = id,
-            title = title,
-            urgency = priority,
-            dueDate = dueDateMs,
-            x = x?.toFloat() ?: 0.5f,
-            y = y?.toFloat() ?: 0.5f,
-            createdAt = createdAtMs,
-            isSubtask = isSubtask,
-            isRecurring = isRecurring,
-            echoInterval = echoInterval,
-            isCompleted = completed,
-            completedAt = completedAtMs,
-            isArchived = archived,
-            archivedAt = archivedAtMs,
+            localId = localId,
+            serverId = this.id,
+            title = this.title ?: "",
+            urgency = this.priority ?: 0,
+            dueDate = parseDueDate(this.dueDate, this.dueTime),
+            x = this.x?.toFloat() ?: 0.5f,
+            y = this.y?.toFloat() ?: 0.5f,
+            createdAt = this.createdAt?.let { parseTimestamp(it) } ?: System.currentTimeMillis(),
+            isSubtask = this.isSubtask ?: false,
+            isRecurring = this.isRecurring ?: false,
+            echoInterval = this.echoInterval,
+            isCompleted = this.completed ?: false,
+            completedAt = this.completedAt?.let { parseTimestamp(it) },
+            isArchived = this.archived ?: false,
+            archivedAt = this.archivedAt?.let { parseTimestamp(it) },
             syncStatus = "synced",
             syncVersion = 0,
-            updatedAt = updatedAtMs,
-            isDeleted = false
+            updatedAt = System.currentTimeMillis(),
+            isDeleted = false,
+            serverUpdatedAt = serverTimestamp
+        )
+    }
+
+    private fun StarEntity.toSyncPayload(): Map<String, Any?> {
+        return mapOf(
+            "title" to title,
+            "priority" to urgency,
+            "x" to x,
+            "y" to y,
+            "is_recurring" to isRecurring,
+            "is_subtask" to isSubtask
         )
     }
 }
@@ -511,4 +569,24 @@ sealed class SyncState {
     object Syncing : SyncState()
     data class Synced(val timestamp: Long) : SyncState()
     data class Error(val message: String) : SyncState()
+}
+
+/**
+ * CRITICAL FIX: Conflict resolution tracking for UI
+ */
+sealed class ConflictResolution {
+    abstract val localId: String
+    
+    data class AutoResolved(
+        override val localId: String,
+        val reason: String,
+        val localData: StarEntity,
+        val serverData: TaskResponse
+    ) : ConflictResolution()
+    
+    data class RequiresUserChoice(
+        override val localId: String,
+        val localData: StarEntity,
+        val serverData: TaskResponse
+    ) : ConflictResolution()
 }

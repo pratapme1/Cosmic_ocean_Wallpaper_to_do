@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.0] - 2026-02-01 (Local-First Architecture)
+
+### Major Architecture Improvements 🏗️
+
+#### Local-First Sync Architecture (12 Critical Issues Fixed)
+- **Unified Sync Path**: All operations now go through SyncManager (Issue #1)
+- **Stable ID Management**: Separate `localId` (never changes) and `serverId` (backend-assigned) (Issue #2)
+- **Transaction Boundaries**: All database operations use atomic transactions (Issue #3)
+- **Server Timestamps**: Conflict resolution now uses server timestamps instead of device time (Issue #4)
+- **Queue Data Integrity**: No merging of operations - server handles proper ordering (Issue #5)
+- **Conflict Resolution UI**: New dialog allows users to choose between local and server versions (Issue #6)
+- **Automatic Cleanup**: Error entries automatically deleted after 7 days (Issue #7)
+- **Safe Migration**: Database v3→v4 migration preserves all data and forces re-sync for consistency (Issue #8)
+- **Sync Throttling**: Prevents spam with 5-second minimum between syncs (Issue #9)
+- **Sync Status Indicator**: Visual UI showing sync state, pending count, and errors (Issue #10)
+- **Position Preservation**: Local task positions survive sync operations (Issue #11)
+- **Wallpaper Throttling**: Prevents wallpaper update spam with 2-second minimum (Issue #12)
+
+#### New Components
+- `SyncManager.kt` - Completely rewritten unified sync engine
+- `SyncStatusIndicator.kt` - UI component for sync status visibility
+- `SyncQueueEntity` - Improved sync queue with localTaskId references
+- Database Migration 3→4 - Schema changes for local-first architecture
+
+#### Testing
+- Added comprehensive E2E test suite for local-first architecture
+- Added complete API endpoint testing (32 tests)
+- All 12 critical issues have dedicated test coverage
+
+---
+
 ## [2.2.13] - 2026-01-30 (Hotfix)
 
 ### Optimized - Boot Stability ⚡

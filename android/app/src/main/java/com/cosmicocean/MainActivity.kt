@@ -43,6 +43,7 @@ import com.cosmicocean.viewmodel.MainViewModel
 import com.cosmicocean.viewmodel.MainViewModelFactory
 import com.cosmicocean.viewmodel.EnvironmentSettingsViewModel
 import com.cosmicocean.service.RealTimeWallpaperService
+import com.cosmicocean.sync.SyncManager
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -67,8 +68,24 @@ class MainActivity : ComponentActivity() {
         wallpaperPreferences.detectDeviceResolution()
 
         database = CosmicDatabase.getDatabase(this)
-        // Epic 8: Pass applicationContext for network connectivity checks
-        val repository = TaskRepository(database.starDao(), NetworkModule.getApi(this), applicationContext)
+        
+        // CRITICAL FIX: Initialize SyncManager for local-first architecture
+        val apiService = NetworkModule.getApi(this)
+        val syncManager = SyncManager.getInstance(
+            database.syncQueueDao(),
+            database.starDao(),
+            apiService,
+            applicationContext
+        )
+        
+        // CRITICAL FIX: Repository now uses SyncManager for all sync operations
+        val repository = TaskRepository(
+            starDao = database.starDao(),
+            apiService = apiService,
+            context = applicationContext,
+            syncManager = syncManager
+        )
+        
         val engine = VerletEngine()
         val constellationSystem = ConstellationSystem(engine)
         val orbitalSystem = OrbitalSystem(engine)
@@ -76,7 +93,7 @@ class MainActivity : ComponentActivity() {
         val zoneManager = ZoneManager(1080f, 1920f)
         val audioEngine = com.cosmicocean.audio.AudioEngine(this)
 
-        val factory = MainViewModelFactory(repository, engine, constellationSystem, orbitalSystem, commandHistory)
+        val factory = MainViewModelFactory(repository, engine, constellationSystem, orbitalSystem, commandHistory, syncManager)
 
         // Set up command history callbacks for toast notifications
         commandHistory.onUndoRedo = { action, description ->
