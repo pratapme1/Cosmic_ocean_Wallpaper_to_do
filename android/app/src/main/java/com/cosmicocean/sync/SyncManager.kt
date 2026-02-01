@@ -323,16 +323,15 @@ class SyncManager(
                         }
                     }
                     
-                    conflict.serverData?.let { 
-                        mergeServerTask(it, response.syncedAt)
-                        // CRITICAL FIX: Track conflict for UI
+                    // CRITICAL FIX: Track conflict for UI (don't merge - we already updated local task above)
+                    conflict.serverData?.let { serverData ->
                         val localTask = starDao.getByLocalId(conflict.clientId)
                         if (localTask != null) {
                             newConflicts.add(ConflictResolution.AutoResolved(
                                 localId = conflict.clientId,
                                 reason = "Task already exists on server",
                                 localData = localTask,
-                                serverData = it
+                                serverData = serverData
                             ))
                         }
                     }
@@ -346,10 +345,25 @@ class SyncManager(
                             localData = localTask,
                             serverData = conflict.serverData
                         ))
+                        
+                        // CRITICAL FIX: Update existing local task instead of creating duplicate
+                        val updatedTask = localTask.copy(
+                            serverId = conflict.serverData.id ?: localTask.serverId,
+                            title = conflict.serverData.title ?: localTask.title,
+                            urgency = conflict.serverData.priority ?: localTask.urgency,
+                            dueDate = parseDueDate(conflict.serverData.dueDate, conflict.serverData.dueTime) ?: localTask.dueDate,
+                            isCompleted = conflict.serverData.completed ?: localTask.isCompleted,
+                            completedAt = conflict.serverData.completedAt?.let { parseTimestamp(it) } ?: localTask.completedAt,
+                            isArchived = conflict.serverData.archived ?: localTask.isArchived,
+                            archivedAt = conflict.serverData.archivedAt?.let { parseTimestamp(it) } ?: localTask.archivedAt,
+                            syncStatus = "synced",
+                            serverUpdatedAt = response.syncedAt
+                        )
+                        starDao.insertStar(updatedTask)
+                        Log.d(TAG, "Updated stale_data task: ${localTask.localId}")
                     }
                     
                     syncQueueDao.deleteByLocalTaskId(conflict.clientId)
-                    conflict.serverData?.let { mergeServerTask(it, response.syncedAt) }
                 }
                 "task_not_found" -> {
                     syncQueueDao.deleteByLocalTaskId(conflict.clientId)

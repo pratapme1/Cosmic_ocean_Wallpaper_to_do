@@ -42,10 +42,11 @@ class TaskRepository(
 ) {
     companion object {
         private const val TAG = "TaskRepository"
-        private const val WALLPAPER_THROTTLE_MS = 500L  // 500ms throttle - fast updates for responsive wallpaper
+        // REMOVED: No throttling for instant wallpaper updates
+        // All task changes trigger immediate wallpaper refresh
     }
 
-    private var lastWallpaperUpdate = 0L
+
 
     // === Query Methods ===
     
@@ -213,23 +214,18 @@ class TaskRepository(
         // Queue to SyncManager
         syncManager.queueDelete(star.id)
 
-        // Trigger wallpaper update (throttled)
+        // Trigger wallpaper update immediately (no throttling)
         triggerImmediateWallpaperUpdate()
     }
 
     /**
-     * CRITICAL FIX: Throttled wallpaper update (Issue #12)
+     * CRITICAL FIX: Immediate wallpaper update (NO throttling)
+     * Every task change triggers instant wallpaper refresh
      */
     private fun triggerImmediateWallpaperUpdate() {
-        val now = System.currentTimeMillis()
-        if (now - lastWallpaperUpdate < WALLPAPER_THROTTLE_MS) {
-            return  // Too soon, skip
-        }
-        lastWallpaperUpdate = now
-
         try {
             wallpaperUpdater(context)
-            Log.d(TAG, "Triggered wallpaper update")
+            Log.d(TAG, "Triggered immediate wallpaper update")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to trigger wallpaper update: ${e.message}")
         }

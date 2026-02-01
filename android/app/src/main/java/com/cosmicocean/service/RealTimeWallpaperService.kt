@@ -360,24 +360,17 @@ class RealTimeWallpaperService : Service() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 when (intent?.action) {
                     Intent.ACTION_SCREEN_OFF -> {
-                        Log.d(TAG, "Screen OFF - scheduling update (debounced 2s)")
-                        // Debounce updates to prevent spamming while toggling screen
-                        handler.removeCallbacks(updateRunnable) 
-                        handler.postDelayed({ 
-                             updateWallpaper() 
-                             // Restart periodic timer from this point
-                             handler.postDelayed(updateRunnable, UPDATE_INTERVAL_MS)
-                        }, 2000)
+                        Log.d(TAG, "Screen OFF - updating wallpaper immediately")
+                        // IMMEDIATE update when screen turns off (for lock screen)
+                        handler.removeCallbacks(updateRunnable)
+                        updateWallpaper()
+                        // Restart periodic timer
+                        handler.postDelayed(updateRunnable, UPDATE_INTERVAL_MS)
                     }
                     Intent.ACTION_SCREEN_ON -> {
-                         // Optional: Might skip update on SCREEN_ON if we trust background updates
-                         // But for now, just debounce it too
-                         Log.d(TAG, "Screen ON - scheduling update (debounced 2s)")
-                         handler.removeCallbacks(updateRunnable)
-                         handler.postDelayed({ 
-                             updateWallpaper()
-                             handler.postDelayed(updateRunnable, UPDATE_INTERVAL_MS)
-                         }, 2000)
+                         Log.d(TAG, "Screen ON - wallpaper already set from OFF event")
+                         // Screen ON doesn't need immediate update - user just unlocked
+                         // Background updates every 5s will catch any changes
                     }
                 }
             }

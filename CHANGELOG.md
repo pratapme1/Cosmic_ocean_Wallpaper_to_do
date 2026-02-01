@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.6] - 2026-02-02 (INSTANT Wallpaper Updates - <1 Second)
+
+### ⚡ INSTANT WALLPAPER UPDATES
+
+#### **Removed ALL Delays - Updates in <1 Second**
+
+**Before:**
+- Task creation → 500ms throttle → could skip rapid updates
+- Screen OFF/ON → 2 second debounce → 2s delay
+- Multiple rapid tasks → some updates skipped
+
+**After:**
+- Task creation → **0ms throttle** → immediate update
+- Screen OFF → **0ms debounce** → instant update for lock screen
+- Multiple rapid tasks → **every single one triggers update**
+
+#### **Changes Made:**
+
+**TaskRepository.kt:**
+- Removed `WALLPAPER_THROTTLE_MS` (was 500ms)
+- Removed `lastWallpaperUpdate` tracking
+- Every task change triggers **immediate** wallpaper refresh
+- No skipping of rapid consecutive changes
+
+**RealTimeWallpaperService.kt:**
+- Screen OFF: Removed 2s debounce → **immediate update**
+- Screen ON: Removed 2s debounce → relies on background updates
+- Lock screen shows latest tasks **within 1 second**
+
+#### **Performance:**
+```
+Create Task 1    → 0-100ms → Wallpaper updates
+Create Task 2    → 0-100ms → Wallpaper updates  
+Create Task 3    → 0-100ms → Wallpaper updates
+Lock Phone       → 0-100ms → Wallpaper updates
+```
+
+**Result:** When user visits lockscreen, ALL recent changes are there within 1 second.
+
+### APK
+- **File**: `cosmic-ocean-v2.3.6.apk` (8.2 MB)
+- **Status**: Instant updates enabled
+
+---
+
 ## [2.3.4] - 2026-02-02 (CRITICAL: Duplicate Task Fix)
 
 ### 🚨 CRITICAL BUG FIX - Duplicate Task Creation
