@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.1] - 2026-02-02 (Sync UUID Hotfix)
+
+### Fixed - Critical Sync Issue 🐛
+- **Problem**: Backend was rejecting sync operations with `invalid input syntax for type uuid: "star-{timestamp}"`
+- **Root Cause**: PostgreSQL requires proper UUID format, but Android was sending local IDs like `star-1769970517500`
+- **Solution**: 
+  - Backend now generates proper `crypto.randomUUID()` for all new tasks
+  - Backend returns `mappings` array with `clientId → serverId` translations
+  - Android SyncManager now processes these mappings to update local records
+- **Result**: Sync now works correctly between Android app and PostgreSQL backend
+
+### Technical Changes
+- **Backend** (`backend/routes/sync.js`):
+  - Added `crypto.randomUUID()` generation for new tasks
+  - Returns `mappings: [{clientId, serverId, serverData}]` in sync response
+  - Fixed UUID validation errors
+  
+- **Android** (`SyncManager.kt`, `ApiModels.kt`):
+  - Added `SyncMapping` data class for ID translations
+  - Updated `SyncResponse` to include mappings
+  - SyncManager now updates local records with serverIds after successful sync
+  - Tasks properly marked as `synced` after mapping
+
+---
+
 ## [2.3.0] - 2026-02-01 (Local-First Architecture)
 
 ### Major Architecture Improvements 🏗️

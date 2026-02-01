@@ -261,13 +261,16 @@ data class SyncChange(
 
 /**
  * Response from POST /api/sync
+ * CRITICAL FIX: Includes mappings for clientId → serverId translation
  */
 data class SyncResponse(
     @SerializedName("syncedAt")
     val syncedAt: Long,
     val tasks: List<TaskResponse>,
     val results: SyncResults,
-    val conflicts: List<SyncConflict>
+    val conflicts: List<SyncConflict>,
+    @SerializedName("mappings")
+    val mappings: List<SyncMapping>? = null  // NEW: ClientId → ServerId mappings for creates
 )
 
 /**
@@ -287,7 +290,21 @@ data class SyncConflict(
     val reason: String,          // already_exists, stale_data, task_not_found, server_error
     @SerializedName("serverData")
     val serverData: TaskResponse? = null,
-    val error: String? = null
+    val error: String? = null,
+    @SerializedName("serverId")
+    val serverId: String? = null  // For already_exists, return the existing server ID
+)
+
+/**
+ * Sync mapping entry (for successful creates)
+ * Maps clientId (local) to serverId (backend UUID)
+ */
+data class SyncMapping(
+    val clientId: String,
+    @SerializedName("serverId")
+    val serverId: String,
+    @SerializedName("serverData")
+    val serverData: TaskResponse
 )
 
 /**

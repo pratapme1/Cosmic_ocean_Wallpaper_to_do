@@ -1,5 +1,6 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
+const crypto = require('crypto');
 const { verifyToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -10,6 +11,8 @@ router.use(verifyToken);
 /**
  * POST /api/sync
  * Synchronize pending changes and get latest data
+ * 
+ * CRITICAL FIX: Handles clientId → serverId mapping for local-first architecture
  *
  * Request body:
  * {
@@ -19,7 +22,7 @@ router.use(verifyToken);
  *       type: 'create' | 'update' | 'delete',
  *       entity: 'task',
  *       data: {...},
- *       clientId: 'uuid',
+ *       clientId: 'local-id',  // Android local ID (any format)
  *       timestamp: number
  *     }
  *   ]
@@ -29,9 +32,11 @@ router.use(verifyToken);
  * {
  *   syncedAt: timestamp,
  *   tasks: [...],
+ *   results: { applied, rejected, skipped },
  *   conflicts: [...],
- *   applied: number,
- *   rejected: number
+ *   mappings: [  // NEW: ClientId → ServerId mappings for successful creates
+ *     { clientId: 'star-xxx', serverId: 'uuid', serverData: {...} }
+ *   ]
  * }
  */
 router.post(
@@ -39,7 +44,6 @@ router.post(
   [
     body('lastSyncAt').optional().isInt(),
     body('pendingChanges').optional().isArray(),
-    // Accept both 'action' and 'type' for backward compatibility
     body('pendingChanges.*.data').optional().isObject(),
     body('pendingChanges.*.clientId').isString(),
     body('pendingChanges.*.timestamp').isInt()
@@ -56,7 +60,7 @@ router.post(
       const client = req.dbClient;
       let { lastSyncAt, pendingChanges = [] } = req.body;
 
-      // Normalize pending changes (map action->type, taskId->data.id, add entity)
+      // Normalize pending changes
       pendingChanges = pendingChanges.map(change => ({
         type: change.action || change.type,
         entity: change.entity || 'task',
@@ -72,12 +76,12 @@ router.post(
         applied: 0,
         rejected: 0,
         skipped: 0,
-        conflicts: []
+        conflicts: [],
+        mappings: []  // CRITICAL FIX: Track successful mappings
       };
 
       // Process pending changes in order
       for (const change of pendingChanges) {
-        // Validate action type
         if (!['create', 'update', 'delete'].includes(change.type)) {
           console.warn(`[Sync] Skipping invalid change type: ${change.type}`);
           syncResults.skipped++;
@@ -89,12 +93,21 @@ router.post(
             const result = await applyTaskChange(client, userId, change);
             if (result.success) {
               syncResults.applied++;
+              // CRITICAL FIX: If create succeeded, add mapping
+              if (change.type === 'create' && result.clientId && result.serverId) {
+                syncResults.mappings.push({
+                  clientId: result.clientId,
+                  serverId: result.serverId,
+                  serverData: result.data
+                });
+              }
             } else {
               syncResults.rejected++;
               syncResults.conflicts.push({
                 clientId: change.clientId,
                 reason: result.reason,
-                serverData: result.serverData
+                serverData: result.serverData,
+                serverId: result.serverId  // Include serverId for already_exists
               });
             }
           }
@@ -121,7 +134,8 @@ router.post(
         syncedAt: Date.now(),
         tasks: tasksResult.rows,
         results: syncResults,
-        conflicts: syncResults.conflicts // For backward compatibility
+        conflicts: syncResults.conflicts,  // Backward compatibility
+        mappings: syncResults.mappings  // NEW: ClientId → ServerId mappings
       });
     } catch (err) {
       console.error('Sync error:', err);
@@ -158,24 +172,29 @@ async function applyTaskChange(client, userId, change) {
 
 /**
  * Create task from sync
+ * CRITICAL FIX: Generate proper server UUID, map clientId to serverId
  */
 async function createTask(client, userId, data, clientId, timestamp) {
-  // Check if task already exists (by client ID or server ID)
+  // Generate a proper server UUID (PostgreSQL compatible)
+  const serverId = crypto.randomUUID();
+  
+  // Check if task already exists by title (same user, same title = duplicate)
   const existingCheck = await client.query(
-    'SELECT id, updated_at FROM tasks WHERE id = $1 OR (user_id = $2 AND title = $3)',
-    [data.id || clientId, userId, data.title]
+    'SELECT id, updated_at FROM tasks WHERE user_id = $1 AND title = $2 AND created_at > to_timestamp($3 / 1000.0) - INTERVAL \'1 minute\'',
+    [userId, data.title, timestamp]
   );
 
   if (existingCheck.rows.length > 0) {
-    // Task already exists - this is a conflict
     return {
       success: false,
       reason: 'already_exists',
-      serverData: existingCheck.rows[0]
+      serverData: existingCheck.rows[0],
+      clientId: clientId,
+      serverId: existingCheck.rows[0].id  // Return existing server ID
     };
   }
 
-  // Create the task
+  // Create the task with server-generated UUID
   const query = `
     INSERT INTO tasks (
       id, user_id, title, estimate_minutes, priority, due_date, due_time,
@@ -188,7 +207,7 @@ async function createTask(client, userId, data, clientId, timestamp) {
   `;
 
   const values = [
-    data.id || clientId,
+    serverId,  // CRITICAL FIX: Use server-generated UUID
     userId,
     data.title || 'New Task',
     data.estimate_minutes || null,
@@ -208,18 +227,33 @@ async function createTask(client, userId, data, clientId, timestamp) {
 
   const result = await client.query(query, values);
 
-  return { success: true, data: result.rows[0] };
+  return { 
+    success: true, 
+    data: result.rows[0],
+    clientId: clientId,
+    serverId: serverId
+  };
 }
 
 /**
  * Update task from sync with last-write-wins
  */
 async function updateTask(client, userId, data, clientId, timestamp) {
-  // Get current task
-  const currentTask = await client.query(
+  // First try to find by server ID (if we have it)
+  let currentTask = await client.query(
     'SELECT * FROM tasks WHERE id = $1 AND user_id = $2',
     [data.id || clientId, userId]
   );
+  
+  // If not found and data.id looks like a clientId, try to find by other means
+  if (currentTask.rows.length === 0 && data.id && data.id.startsWith('star-')) {
+    // This is a clientId, we need to find the corresponding server task
+    // For now, try matching by title and recent creation
+    currentTask = await client.query(
+      'SELECT * FROM tasks WHERE user_id = $1 AND title = $2 AND created_at > to_timestamp($3 / 1000.0) - INTERVAL \'5 minutes\'',
+      [userId, data.title, timestamp]
+    );
+  }
 
   if (currentTask.rows.length === 0) {
     return {
@@ -242,7 +276,7 @@ async function updateTask(client, userId, data, clientId, timestamp) {
 
   // Build dynamic update query
   const updates = [];
-  const values = [data.id || clientId, userId];
+  const values = [serverTask.id, userId];
   let paramIndex = 3;
 
   const allowedFields = [
@@ -287,17 +321,27 @@ async function updateTask(client, userId, data, clientId, timestamp) {
  * Delete task from sync
  */
 async function deleteTask(client, userId, data, clientId, timestamp) {
-  // Check if task exists
-  const existingTask = await client.query(
-    'SELECT updated_at FROM tasks WHERE id = $1 AND user_id = $2',
+  // Try to find the task - first by server ID, then try to match by title if it's a clientId
+  let existingTask = await client.query(
+    'SELECT id, updated_at FROM tasks WHERE id = $1 AND user_id = $2',
     [data.id || clientId, userId]
   );
+  
+  if (existingTask.rows.length === 0 && data.id && data.id.startsWith('star-')) {
+    // Try to find by title if we have it
+    if (data.title) {
+      existingTask = await client.query(
+        'SELECT id, updated_at FROM tasks WHERE user_id = $1 AND title = $2 ORDER BY created_at DESC LIMIT 1',
+        [userId, data.title]
+      );
+    }
+  }
 
   if (existingTask.rows.length === 0) {
-    // Already deleted or never existed
     return { success: true };
   }
 
+  const serverTaskId = existingTask.rows[0].id;
   const serverTimestamp = new Date(existingTask.rows[0].updated_at).getTime();
 
   // Last-write-wins: only delete if client change is newer
@@ -312,7 +356,7 @@ async function deleteTask(client, userId, data, clientId, timestamp) {
   // Delete the task
   await client.query(
     'DELETE FROM tasks WHERE id = $1 AND user_id = $2',
-    [data.id || clientId, userId]
+    [serverTaskId, userId]
   );
 
   return { success: true };

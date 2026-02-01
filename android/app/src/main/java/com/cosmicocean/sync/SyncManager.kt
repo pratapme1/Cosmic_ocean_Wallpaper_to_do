@@ -278,14 +278,39 @@ class SyncManager(
     }
 
     /**
-     * CRITICAL FIX: Handle sync response with server timestamps
+     * CRITICAL FIX: Handle sync response with server timestamps and ID mappings
      */
     private suspend fun handleSyncResponse(response: SyncResponse, pendingChanges: List<SyncQueueEntity>) {
         val newConflicts = mutableListOf<ConflictResolution>()
         
-        // Process returned tasks (merge from server)
+        // CRITICAL FIX: Process ID mappings from successful creates
+        response.mappings?.forEach { mapping ->
+            Log.d(TAG, "Mapping received: ${mapping.clientId} -> ${mapping.serverId}")
+            
+            // Update local record with serverId
+            val localTask = starDao.getByLocalId(mapping.clientId)
+            if (localTask != null) {
+                // Update the local record with serverId and mark as synced
+                val updatedTask = localTask.copy(
+                    serverId = mapping.serverId,
+                    syncStatus = "synced",
+                    serverUpdatedAt = response.syncedAt
+                )
+                starDao.insertStar(updatedTask)
+                Log.d(TAG, "Updated local task ${mapping.clientId} with serverId ${mapping.serverId}")
+            }
+            
+            // Also merge any server data (parsed fields from NLP)
+            mergeServerTask(mapping.serverData, response.syncedAt)
+        }
+        
+        // Process returned tasks (merge from server for tasks we didn't create)
         response.tasks.forEach { serverTask ->
-            mergeServerTask(serverTask, response.syncedAt)
+            // Skip tasks that were already handled via mappings
+            val alreadyMapped = response.mappings?.any { it.serverId == serverTask.id } ?: false
+            if (!alreadyMapped) {
+                mergeServerTask(serverTask, response.syncedAt)
+            }
         }
 
         // Handle conflicts
@@ -295,6 +320,21 @@ class SyncManager(
             when (conflict.reason) {
                 "already_exists" -> {
                     syncQueueDao.deleteByLocalTaskId(conflict.clientId)
+                    
+                    // CRITICAL FIX: If server returned a serverId for already_exists, update local record
+                    if (conflict.serverId != null) {
+                        val localTask = starDao.getByLocalId(conflict.clientId)
+                        if (localTask != null) {
+                            val updatedTask = localTask.copy(
+                                serverId = conflict.serverId,
+                                syncStatus = "synced",
+                                serverUpdatedAt = response.syncedAt
+                            )
+                            starDao.insertStar(updatedTask)
+                            Log.d(TAG, "Updated already-exists task ${conflict.clientId} with serverId ${conflict.serverId}")
+                        }
+                    }
+                    
                     conflict.serverData?.let { 
                         mergeServerTask(it, response.syncedAt)
                         // CRITICAL FIX: Track conflict for UI
@@ -346,9 +386,18 @@ class SyncManager(
             _conflicts.value = _conflicts.value + newConflicts
         }
 
-        // Remove successfully synced items from queue
+        // Remove successfully synced items from queue (including those handled via mappings)
+        val mappedClientIds = response.mappings?.map { it.clientId }?.toSet() ?: emptySet()
         val successfulIds = pendingChanges
-            .filter { entity -> response.conflicts.none { it.clientId == entity.localTaskId } }
+            .filter { entity -> 
+                response.conflicts.none { it.clientId == entity.localTaskId } ||
+                mappedClientIds.contains(entity.localTaskId)  // Also remove if successfully mapped
+            }
+            .filter { entity ->
+                // Only remove if not in conflicts OR if it was successfully mapped
+                response.conflicts.none { it.clientId == entity.localTaskId } ||
+                mappedClientIds.contains(entity.localTaskId)
+            }
             .map { it.id }
 
         if (successfulIds.isNotEmpty()) {
