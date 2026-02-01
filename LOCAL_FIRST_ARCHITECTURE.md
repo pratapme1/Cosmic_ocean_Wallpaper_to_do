@@ -2,6 +2,7 @@
 
 > **Status:** PROPOSAL
 > **Created:** 2026-02-01
+> **Updated:** 2026-02-01 (Added reusable components analysis)
 > **Author:** Architecture Review
 > **Priority:** CRITICAL
 
@@ -15,6 +16,15 @@ The current architecture has a **fatal flaw**: everything depends on network con
 2. **Wallpaper generates on-device** (no network dependency)
 3. **Background sync keeps cloud updated** (eventual consistency)
 4. **App works 100% offline** (network is optional enhancement)
+
+### Key Finding: 80% of Infrastructure Already Exists!
+
+After thorough code review, we discovered:
+- ✅ **Backend sync API** is COMPLETE (`backend/routes/sync.js`)
+- ✅ **TaskRepository** already saves locally first
+- ✅ **Network detection** already implemented
+- ✅ **Retry logic** already in wallpaper service
+- ⚠️ **Missing:** Sync queue persistence, sync status fields, local wallpaper
 
 ---
 
@@ -90,6 +100,222 @@ CURRENT STATE:
 - Not actually real-time
 - Drains battery with constant network activity
 ```
+
+---
+
+## Existing Code Audit: What We Can Reuse
+
+### ✅ COMPLETE: Backend Sync API (Zero Changes Needed)
+
+**File:** `backend/routes/sync.js` (355 lines)
+
+The sync API is **production-ready** with:
+
+```javascript
+// POST /api/sync - Already handles:
+{
+  lastSyncAt: timestamp,      // Delta sync support
+  pendingChanges: [
+    {
+      type: 'create' | 'update' | 'delete',
+      clientId: 'uuid',
+      data: {...},
+      timestamp: number
+    }
+  ]
+}
+
+// Response includes:
+{
+  syncedAt: timestamp,
+  tasks: [...],              // Only tasks modified since lastSyncAt
+  results: { applied, rejected, conflicts },
+  conflicts: [{ clientId, reason, serverData }]
+}
+```
+
+**Features Already Implemented:**
+- ✅ Last-write-wins conflict resolution (lines 234-240)
+- ✅ Delta sync - only returns tasks after `lastSyncAt` (lines 113-118)
+- ✅ Duplicate detection on create (lines 164-176)
+- ✅ Dynamic field updates (lines 248-259)
+- ✅ Backward compatibility (`action` → `type` mapping)
+- ✅ Sync status endpoint: `GET /api/sync/status`
+
+**Reuse Strategy:** Use as-is. No modifications needed.
+
+---
+
+### ✅ MOSTLY COMPLETE: TaskRepository (Minor Changes)
+
+**File:** `android/.../data/TaskRepository.kt` (337 lines)
+
+**Already Implements Local-First Pattern:**
+
+```kotlin
+// Current addStar() flow (lines 141-219):
+suspend fun addStar(star: Star) {
+    // 1. Save to local database FIRST ✅
+    starDao.insertStar(star.toEntity())
+
+    // 2. Then sync to backend
+    try {
+        val response = apiService.createTask(...)
+        // Update with server ID on success
+    } catch (e: Exception) {
+        // Log error but DON'T FAIL - offline mode ✅
+        Log.e(TAG, "Failed to sync: ${e.message}")
+    }
+}
+```
+
+**Already Has:**
+- ✅ Local-first save (line 144)
+- ✅ Network availability check (`isNetworkAvailable()`, lines 104-109)
+- ✅ Graceful offline handling (catch block doesn't fail)
+- ✅ LLM parsing with local fallback (lines 67-99)
+- ✅ Context tag extraction (lines 136-139)
+- ✅ Wallpaper update trigger (lines 33-47)
+
+**What's Missing (Add, Don't Rewrite):**
+- ❌ Persist failed operations to sync queue
+- ❌ Sync status tracking on entities
+- ❌ Background sync trigger
+
+**Reuse Strategy:** Extend with sync queue, don't rewrite.
+
+---
+
+### ✅ COMPLETE: Network Handling
+
+**File:** `android/.../network/NetworkModule.kt` (154 lines)
+
+**Already Has:**
+- ✅ OkHttp with 30-second timeouts
+- ✅ Auth token injection interceptor (lines 37-46)
+- ✅ Automatic 401 token refresh (lines 48-97)
+- ✅ Thread-safe refresh with sync lock
+- ✅ Logging interceptor for debugging
+
+**File:** `android/.../data/TaskRepository.kt` (lines 104-109)
+
+```kotlin
+// Network check already exists!
+private fun isNetworkAvailable(): Boolean {
+    val connectivityManager = context.getSystemService(...) as ConnectivityManager
+    val network = connectivityManager?.activeNetwork ?: return false
+    val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+}
+```
+
+**Reuse Strategy:** Use as-is. Just need to expose for SyncManager.
+
+---
+
+### ✅ COMPLETE: Wallpaper Service Infrastructure
+
+**File:** `android/.../service/RealTimeWallpaperService.kt` (382 lines)
+
+**Already Has:**
+- ✅ Foreground service with notification
+- ✅ Retry logic with exponential backoff (lines 273-290)
+- ✅ Wake lock for reliable updates (lines 142-174)
+- ✅ Force update capability via Intent (lines 74-85)
+- ✅ Screen on/off detection (lines 298-335)
+- ✅ WallpaperManager integration (lines 238-243)
+
+**Reuse Strategy:** Add local generation path, keep network as fallback.
+
+---
+
+### ✅ COMPLETE: Local Database (Room)
+
+**File:** `android/.../data/CosmicDatabase.kt` (46 lines)
+
+**Already Has:**
+- ✅ Singleton pattern with synchronized instance
+- ✅ 6 entities (Star, Constellation, Orbit, Patina, Trophy, AchievementStats)
+- ✅ Migration support structure
+
+**File:** `android/.../data/Entities.kt` (87 lines)
+
+**StarEntity Already Has:**
+```kotlin
+@Entity(tableName = "stars")
+data class StarEntity(
+    @PrimaryKey val id: String,
+    val title: String,
+    val urgency: Int,
+    val dueDate: Long?,
+    val x: Float, val y: Float,
+    val createdAt: Long,
+    val isSubtask: Boolean,
+    val isRecurring: Boolean,
+    val echoInterval: String?,
+    val isCompleted: Boolean,
+    val completedAt: Long?,
+    val isArchived: Boolean,
+    val archivedAt: Long?
+)
+```
+
+**Missing Fields (Add 4 fields):**
+```kotlin
+// ADD these for sync:
+val syncStatus: String = "synced",  // synced, pending, error
+val syncVersion: Long = 0,
+val updatedAt: Long = System.currentTimeMillis(),
+val isDeleted: Boolean = false  // Soft delete for sync
+```
+
+**File:** `android/.../data/Daos.kt` (95 lines)
+
+**StarDao Already Has:**
+- ✅ `getAllActiveStars()` - Flow-based reactive query
+- ✅ `insertStar()` / `insertStars()` - Batch insert
+- ✅ `deleteStarById()` - Safe deletion
+
+**Missing DAO Methods (Add ~5 methods):**
+```kotlin
+@Query("SELECT * FROM stars WHERE syncStatus != 'synced'")
+suspend fun getPendingSyncTasks(): List<StarEntity>
+
+@Query("SELECT * FROM stars WHERE updatedAt > :since")
+suspend fun getTasksSince(since: Long): List<StarEntity>
+
+@Query("UPDATE stars SET syncStatus = :status WHERE id = :id")
+suspend fun updateSyncStatus(id: String, status: String)
+```
+
+---
+
+### ✅ COMPLETE: Preferences & Token Storage
+
+**File:** `android/.../auth/TokenManager.kt` (69 lines)
+- ✅ EncryptedSharedPreferences (secure)
+- ✅ Access/refresh token storage
+- ✅ User ID storage
+
+**File:** `android/.../utils/WallpaperPreferencesManager.kt` (122 lines)
+- ✅ Theme preference (cosmic/ocean/fantasy)
+- ✅ Resolution detection
+- ✅ `lastSyncTime` tracking (can extend)
+
+---
+
+### ❌ MISSING: Components to Create
+
+| Component | Estimated LOC | Priority |
+|-----------|---------------|----------|
+| **SyncQueueEntity + DAO** | ~50 | P0 |
+| **SyncManager** | ~200 | P0 |
+| **ApiService.sync()** | ~10 | P0 |
+| **StarEntity migration** | ~30 | P0 |
+| **LocalWallpaperGenerator** | ~400 | P1 |
+| **Enhanced LocalParser** | ~300 | P2 |
+
+**Total New Code: ~1,000 lines** (not 8,000+ as originally estimated)
 
 ---
 
@@ -1169,89 +1395,310 @@ app.get('/api/sync/pull', authMiddleware, async (req, res) => {
 
 ---
 
-## Migration Plan
+## Migration Plan (Minimal Changes - Leveraging Existing Code)
 
-### Phase 1: Local Database Enhancement (Week 1)
+### Phase 1: Database & Sync Queue (2-3 Days)
 
-**Goal:** Make Room the source of truth without breaking existing functionality.
+**Goal:** Add sync tracking to existing database.
 
-| Task | Description | Risk |
-|------|-------------|------|
-| 1.1 | Add sync metadata columns to TaskEntity | Low |
-| 1.2 | Create SyncQueueEntity and DAO | Low |
-| 1.3 | Implement soft delete (isDeleted flag) | Low |
-| 1.4 | Database migration for existing data | Medium |
+| Task | File | Change | LOC |
+|------|------|--------|-----|
+| 1.1 | `Entities.kt` | Add 4 fields to StarEntity | +10 |
+| 1.2 | `Entities.kt` | Create SyncQueueEntity | +20 |
+| 1.3 | `Daos.kt` | Add 5 sync query methods | +25 |
+| 1.4 | `CosmicDatabase.kt` | Add SyncQueueDao, bump version | +10 |
+| 1.5 | `CosmicDatabase.kt` | Add migration(2,3) | +15 |
 
-**Rollback:** Revert database schema, no data loss.
+**Total:** ~80 lines added to existing files
 
-### Phase 2: Local-First Repository (Week 2)
+**Changes to StarEntity:**
+```kotlin
+// ADD to existing StarEntity (Entities.kt line 6-22):
+val syncStatus: String = "synced",  // synced, pending, conflict, error
+val syncVersion: Long = 0,
+val updatedAt: Long = System.currentTimeMillis(),
+val isDeleted: Boolean = false
+```
 
-**Goal:** All CRUD operations happen locally first.
+**New SyncQueueEntity:**
+```kotlin
+@Entity(tableName = "sync_queue")
+data class SyncQueueEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val taskId: String,
+    val operation: String,  // create, update, delete
+    val payload: String,    // JSON
+    val createdAt: Long = System.currentTimeMillis(),
+    val retryCount: Int = 0
+)
+```
 
-| Task | Description | Risk |
-|------|-------------|------|
-| 2.1 | Refactor TaskRepository for local-first | Medium |
-| 2.2 | Implement sync queue insertion | Low |
-| 2.3 | Add optimistic UI updates | Low |
-| 2.4 | Keep existing API calls as background sync | Low |
+---
 
-**Rollback:** Feature flag to revert to network-first.
+### Phase 2: Sync Manager (2-3 Days)
 
-### Phase 3: On-Device Wallpaper Generation (Week 3)
+**Goal:** Background sync using EXISTING backend API.
 
-**Goal:** Generate wallpaper without network.
+| Task | File | Change | LOC |
+|------|------|--------|-----|
+| 2.1 | `ApiService.kt` | Add sync() endpoint | +15 |
+| 2.2 | NEW `SyncManager.kt` | Create sync coordinator | +200 |
+| 2.3 | `TaskRepository.kt` | Queue failed ops instead of just logging | +30 |
 
-| Task | Description | Risk |
-|------|-------------|------|
-| 3.1 | Create LocalWallpaperGenerator with Canvas | High |
-| 3.2 | Port theme colors from backend | Low |
-| 3.3 | Implement particle systems | Medium |
-| 3.4 | Add text rendering with wrapping | Medium |
-| 3.5 | Integration with WallpaperManager | Low |
+**ApiService Addition:**
+```kotlin
+// ADD to ApiService.kt:
+@POST("api/sync")
+suspend fun sync(@Body request: SyncRequest): Response<SyncResponse>
 
-**Rollback:** Feature flag to use backend wallpaper.
+data class SyncRequest(
+    val lastSyncAt: Long?,
+    val pendingChanges: List<SyncChange>
+)
 
-### Phase 4: Sync Engine (Week 4)
+data class SyncChange(
+    val type: String,        // create, update, delete
+    val clientId: String,
+    val data: Map<String, Any?>,
+    val timestamp: Long
+)
 
-**Goal:** Robust background synchronization.
+data class SyncResponse(
+    val syncedAt: Long,
+    val tasks: List<TaskResponse>,
+    val results: SyncResults,
+    val conflicts: List<SyncConflict>
+)
+```
 
-| Task | Description | Risk |
-|------|-------------|------|
-| 4.1 | Create SyncEngine class | Medium |
-| 4.2 | Implement push changes to server | Medium |
-| 4.3 | Implement pull changes from server | Medium |
-| 4.4 | Conflict resolution (last-write-wins) | Medium |
-| 4.5 | Retry with exponential backoff | Low |
-| 4.6 | Sync state UI indicator | Low |
+**SyncManager (New File ~200 lines):**
+```kotlin
+class SyncManager(
+    private val syncQueueDao: SyncQueueDao,
+    private val starDao: StarDao,
+    private val apiService: ApiService,
+    private val context: Context
+) {
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-**Rollback:** Disable sync engine, use manual sync.
+    // Debounced sync trigger
+    private val syncChannel = Channel<Unit>(Channel.CONFLATED)
 
-### Phase 5: Enhanced Local Parser (Week 5)
+    init {
+        scope.launch {
+            syncChannel.receiveAsFlow()
+                .debounce(1000)  // Wait 1s for batch changes
+                .collect { performSync() }
+        }
+    }
 
-**Goal:** Handle 95% of inputs without LLM.
+    fun triggerSync() = syncChannel.trySend(Unit)
 
-| Task | Description | Risk |
-|------|-------------|------|
-| 5.1 | Expand time pattern matching | Low |
-| 5.2 | Add relative date parsing | Low |
-| 5.3 | Improve duration extraction | Low |
-| 5.4 | Add category detection | Low |
-| 5.5 | LLM only for low-confidence inputs | Medium |
+    private suspend fun performSync() {
+        if (!isOnline()) return
 
-**Rollback:** Feature flag to use LLM always.
+        val pending = syncQueueDao.getPendingChanges()
+        if (pending.isEmpty()) return
 
-### Phase 6: Backend Simplification (Week 6)
+        val request = SyncRequest(
+            lastSyncAt = getLastSyncTime(),
+            pendingChanges = pending.map { it.toSyncChange() }
+        )
 
-**Goal:** Backend becomes sync server only.
+        try {
+            val response = apiService.sync(request)
+            if (response.isSuccessful) {
+                handleSyncResponse(response.body()!!, pending)
+            }
+        } catch (e: Exception) {
+            Log.e("SyncManager", "Sync failed: ${e.message}")
+            // Will retry on next trigger
+        }
+    }
+}
+```
 
-| Task | Description | Risk |
-|------|-------------|------|
-| 6.1 | Create /api/sync/push endpoint | Medium |
-| 6.2 | Create /api/sync/pull endpoint | Medium |
-| 6.3 | Remove wallpaper generation (optional) | Low |
-| 6.4 | Keep legacy endpoints for gradual migration | Low |
+**TaskRepository Modification:**
+```kotlin
+// CHANGE in TaskRepository.kt addStar() catch block (line 215-218):
+// FROM:
+} catch (e: Exception) {
+    Log.e(TAG, "Failed to sync: ${e.message}")
+}
 
-**Rollback:** Full backward compatibility maintained.
+// TO:
+} catch (e: Exception) {
+    Log.e(TAG, "Failed to sync, queuing for later: ${e.message}")
+    syncQueueDao.insert(SyncQueueEntity(
+        taskId = star.id,
+        operation = "create",
+        payload = star.toJson()
+    ))
+    syncManager.triggerSync()  // Will retry when online
+}
+```
+
+---
+
+### Phase 3: Local Wallpaper Generation (3-4 Days)
+
+**Goal:** Generate wallpaper on-device when offline.
+
+| Task | File | Change | LOC |
+|------|------|--------|-----|
+| 3.1 | NEW `LocalWallpaperGenerator.kt` | Canvas-based rendering | +350 |
+| 3.2 | NEW `WallpaperTheme.kt` | Theme colors (port from backend) | +80 |
+| 3.3 | `RealTimeWallpaperService.kt` | Add local generation path | +40 |
+
+**Integration with Existing Service:**
+```kotlin
+// MODIFY RealTimeWallpaperService.updateWallpaper() (line 191):
+
+private fun updateWallpaper() {
+    // ... existing token check ...
+
+    currentUpdateJob = serviceScope.launch {
+        try {
+            val bitmap = if (isOnline()) {
+                // Existing path: fetch from backend
+                fetchWallpaperFromBackend()
+            } else {
+                // NEW path: generate locally
+                generateWallpaperLocally()
+            }
+
+            bitmap?.let { setWallpaper(it) }
+        } catch (e: Exception) {
+            // Fallback: try local generation
+            generateWallpaperLocally()?.let { setWallpaper(it) }
+        }
+    }
+}
+
+private suspend fun generateWallpaperLocally(): Bitmap? {
+    val tasks = starDao.getAllActiveStarsSync()
+    val topTask = tasks.firstOrNull()
+    val theme = prefsManager.getTheme()
+    val resolution = getScreenResolution()
+
+    return LocalWallpaperGenerator.generate(
+        task = topTask,
+        theme = theme,
+        width = resolution.width,
+        height = resolution.height
+    )
+}
+```
+
+---
+
+### Phase 4: Enhanced Local Parser (Optional, 2 Days)
+
+**Goal:** Better offline parsing (currently just uses raw title).
+
+| Task | File | Change | LOC |
+|------|------|--------|-----|
+| 4.1 | `TaskRepository.kt` | Enhance createLocalFallback() | +150 |
+
+**Enhance Existing Fallback (lines 115-131):**
+```kotlin
+// ENHANCE createLocalFallback() in TaskRepository.kt:
+private fun createLocalFallback(input: String, reason: String): ParsedTaskResult {
+    // Parse time: "at 3pm", "in 10 minutes"
+    val timeMatch = Regex("""(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?""", RegexOption.IGNORE_CASE).find(input)
+    val dueTime = timeMatch?.let { parseTimeMatch(it) }
+
+    // Parse date: "tomorrow", "friday", "in 2 days"
+    val dateMatch = extractDate(input)
+
+    // Parse duration: "30m", "1h", "quick"
+    val durationMatch = Regex("""(\d+)\s*(min|m|hr|h)\b""", RegexOption.IGNORE_CASE).find(input)
+    val duration = durationMatch?.let { parseDuration(it) }
+
+    // Extract priority: "!", "!!", "urgent", "asap"
+    val priority = when {
+        input.contains("!!!") || input.contains(Regex("urgent|asap|critical", RegexOption.IGNORE_CASE)) -> 1
+        input.contains("!!") || input.contains(Regex("important", RegexOption.IGNORE_CASE)) -> 1
+        input.contains(Regex("low priority|whenever|someday", RegexOption.IGNORE_CASE)) -> 3
+        else -> 2
+    }
+
+    // Clean title (remove parsed parts)
+    val title = cleanTitle(input, timeMatch, dateMatch, durationMatch)
+
+    return ParsedTaskResult(
+        title = title,
+        dueDate = dateMatch?.format(),
+        dueTime = dueTime,
+        estimateMinutes = duration,
+        priority = priority,
+        // ... rest unchanged
+    )
+}
+```
+
+---
+
+## Summary: Minimal Changes Required
+
+### Files to Modify (Small Changes)
+
+| File | Lines Changed | Description |
+|------|---------------|-------------|
+| `Entities.kt` | +30 | Add sync fields + SyncQueueEntity |
+| `Daos.kt` | +30 | Add sync queries + SyncQueueDao |
+| `CosmicDatabase.kt` | +25 | Add DAO, migration |
+| `ApiService.kt` | +20 | Add sync() endpoint |
+| `TaskRepository.kt` | +50 | Queue failed ops, enhanced parser |
+| `RealTimeWallpaperService.kt` | +40 | Add local generation path |
+
+**Total Modifications:** ~195 lines
+
+### New Files to Create
+
+| File | Lines | Description |
+|------|-------|-------------|
+| `SyncManager.kt` | ~200 | Sync coordinator |
+| `LocalWallpaperGenerator.kt` | ~350 | On-device wallpaper |
+| `WallpaperTheme.kt` | ~80 | Theme colors |
+
+**Total New Code:** ~630 lines
+
+### Backend Changes: ZERO
+
+The existing `backend/routes/sync.js` is production-ready. No changes needed.
+
+---
+
+## Revised Timeline
+
+| Phase | Duration | Risk | Blocker |
+|-------|----------|------|---------|
+| **Phase 1: Database** | 2-3 days | Low | None |
+| **Phase 2: Sync Manager** | 2-3 days | Medium | None |
+| **Phase 3: Local Wallpaper** | 3-4 days | Medium | Canvas complexity |
+| **Phase 4: Enhanced Parser** | 2 days | Low | Optional |
+
+**Total: 9-12 days** (down from 6 weeks original estimate)
+
+---
+
+## Rollback Strategy
+
+Each phase has a feature flag:
+
+```kotlin
+object FeatureFlags {
+    const val LOCAL_FIRST_SYNC = true      // Phase 1-2
+    const val LOCAL_WALLPAPER = true       // Phase 3
+    const val ENHANCED_LOCAL_PARSER = true // Phase 4
+}
+```
+
+If issues arise:
+1. Set flag to `false`
+2. App reverts to current behavior (network-first)
+3. No data loss (local DB is always up-to-date)
 
 ---
 
@@ -1396,43 +1843,48 @@ The migration is phased over 6 weeks with feature flags and rollback plans at ea
 
 ---
 
-## Appendix: File Changes Summary
+## Appendix: Actual File Changes (Minimal)
 
-### New Files to Create
+### New Files to Create (3 files, ~630 lines)
 
 ```
 android/app/src/main/java/com/cosmicocean/
 ├── sync/
-│   ├── SyncEngine.kt
-│   ├── SyncState.kt
-│   ├── SyncQueueDao.kt
-│   └── SyncQueueEntity.kt
-├── wallpaper/
-│   ├── LocalWallpaperGenerator.kt
-│   ├── WallpaperTheme.kt
-│   ├── ThemeColors.kt
-│   ├── ParticleRenderer.kt
-│   └── TextRenderer.kt
-├── parser/
-│   └── LocalTaskParser.kt (enhanced)
-└── data/
-    └── TaskEntity.kt (modified with sync fields)
-
-backend/
-├── routes/
-│   └── sync.js (new)
-└── server.js (modified)
+│   └── SyncManager.kt          # ~200 lines - Sync coordinator
+└── wallpaper/
+    ├── LocalWallpaperGenerator.kt  # ~350 lines - On-device generation
+    └── WallpaperTheme.kt           # ~80 lines - Theme colors
 ```
 
-### Files to Modify
+### Files to Modify (6 files, ~195 lines changed)
 
 ```
-android/
-├── TaskRepository.kt → Local-first operations
-├── CosmicDatabase.kt → New entities, migrations
-├── RealTimeWallpaperService.kt → Use local generator
-└── MainActivity.kt → Sync state UI
+android/app/src/main/java/com/cosmicocean/data/
+├── Entities.kt                 # +30 lines (sync fields, SyncQueueEntity)
+├── Daos.kt                     # +30 lines (sync queries, SyncQueueDao)
+├── CosmicDatabase.kt           # +25 lines (new DAO, migration)
+└── TaskRepository.kt           # +50 lines (queue failed ops)
 
-backend/
-└── server.js → Add sync endpoints
+android/app/src/main/java/com/cosmicocean/network/
+└── ApiService.kt               # +20 lines (sync endpoint)
+
+android/app/src/main/java/com/cosmicocean/service/
+└── RealTimeWallpaperService.kt # +40 lines (local generation path)
 ```
+
+### Backend Changes: NONE
+
+```
+backend/routes/sync.js  # ✅ Already complete - 355 lines production-ready
+```
+
+### Total Impact
+
+| Category | Lines |
+|----------|-------|
+| New code | ~630 |
+| Modified code | ~195 |
+| Backend changes | 0 |
+| **Total** | **~825 lines** |
+
+*Original estimate was 8,000+ lines. Leveraging existing code reduced this by 90%.*
