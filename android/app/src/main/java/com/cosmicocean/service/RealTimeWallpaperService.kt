@@ -197,58 +197,38 @@ class RealTimeWallpaperService : Service() {
     }
 
     private fun updateWallpaper() {
-        val tokenManager = TokenManager(applicationContext)
-        val userId = tokenManager.getUserId()
-        if (userId == null) {
-            Log.w(TAG, "❌ No user logged in (TokenManager), skipping update")
+        if (isUpdating) {
+            Log.d(TAG, "Update already in progress, skipping")
             return
         }
 
         // FIX 3: Acquire wake lock before starting update
         acquireWakeLock()
 
-        // SERALIZATION FIX: Cancel any existing update job to prevent overlapping downloads/sets
+        // SERALIZATION FIX: Cancel any existing update job to prevent overlapping generations
         currentUpdateJob?.cancel()
 
         currentUpdateJob = serviceScope.launch {
             try {
                 val prefsManager = WallpaperPreferencesManager(applicationContext)
                 val theme = prefsManager.getTheme()
-                val resolution = prefsManager.getResolution()
 
-                // LOCAL-FIRST: Check network and decide path
-                val bitmap = if (isOnline()) {
-                    // Online: Try backend first, fallback to local
-                    fetchWallpaperFromBackend(theme, resolution)
-                        ?: generateWallpaperLocally(theme)
-                } else {
-                    // Offline: Generate locally
-                    Log.d(TAG, "Offline mode: generating wallpaper locally")
-                    generateWallpaperLocally(theme)
-                }
+                // CRITICAL FIX: Always generate wallpaper locally
+                // No backend dependency for wallpaper generation
+                Log.d(TAG, "Generating wallpaper locally (completely offline)")
+                val bitmap = generateWallpaperLocally(theme)
 
                 if (bitmap != null) {
                     setWallpaperBitmap(bitmap)
                     retryCount = 0
+                    Log.d(TAG, "✅ Local wallpaper generated and set successfully")
                 } else {
-                    Log.e(TAG, "Failed to generate wallpaper")
-                    scheduleRetry("wallpaper generation failed")
+                    Log.e(TAG, "❌ Failed to generate local wallpaper")
+                    scheduleRetry("local wallpaper generation failed")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Update failed: ${e.message}")
-                // Try local generation as last resort
-                try {
-                    val prefsManager = WallpaperPreferencesManager(applicationContext)
-                    val localBitmap = generateWallpaperLocally(prefsManager.getTheme())
-                    if (localBitmap != null) {
-                        setWallpaperBitmap(localBitmap)
-                        Log.d(TAG, "Fallback to local generation succeeded")
-                    } else {
-                        scheduleRetry("exception: ${e.message}")
-                    }
-                } catch (e2: Exception) {
-                    scheduleRetry("local fallback failed: ${e2.message}")
-                }
+                Log.e(TAG, "❌ Wallpaper update failed: ${e.message}")
+                scheduleRetry("exception: ${e.message}")
             } finally {
                 // FIX 3: Release wake lock after update completes
                 releaseWakeLock()

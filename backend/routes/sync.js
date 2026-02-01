@@ -206,10 +206,13 @@ async function createTask(client, userId, data, clientId, timestamp) {
     RETURNING *
   `;
 
+  // CRITICAL FIX: Android sends 'rawTitle', backend expects 'title'
+  const taskTitle = data.title || data.rawTitle || 'New Task';
+  
   const values = [
     serverId,  // CRITICAL FIX: Use server-generated UUID
     userId,
-    data.title || 'New Task',
+    taskTitle,
     data.estimate_minutes || null,
     data.priority || 0,
     data.due_date || null,
@@ -237,20 +240,28 @@ async function createTask(client, userId, data, clientId, timestamp) {
 
 /**
  * Update task from sync with last-write-wins
+ * CRITICAL FIX: Never query by clientId (non-UUID), only by title matching
  */
 async function updateTask(client, userId, data, clientId, timestamp) {
-  // First try to find by server ID (if we have it)
-  let currentTask = await client.query(
-    'SELECT * FROM tasks WHERE id = $1 AND user_id = $2',
-    [data.id || clientId, userId]
-  );
+  let currentTask = null;
   
-  // If not found and data.id looks like a clientId, try to find by other means
-  if (currentTask.rows.length === 0 && data.id && data.id.startsWith('star-')) {
-    // This is a clientId, we need to find the corresponding server task
-    // For now, try matching by title and recent creation
+  // CRITICAL FIX: Check if data.id is a valid UUID before querying
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const isValidUuid = data.id && uuidRegex.test(data.id);
+  
+  // Only query by ID if it's a valid UUID
+  if (isValidUuid) {
     currentTask = await client.query(
-      'SELECT * FROM tasks WHERE user_id = $1 AND title = $2 AND created_at > to_timestamp($3 / 1000.0) - INTERVAL \'5 minutes\'',
+      'SELECT * FROM tasks WHERE id = $1 AND user_id = $2',
+      [data.id, userId]
+    );
+  }
+  
+  // If not found by UUID (or no UUID provided), try to find by title matching
+  // This handles the case where Android sends clientId but we need to find server task
+  if ((!currentTask || currentTask.rows.length === 0) && data.title) {
+    currentTask = await client.query(
+      'SELECT * FROM tasks WHERE user_id = $1 AND title = $2 AND created_at > to_timestamp($3 / 1000.0) - INTERVAL \'5 minutes\' ORDER BY created_at DESC LIMIT 1',
       [userId, data.title, timestamp]
     );
   }
@@ -319,22 +330,29 @@ async function updateTask(client, userId, data, clientId, timestamp) {
 
 /**
  * Delete task from sync
+ * CRITICAL FIX: Never query by clientId (non-UUID), only by title matching
  */
 async function deleteTask(client, userId, data, clientId, timestamp) {
-  // Try to find the task - first by server ID, then try to match by title if it's a clientId
-  let existingTask = await client.query(
-    'SELECT id, updated_at FROM tasks WHERE id = $1 AND user_id = $2',
-    [data.id || clientId, userId]
-  );
+  let existingTask = null;
   
-  if (existingTask.rows.length === 0 && data.id && data.id.startsWith('star-')) {
-    // Try to find by title if we have it
-    if (data.title) {
-      existingTask = await client.query(
-        'SELECT id, updated_at FROM tasks WHERE user_id = $1 AND title = $2 ORDER BY created_at DESC LIMIT 1',
-        [userId, data.title]
-      );
-    }
+  // CRITICAL FIX: Check if data.id is a valid UUID before querying
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const isValidUuid = data.id && uuidRegex.test(data.id);
+  
+  // Only query by ID if it's a valid UUID
+  if (isValidUuid) {
+    existingTask = await client.query(
+      'SELECT id, updated_at FROM tasks WHERE id = $1 AND user_id = $2',
+      [data.id, userId]
+    );
+  }
+  
+  // If not found by UUID (or no UUID provided), try to find by title matching
+  if ((!existingTask || existingTask.rows.length === 0) && data.title) {
+    existingTask = await client.query(
+      'SELECT id, updated_at FROM tasks WHERE user_id = $1 AND title = $2 ORDER BY created_at DESC LIMIT 1',
+      [userId, data.title]
+    );
   }
 
   if (existingTask.rows.length === 0) {

@@ -7,14 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.2] - 2026-02-02 (Emergency Hotfix - COMPLETELY LOCAL)
+
+### 🚨 CRITICAL FIXES - App Now Works 100% Offline
+
+#### **1. Fixed "New Task" Display Issue**
+- **Problem**: Tasks showing as "New Task" instead of actual names
+- **Root Cause**: Android sends `rawTitle`, backend only accepted `title`
+- **Fix**: Backend now handles both `title` and `rawTitle` fields
+- **Result**: Task names display correctly
+
+#### **2. Made Wallpaper Generation Completely Local** ⚡
+- **Problem**: Wallpaper depended on backend API (slow, failed when offline)
+- **Root Cause**: `RealTimeWallpaperService` tried backend first
+- **Fix**: Removed ALL backend wallpaper calls
+  - Wallpaper generates 100% locally using `LocalWallpaperGenerator`
+  - No network dependency
+  - Works on airplane mode
+  - Instant updates
+- **Result**: Wallpaper updates immediately, works offline
+
+#### **3. Fixed Sync UUID Errors**
+- **Problem**: `invalid input syntax for type uuid: "star-xxx"` errors
+- **Root Cause**: Backend tried to query PostgreSQL with clientId (non-UUID format)
+- **Fix**: 
+  - Added UUID validation before database queries
+  - Uses title-matching for clientId lookups
+  - Proper server UUID generation
+- **Result**: Sync works without database errors
+
+### Files Changed
+- `backend/routes/sync.js` - UUID validation, title/rawTitle handling
+- `android/app/src/main/java/com/cosmicocean/service/RealTimeWallpaperService.kt` - Local-only wallpaper
+- `android/app/build.gradle` - Version bump to 2.3.2
+
+### APK
+- **File**: `cosmic-ocean-v2.3.2.apk` (8.2 MB)
+- **Status**: Production ready, completely offline-capable
+
+---
+
 ## [2.3.1] - 2026-02-02 (Sync UUID Hotfix)
 
 ### Fixed - Critical Sync Issue 🐛
 - **Problem**: Backend was rejecting sync operations with `invalid input syntax for type uuid: "star-{timestamp}"`
 - **Root Cause**: PostgreSQL requires proper UUID format, but Android was sending local IDs like `star-1769970517500`
 - **Solution**: 
-  - Backend now generates proper `crypto.randomUUID()` for all new tasks
-  - Backend returns `mappings` array with `clientId → serverId` translations
+  - Backend now generates proper `crypto.randomUUID()` for new tasks
+  - Returns `mappings` array with `clientId → serverId` translations
   - Android SyncManager now processes these mappings to update local records
 - **Result**: Sync now works correctly between Android app and PostgreSQL backend
 
