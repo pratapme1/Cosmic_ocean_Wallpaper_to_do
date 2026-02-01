@@ -12,6 +12,7 @@ import com.cosmicocean.model.ParsedTaskResult
 import com.cosmicocean.model.Star
 import com.cosmicocean.model.TaskResponse
 import com.cosmicocean.network.ApiService
+import com.cosmicocean.sync.SyncManager
 import com.cosmicocean.worker.WallpaperUpdateWorker
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -20,6 +21,7 @@ class TaskRepository(
     private val starDao: StarDao,
     private val apiService: ApiService,
     private val context: Context,
+    private val syncManager: SyncManager? = null,  // Local-first sync support
     private val wallpaperUpdater: (Context) -> Unit = { ctx -> com.cosmicocean.service.RealTimeWallpaperService.updateNow(ctx) }
 ) {
     companion object {
@@ -139,10 +141,14 @@ class TaskRepository(
     }
 
     suspend fun addStar(star: Star) {
-        // Save to local database first with local ID
+        // Save to local database first with local ID (LOCAL-FIRST)
         val oldId = star.id
-        starDao.insertStar(star.toEntity())
-        Log.d(TAG, "Saved star locally with ID: $oldId")
+        val entity = star.toEntity().copy(
+            syncStatus = "pending",  // Mark as pending sync
+            updatedAt = System.currentTimeMillis()
+        )
+        starDao.insertStar(entity)
+        Log.d(TAG, "Saved star locally with ID: $oldId (sync pending)")
 
         // Sync new task to backend API
         try {
@@ -213,14 +219,32 @@ class TaskRepository(
                 Log.e(TAG, "Backend create failed: ${response.code()} - ${response.errorBody()?.string()}")
             }
         } catch (e: Exception) {
-            // Log error but don't fail - offline mode
-            Log.e(TAG, "Failed to sync new star $oldId to backend: ${e.message}", e)
+            // LOCAL-FIRST: Queue for background sync instead of just logging
+            Log.e(TAG, "Failed to sync new star $oldId, queuing for retry: ${e.message}", e)
+
+            // Queue for background sync
+            syncManager?.queueCreate(oldId, mapOf(
+                "title" to star.title,
+                "x" to star.particle.x,
+                "y" to star.particle.y,
+                "is_recurring" to star.isRecurring,
+                "echo_interval" to (star.echoInterval?.name ?: ""),
+                "is_subtask" to star.isSubtask,
+                "priority" to star.urgency
+            ))
+
+            // Still trigger wallpaper update with local data
+            triggerImmediateWallpaperUpdate()
         }
     }
 
     suspend fun updateStar(star: Star) {
-        // EPIC 9 FIX: Update local database with current positions
-        starDao.insertStar(star.toEntity())
+        // LOCAL-FIRST: Update local database immediately with pending sync status
+        val entity = star.toEntity().copy(
+            syncStatus = "pending",
+            updatedAt = System.currentTimeMillis()
+        )
+        starDao.insertStar(entity)
 
         // CRITICAL FIX: Sync to backend API (including positions)
         try {
@@ -272,27 +296,43 @@ class TaskRepository(
                 }
             }
         } catch (e: Exception) {
-            // Log error but don't fail - offline mode
-            android.util.Log.e("TaskRepository", "Failed to sync star ${star.id} to backend: ${e.message}", e)
-            println("Failed to sync star ${star.id} to backend: ${e.message}")
+            // LOCAL-FIRST: Queue for background sync
+            Log.e(TAG, "Failed to sync update for ${star.id}, queuing for retry: ${e.message}", e)
+
+            syncManager?.queueUpdate(star.id, mapOf(
+                "title" to star.title,
+                "priority" to star.urgency,
+                "x" to star.particle.x,
+                "y" to star.particle.y,
+                "completed" to star.isCompleted,
+                "archived" to star.isArchived
+            ))
+
+            // Still trigger wallpaper update with local data
+            triggerImmediateWallpaperUpdate()
         }
     }
 
     suspend fun deleteStar(star: Star) {
-        // CRITICAL FIX: Use deleteStarById to ensure deletion by Primary Key
-        // Prevents issues where entity fields mismatch (e.g. float precision) causes silent fail
-        starDao.deleteStarById(star.id)
+        // LOCAL-FIRST: Soft delete locally for sync, then try backend
+        starDao.softDelete(star.id)
+        Log.d(TAG, "Soft deleted star locally: ${star.id}")
 
-        // CRITICAL FIX: Sync deletion to backend API
+        // Trigger wallpaper update immediately (local-first)
+        triggerImmediateWallpaperUpdate()
+
+        // Try to sync deletion to backend
         try {
             val response = apiService.deleteTask(star.id)
             if (response.isSuccessful) {
-                // Trigger immediate wallpaper update ONLY after successful sync
-                triggerImmediateWallpaperUpdate()
+                // Hard delete since backend confirmed
+                starDao.deleteStarById(star.id)
+                Log.d(TAG, "Deletion synced to backend: ${star.id}")
             }
         } catch (e: Exception) {
-            // Log error but don't fail - offline mode
-            println("Failed to sync deletion of star ${star.id} to backend: ${e.message}")
+            // Queue for background sync
+            Log.e(TAG, "Failed to sync deletion of ${star.id}, queuing: ${e.message}")
+            syncManager?.queueDelete(star.id)
         }
     }
 
@@ -331,7 +371,12 @@ class TaskRepository(
             isCompleted = isCompleted,
             completedAt = completedAt,
             isArchived = isArchived,
-            archivedAt = archivedAt
+            archivedAt = archivedAt,
+            // Local-first sync fields
+            syncStatus = "synced",
+            syncVersion = 0,
+            updatedAt = System.currentTimeMillis(),
+            isDeleted = false
         )
     }
 }

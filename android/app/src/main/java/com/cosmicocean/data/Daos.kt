@@ -5,8 +5,17 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface StarDao {
-    @Query("SELECT * FROM stars WHERE isArchived = 0")
+    @Query("SELECT * FROM stars WHERE isArchived = 0 AND isDeleted = 0")
     fun getAllActiveStars(): Flow<List<StarEntity>>
+
+    @Query("SELECT * FROM stars WHERE isArchived = 0 AND isDeleted = 0")
+    suspend fun getAllActiveStarsSync(): List<StarEntity>
+
+    @Query("SELECT * FROM stars WHERE isArchived = 0 AND isDeleted = 0 AND isCompleted = 0 ORDER BY urgency ASC, dueDate ASC LIMIT 1")
+    suspend fun getTopTask(): StarEntity?
+
+    @Query("SELECT * FROM stars WHERE id = :id")
+    suspend fun getById(id: String): StarEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertStar(star: StarEntity)
@@ -22,6 +31,29 @@ interface StarDao {
 
     @Query("DELETE FROM stars")
     suspend fun deleteAllStars()
+
+    // === Local-First Sync Methods ===
+
+    @Query("SELECT * FROM stars WHERE syncStatus != 'synced'")
+    suspend fun getPendingSyncTasks(): List<StarEntity>
+
+    @Query("SELECT * FROM stars WHERE updatedAt > :since")
+    suspend fun getTasksSince(since: Long): List<StarEntity>
+
+    @Query("UPDATE stars SET syncStatus = :status, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateSyncStatus(id: String, status: String, updatedAt: Long = System.currentTimeMillis())
+
+    @Query("UPDATE stars SET syncStatus = 'error', lastError = :error, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun markSyncError(id: String, error: String, updatedAt: Long = System.currentTimeMillis())
+
+    @Query("UPDATE stars SET isDeleted = 1, syncStatus = 'pending', updatedAt = :updatedAt WHERE id = :id")
+    suspend fun softDelete(id: String, updatedAt: Long = System.currentTimeMillis())
+
+    @Query("UPDATE stars SET isCompleted = 1, completedAt = :completedAt, syncStatus = 'pending', updatedAt = :updatedAt WHERE id = :id")
+    suspend fun markCompleted(id: String, completedAt: Long, updatedAt: Long = System.currentTimeMillis())
+
+    @Query("SELECT MAX(updatedAt) FROM stars WHERE syncStatus = 'synced'")
+    suspend fun getLastSyncTimestamp(): Long?
 }
 
 @Dao
@@ -91,4 +123,38 @@ interface AchievementStatsDao {
 
     @Query("DELETE FROM achievement_stats WHERE userId = :userId")
     suspend fun deleteStats(userId: String)
+}
+
+/**
+ * Sync Queue DAO
+ * Manages pending sync operations for local-first architecture
+ */
+@Dao
+interface SyncQueueDao {
+    @Query("SELECT * FROM sync_queue ORDER BY createdAt ASC")
+    suspend fun getAllPending(): List<SyncQueueEntity>
+
+    @Query("SELECT * FROM sync_queue WHERE taskId = :taskId ORDER BY createdAt DESC LIMIT 1")
+    suspend fun getLatestForTask(taskId: String): SyncQueueEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(entity: SyncQueueEntity): Long
+
+    @Query("DELETE FROM sync_queue WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM sync_queue WHERE taskId = :taskId")
+    suspend fun deleteByTaskId(taskId: String)
+
+    @Query("DELETE FROM sync_queue WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<Long>)
+
+    @Query("UPDATE sync_queue SET retryCount = retryCount + 1, lastError = :error WHERE id = :id")
+    suspend fun incrementRetry(id: Long, error: String)
+
+    @Query("SELECT COUNT(*) FROM sync_queue")
+    suspend fun getPendingCount(): Int
+
+    @Query("DELETE FROM sync_queue")
+    suspend fun deleteAll()
 }
