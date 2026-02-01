@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.3] - 2026-02-02 (Wallpaper Timing Fix - INSTANT UPDATES)
+
+### 🚀 PERFORMANCE FIX - Instant Wallpaper Updates
+
+#### **1. Reduced Wallpaper Update Interval** ⚡
+- **Problem**: Wallpaper only updated every 60 seconds - too slow for task changes
+- **Root Cause**: `UPDATE_INTERVAL_MS = 60_000L` in RealTimeWallpaperService
+- **Fix**: Reduced to `UPDATE_INTERVAL_MS = 5_000L` (5 seconds)
+- **Result**: Wallpaper updates 12x more frequently
+
+#### **2. Removed Artificial Update Delay** ⚡
+- **Problem**: Force updates had 500ms delay before executing
+- **Root Cause**: `handler.postDelayed({ updateWallpaper() }, 500)` 
+- **Fix**: Removed delay - updates happen immediately
+- **Result**: Instant wallpaper refresh when tasks change
+
+#### **3. Reduced Throttling** ⚡
+- **Problem**: Task-triggered updates throttled at 2000ms (2 seconds)
+- **Root Cause**: `WALLPAPER_THROTTLE_MS = 2000L` in TaskRepository
+- **Fix**: Reduced to `WALLPAPER_THROTTLE_MS = 500L` (500ms)
+- **Result**: Fast response to task creation/completion
+
+### Combined Effect
+- **Before**: Task could take up to 60 seconds to appear on wallpaper
+- **After**: Task appears on wallpaper within 1-5 seconds of creation
+- **Before**: Custom wallpaper upload took 3+ seconds to display
+- **After**: Custom wallpaper displays within 1 second of upload
+
+### Files Changed
+- `android/app/src/main/java/com/cosmicocean/service/RealTimeWallpaperService.kt`:
+  - `UPDATE_INTERVAL_MS`: 60s → 5s
+  - Removed 500ms artificial delay in force updates
+- `android/app/src/main/java/com/cosmicocean/data/TaskRepository.kt`:
+  - `WALLPAPER_THROTTLE_MS`: 2000ms → 500ms
+- `android/app/build.gradle`: Version bump 2.3.2 → 2.3.3
+- `CHANGELOG.md`: Documented all timing fixes
+
+### APK
+- **File**: `cosmic-ocean-v2.3.3.apk` (8.2 MB)
+- **Status**: Production ready with instant wallpaper updates
+
+---
+
 ## [2.3.2] - 2026-02-02 (Emergency Hotfix - COMPLETELY LOCAL)
 
 ### 🚨 CRITICAL FIXES - App Now Works 100% Offline

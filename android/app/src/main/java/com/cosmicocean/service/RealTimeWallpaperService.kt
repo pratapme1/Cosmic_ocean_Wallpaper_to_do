@@ -59,7 +59,7 @@ class RealTimeWallpaperService : Service() {
         private const val TAG = "RealTimeWallpaper"
         private const val CHANNEL_ID = "wallpaper_update_channel"
         private const val NOTIFICATION_ID = 1001
-        private const val UPDATE_INTERVAL_MS = 60_000L // 1 minute
+        private const val UPDATE_INTERVAL_MS = 5_000L // 5 seconds - frequent updates for responsive UI
         private const val MAX_RETRY_COUNT = 3
         private const val INITIAL_RETRY_DELAY_MS = 5_000L // 5 seconds
         private const val WAKE_LOCK_TIMEOUT_MS = 30_000L // 30 seconds max
@@ -118,15 +118,13 @@ class RealTimeWallpaperService : Service() {
         startForeground(NOTIFICATION_ID, createNotification())
 
         if (intent?.action == ACTION_FORCE_UPDATE) {
-            Log.d(TAG, "Force update requested - scheduling with 500ms delay for sync consistency")
+            Log.d(TAG, "Force update requested - updating immediately")
             // Serialization: Cancel existing tick but schedule a fresh one after this update
             handler.removeCallbacks(updateRunnable)
             
-            // Artificial delay (500ms) to ensure backend DB has committed task changes
-            handler.postDelayed({
-                updateWallpaper()
-                handler.postDelayed(updateRunnable, UPDATE_INTERVAL_MS)
-            }, 500)
+            // Update wallpaper immediately (no delay needed for local generation)
+            updateWallpaper()
+            handler.postDelayed(updateRunnable, UPDATE_INTERVAL_MS)
         } else {
              if (!isUpdating) {
                  startUpdates()

@@ -42,7 +42,7 @@ class TaskRepository(
 ) {
     companion object {
         private const val TAG = "TaskRepository"
-        private const val WALLPAPER_THROTTLE_MS = 2000L  // CRITICAL FIX: Issue #12
+        private const val WALLPAPER_THROTTLE_MS = 500L  // 500ms throttle - fast updates for responsive wallpaper
     }
 
     private var lastWallpaperUpdate = 0L
