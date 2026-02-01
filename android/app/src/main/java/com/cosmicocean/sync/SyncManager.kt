@@ -299,20 +299,8 @@ class SyncManager(
                 starDao.insertStar(updatedTask)
                 Log.d(TAG, "Updated local task ${mapping.clientId} with serverId ${mapping.serverId}")
             }
-            
-            // Also merge any server data (parsed fields from NLP)
-            mergeServerTask(mapping.serverData, response.syncedAt)
         }
         
-        // Process returned tasks (merge from server for tasks we didn't create)
-        response.tasks.forEach { serverTask ->
-            // Skip tasks that were already handled via mappings
-            val alreadyMapped = response.mappings?.any { it.serverId == serverTask.id } ?: false
-            if (!alreadyMapped) {
-                mergeServerTask(serverTask, response.syncedAt)
-            }
-        }
-
         // Handle conflicts
         response.conflicts.forEach { conflict ->
             Log.w(TAG, "Conflict for ${conflict.clientId}: ${conflict.reason}")

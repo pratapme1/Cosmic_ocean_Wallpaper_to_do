@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.4] - 2026-02-02 (CRITICAL: Duplicate Task Fix)
+
+### 🚨 CRITICAL BUG FIX - Duplicate Task Creation
+
+#### **Root Cause Identified**
+The sync process was creating duplicate tasks every time it ran. When sync returned successfully:
+1. We updated local record with serverId (correct)
+2. THEN we called `mergeServerTask()` again with the same data (WRONG!)
+3. This created race conditions and duplicate entries
+
+#### **The Bug (SyncManager.kt lines 287-305)**
+```kotlin
+// We updated local record here (correct)
+starDao.insertStar(updatedTask)
+
+// Then IMMEDIATELY called this (caused duplicates!)
+mergeServerTask(mapping.serverData, response.syncedAt)
+```
+
+#### **The Fix**
+- **Removed** the redundant `mergeServerTask()` call at line 304
+- Mapping processing (lines 287-301) already handles everything correctly
+- No need to merge again - was creating duplicates
+
+#### **Impact**
+- **Before**: Every sync created duplicate tasks
+- **Before**: Wallpaper showed wrong/outdated tasks
+- **Before**: Updates appeared as new duplicates
+- **After**: Single task per actual task
+- **After**: Wallpaper shows correct current task
+- **After**: Updates modify existing tasks
+
+### Test Suite Added
+- Created `CompleteLocalE2ETest.kt` with 10 comprehensive tests
+- Tests verify: no duplicates, proper updates, wallpaper sync, offline functionality
+- All tests pass ✅
+
+---
+
 ## [2.3.3] - 2026-02-02 (Wallpaper Timing Fix - INSTANT UPDATES)
 
 ### 🚀 PERFORMANCE FIX - Instant Wallpaper Updates
