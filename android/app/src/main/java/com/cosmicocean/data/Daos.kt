@@ -43,8 +43,8 @@ interface StarDao {
     @Query("UPDATE stars SET syncStatus = :status, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateSyncStatus(id: String, status: String, updatedAt: Long = System.currentTimeMillis())
 
-    @Query("UPDATE stars SET syncStatus = 'error', lastError = :error, updatedAt = :updatedAt WHERE id = :id")
-    suspend fun markSyncError(id: String, error: String, updatedAt: Long = System.currentTimeMillis())
+    @Query("UPDATE stars SET syncStatus = 'error', updatedAt = :updatedAt WHERE id = :id")
+    suspend fun markSyncError(id: String, updatedAt: Long = System.currentTimeMillis())
 
     @Query("UPDATE stars SET isDeleted = 1, syncStatus = 'pending', updatedAt = :updatedAt WHERE id = :id")
     suspend fun softDelete(id: String, updatedAt: Long = System.currentTimeMillis())
