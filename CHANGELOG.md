@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.8] - 2026-02-02 (CRITICAL: Wallpaper Service Completely Broken)
+
+### 🚨 CRITICAL BUG - Wallpaper Updates Stopped Working After First Use
+
+#### **Root Cause: `isUpdating` Flag Bug**
+
+**The Bug:**
+```kotlin
+// In startUpdates():
+isUpdating = true  // Set to true
+
+// In updateWallpaper():
+if (isUpdating) {  // Always true after first start!
+    return  // Skips ALL subsequent updates!
+}
+```
+
+**Impact:**
+- ✅ First wallpaper update works
+- ❌ All subsequent updates skipped
+- ❌ New tasks don't appear
+- ❌ Completed tasks stay visible
+- ❌ Service alive but broken
+
+#### **The Fix:**
+Added separate `wallpaperGenerationInProgress` flag:
+```kotlin
+private var wallpaperGenerationInProgress = false
+
+private fun updateWallpaper() {
+    if (wallpaperGenerationInProgress) {
+        return  // Only skip if actually generating
+    }
+    wallpaperGenerationInProgress = true  // Mark as in progress
+    
+    // ... generate wallpaper ...
+    
+    finally {
+        wallpaperGenerationInProgress = false  // Reset when done
+    }
+}
+```
+
+**Result:**
+- ✅ Every task change triggers wallpaper update
+- ✅ New tasks appear immediately
+- ✅ Completed tasks disappear immediately
+- ✅ Service works continuously
+
+### APK
+- **File**: `cosmic-ocean-v2.3.8.apk` (8.2 MB)
+- **Status**: CRITICAL bug fixed
+
+---
+
 ## [2.3.7] - 2026-02-02 (CRITICAL: Fix Race Condition - Wallpaper Sync)
 
 ### 🚨 CRITICAL FIX - Wallpaper Showing Stale Data

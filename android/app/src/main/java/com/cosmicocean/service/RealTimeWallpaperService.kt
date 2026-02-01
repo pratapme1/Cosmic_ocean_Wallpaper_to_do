@@ -49,7 +49,8 @@ class RealTimeWallpaperService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
-    private var isUpdating = false
+    private var isUpdating = false  // Tracks if periodic updates are scheduled
+    private var wallpaperGenerationInProgress = false  // CRITICAL FIX: Tracks actual wallpaper generation
     private var screenReceiver: BroadcastReceiver? = null
     private var retryCount = 0
     private var wakeLock: PowerManager.WakeLock? = null
@@ -195,10 +196,15 @@ class RealTimeWallpaperService : Service() {
     }
 
     private fun updateWallpaper() {
-        if (isUpdating) {
-            Log.d(TAG, "Update already in progress, skipping")
+        // CRITICAL FIX: Check wallpaperGenerationInProgress, not isUpdating
+        // isUpdating tracks periodic scheduling, not actual generation
+        if (wallpaperGenerationInProgress) {
+            Log.d(TAG, "Wallpaper generation already in progress, skipping")
             return
         }
+
+        // CRITICAL FIX: Mark generation as in progress
+        wallpaperGenerationInProgress = true
 
         // FIX 3: Acquire wake lock before starting update
         acquireWakeLock()
@@ -228,6 +234,8 @@ class RealTimeWallpaperService : Service() {
                 Log.e(TAG, "❌ Wallpaper update failed: ${e.message}")
                 scheduleRetry("exception: ${e.message}")
             } finally {
+                // CRITICAL FIX: Reset flag when done (success or failure)
+                wallpaperGenerationInProgress = false
                 // FIX 3: Release wake lock after update completes
                 releaseWakeLock()
             }
