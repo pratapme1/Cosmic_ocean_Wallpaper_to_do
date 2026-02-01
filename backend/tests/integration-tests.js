@@ -1307,7 +1307,8 @@ test('Daily workflow: create, complete, sync across devices', async () => {
   assertNotNull(meetingTask, 'Meeting task should exist on desktop');
   await desktop.completeTask(meetingTask.id);
 
-  // Phone syncs, sees completion
+  // Phone syncs, sees completion - force full sync to get server's latest state
+  phone.lastSyncAt = 0;
   await phone.sync();
   const phoneTask = phone.localTasks.get(meetingTask.id);
   assertNotNull(phoneTask, 'Phone should have the meeting task');

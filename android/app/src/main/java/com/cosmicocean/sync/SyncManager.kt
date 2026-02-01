@@ -233,9 +233,14 @@ class SyncManager(
                     _syncState.value = SyncState.Error(error)
                     Log.e(TAG, "Sync failed: $error")
 
-                    // Increment retry count for failed items
+                    // Increment retry count for failed items, mark as error if max reached
                     pendingChanges.forEach { entity ->
-                        if (entity.retryCount < MAX_RETRY_COUNT) {
+                        if (entity.retryCount + 1 >= MAX_RETRY_COUNT) {
+                            // Max retries reached - mark task as error and remove from queue
+                            starDao.markSyncError(entity.taskId)
+                            syncQueueDao.deleteById(entity.id)
+                            Log.w(TAG, "Max retries reached for task ${entity.taskId}, marked as error")
+                        } else {
                             syncQueueDao.incrementRetry(entity.id, error)
                         }
                     }
@@ -287,10 +292,15 @@ class SyncManager(
                     starDao.deleteStarById(conflict.clientId)
                 }
                 else -> {
-                    // Unknown conflict, increment retry
+                    // Unknown conflict, increment retry or mark as error
                     val entity = pendingChanges.find { it.taskId == conflict.clientId }
                     entity?.let {
-                        if (it.retryCount < MAX_RETRY_COUNT) {
+                        if (it.retryCount + 1 >= MAX_RETRY_COUNT) {
+                            // Max retries reached - mark task as error and remove from queue
+                            starDao.markSyncError(it.taskId)
+                            syncQueueDao.deleteById(it.id)
+                            Log.w(TAG, "Max retries reached for task ${it.taskId}, marked as error")
+                        } else {
                             syncQueueDao.incrementRetry(it.id, conflict.reason)
                         }
                     }
@@ -324,6 +334,9 @@ class SyncManager(
         if (localTask == null) {
             // New task from server, insert
             starDao.insertStar(serverTask.toStarEntity())
+        } else if (localTask.syncStatus == "error") {
+            // Don't overwrite error status - user needs to see this error
+            Log.d(TAG, "Skipping merge for task ${serverTask.id}: local has error status")
         } else if (localTask.syncStatus == "synced") {
             // Local is synced, safe to update
             starDao.insertStar(serverTask.toStarEntity().copy(
@@ -331,8 +344,18 @@ class SyncManager(
                 x = localTask.x,
                 y = localTask.y
             ))
+        } else {
+            // Check if there's a pending change in the queue
+            val hasPendingChange = syncQueueDao.getLatestForTask(serverTask.id) != null
+            if (!hasPendingChange) {
+                // No pending change, safe to apply server version (server is source of truth)
+                starDao.insertStar(serverTask.toStarEntity().copy(
+                    x = localTask.x,
+                    y = localTask.y
+                ))
+            }
+            // If local has pending changes, don't overwrite (will sync on next push)
         }
-        // If local has pending changes, don't overwrite (will sync on next push)
     }
 
     /**
