@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.7] - 2026-02-02 (CRITICAL: Fix Race Condition - Wallpaper Sync)
+
+### 🚨 CRITICAL FIX - Wallpaper Showing Stale Data
+
+#### **Root Cause: Race Condition**
+When you complete/archive/delete a task:
+1. Task saved to database (async transaction starts)
+2. Wallpaper update triggered **immediately**
+3. Wallpaper queries database **before** transaction commits!
+4. Result: Wallpaper shows old data (completed tasks still visible)
+
+#### **The Fix**
+Added 100ms delay in `triggerImmediateWallpaperUpdate()`:
+```kotlin
+GlobalScope.launch {
+    delay(100) // Wait for DB transaction to commit
+    wallpaperUpdater(context) // Then update wallpaper
+}
+```
+
+**Before:** Wallpaper showed stale data for 30-60 seconds
+**After:** Wallpaper shows correct data within 1 second
+
+#### **Files Changed**
+- `TaskRepository.kt`: 
+  - Added `GlobalScope.launch { delay(100) }` before wallpaper trigger
+  - Added kotlinx.coroutines imports (GlobalScope, delay, launch)
+
+### APK
+- **File**: `cosmic-ocean-v2.3.7.apk` (8.2 MB)
+- **Status**: Race condition fixed
+
+---
+
 ## [2.3.6] - 2026-02-02 (INSTANT Wallpaper Updates - <1 Second)
 
 ### ⚡ INSTANT WALLPAPER UPDATES

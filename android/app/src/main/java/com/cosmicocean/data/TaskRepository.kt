@@ -12,8 +12,11 @@ import com.cosmicocean.model.TaskResponse
 import com.cosmicocean.network.ApiService
 import com.cosmicocean.sync.SyncManager
 import com.cosmicocean.service.RealTimeWallpaperService
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 /**
@@ -221,13 +224,20 @@ class TaskRepository(
     /**
      * CRITICAL FIX: Immediate wallpaper update (NO throttling)
      * Every task change triggers instant wallpaper refresh
+     * 
+     * CRITICAL: Add 100ms delay to ensure database transaction commits
+     * before wallpaper service queries the database. Prevents race condition
+     * where wallpaper shows stale data (completed tasks still appearing).
      */
     private fun triggerImmediateWallpaperUpdate() {
-        try {
-            wallpaperUpdater(context)
-            Log.d(TAG, "Triggered immediate wallpaper update")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to trigger wallpaper update: ${e.message}")
+        kotlinx.coroutines.GlobalScope.launch {
+            kotlinx.coroutines.delay(100) // Wait for DB transaction to commit
+            try {
+                wallpaperUpdater(context)
+                Log.d(TAG, "Triggered immediate wallpaper update after DB commit")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to trigger wallpaper update: ${e.message}")
+            }
         }
     }
 
