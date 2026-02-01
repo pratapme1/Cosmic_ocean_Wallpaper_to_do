@@ -1,0 +1,19 @@
+{
+  "type": "mock",
+  "width": 1080,
+  "height": 1920,
+  "theme": "fantasy",
+  "urgency": "attention",
+  "colors": {
+    "bg1": "#5a189a",
+    "bg2": "#3c096c",
+    "accent": "#ffba08",
+    "text": "#ffffff"
+  },
+  "task": {
+    "id": "aa4823a8-f021-4b0d-8853-cd859d47bdb2",
+    "title": "Review team performance - Updated"
+  },
+  "dueText": "Due tomorrow",
+  "generatedAt": "2026-02-01T13:35:16.380Z"
+}

@@ -105,4 +105,11 @@ interface ApiService {
 
     @GET("api/user/stats/graduation")
     suspend fun getGraduationStats(): Response<com.cosmicocean.model.GraduationStats>
+
+    // ==================== Local-First Sync ====================
+    @POST("api/sync")
+    suspend fun sync(@Body request: com.cosmicocean.model.SyncRequest): Response<com.cosmicocean.model.SyncResponse>
+
+    @GET("api/sync/status")
+    suspend fun getSyncStatus(): Response<com.cosmicocean.model.SyncStatusResponse>
 }

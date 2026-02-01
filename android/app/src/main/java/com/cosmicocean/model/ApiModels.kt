@@ -232,3 +232,69 @@ data class UserPreferencesResponse(
     @SerializedName("custom_wallpaper_path")
     val customWallpaperPath: String? = null
 )
+
+// ==================== Local-First Sync Models ====================
+
+/**
+ * Request for POST /api/sync
+ * Sends pending local changes to server
+ */
+data class SyncRequest(
+    @SerializedName("lastSyncAt")
+    val lastSyncAt: Long?,
+    @SerializedName("pendingChanges")
+    val pendingChanges: List<SyncChange>
+)
+
+/**
+ * Individual change to sync
+ */
+data class SyncChange(
+    val type: String,        // create, update, delete
+    val clientId: String,
+    val data: Map<String, Any?>,
+    val timestamp: Long
+)
+
+/**
+ * Response from POST /api/sync
+ */
+data class SyncResponse(
+    @SerializedName("syncedAt")
+    val syncedAt: Long,
+    val tasks: List<TaskResponse>,
+    val results: SyncResults,
+    val conflicts: List<SyncConflict>
+)
+
+/**
+ * Sync results summary
+ */
+data class SyncResults(
+    val applied: Int,
+    val rejected: Int,
+    val skipped: Int = 0
+)
+
+/**
+ * Sync conflict details
+ */
+data class SyncConflict(
+    val clientId: String,
+    val reason: String,          // already_exists, stale_data, task_not_found, server_error
+    @SerializedName("serverData")
+    val serverData: TaskResponse? = null,
+    val error: String? = null
+)
+
+/**
+ * Response from GET /api/sync/status
+ */
+data class SyncStatusResponse(
+    @SerializedName("taskCount")
+    val taskCount: Int,
+    @SerializedName("lastModified")
+    val lastModified: Long?,
+    @SerializedName("serverTime")
+    val serverTime: Long
+)

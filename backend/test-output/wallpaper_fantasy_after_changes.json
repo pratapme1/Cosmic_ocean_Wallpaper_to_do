@@ -1,0 +1,19 @@
+{
+  "type": "mock",
+  "width": 1080,
+  "height": 1920,
+  "theme": "fantasy",
+  "urgency": "critical",
+  "colors": {
+    "bg1": "#7f0000",
+    "bg2": "#4a0000",
+    "accent": "#ff0000",
+    "text": "#ffffff"
+  },
+  "task": {
+    "id": "2acb43a6-0ae1-4798-ae7a-665316cabd3a",
+    "title": "Call client about proposal"
+  },
+  "dueText": "Due in 2h",
+  "generatedAt": "2026-02-01T13:35:16.382Z"
+}

@@ -18,7 +18,12 @@ data class StarEntity(
     val isCompleted: Boolean,
     val completedAt: Long?,
     val isArchived: Boolean,
-    val archivedAt: Long?
+    val archivedAt: Long?,
+    // Local-first sync fields
+    val syncStatus: String = "synced",  // synced, pending, conflict, error
+    val syncVersion: Long = 0,
+    val updatedAt: Long = System.currentTimeMillis(),
+    val isDeleted: Boolean = false  // Soft delete for sync
 )
 
 @Entity(tableName = "constellation_links")
@@ -83,4 +88,20 @@ data class AchievementStatsEntity(
     val longestStreak: Int = 0,
     val fastestCompletion: Long = 0,    // milliseconds
     val lastCompletionDate: Long = 0
+)
+
+/**
+ * Sync Queue Entity
+ * Tracks pending operations for background sync
+ * Part of local-first architecture
+ */
+@Entity(tableName = "sync_queue")
+data class SyncQueueEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val taskId: String,
+    val operation: String,  // create, update, delete, complete
+    val payload: String,    // JSON serialized data
+    val createdAt: Long = System.currentTimeMillis(),
+    val retryCount: Int = 0,
+    val lastError: String? = null
 )

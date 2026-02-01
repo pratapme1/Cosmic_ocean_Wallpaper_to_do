@@ -10,18 +10,26 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.util.DisplayMetrics
 import android.util.Log
+import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import com.cosmicocean.MainActivity
 import com.cosmicocean.R
+import com.cosmicocean.data.CosmicDatabase
 import com.cosmicocean.network.NetworkModule
 import com.cosmicocean.auth.TokenManager
 import com.cosmicocean.utils.WallpaperPreferencesManager
+import com.cosmicocean.wallpaper.LocalWallpaperGenerator
+import com.cosmicocean.wallpaper.WallpaperTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -201,72 +209,146 @@ class RealTimeWallpaperService : Service() {
 
         // SERALIZATION FIX: Cancel any existing update job to prevent overlapping downloads/sets
         currentUpdateJob?.cancel()
-        
+
         currentUpdateJob = serviceScope.launch {
             try {
                 val prefsManager = WallpaperPreferencesManager(applicationContext)
                 val theme = prefsManager.getTheme()
                 val resolution = prefsManager.getResolution()
-                val timestamp = System.currentTimeMillis()
-                val timezone = java.util.TimeZone.getDefault().id // e.g., "Asia/Kolkata"
 
-                Log.d(TAG, "Fetching wallpaper: theme=$theme, resolution=$resolution, timezone=$timezone, ts=$timestamp")
-
-                val response = NetworkModule.getApi(applicationContext).getWallpaper(
-                    theme = theme,
-                    resolution = resolution,
-                    enhanced = true,
-                    timestamp = timestamp,
-                    timezone = timezone
-                )
-
-                if (response.isSuccessful && response.body() != null) {
-                    // ROBUST IMAGE LOADING FIX: Read full byte array before decoding
-                    // BitmapFactory.decodeStream can partially decode and return a partial bitmap 
-                    // if the connection drops, leading to "black patches".
-                    val bytes = response.body()!!.bytes()
-                    val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-
-                    if (bitmap != null) {
-                        val wallpaperManager = WallpaperManager.getInstance(applicationContext)
-
-                        // RACE CONDITION FIX (2026-01-09):
-                        // Do NOT call clear() before setBitmap() - if setBitmap fails, wallpaper stays blank
-                        // setBitmap() atomically replaces the existing wallpaper
-                        val wallpaperFlags = WallpaperManager.FLAG_LOCK
-
-                        wallpaperManager.setBitmap(
-                            bitmap,
-                            null,
-                            true,
-                            wallpaperFlags  // Update LOCK screen only (Home screen stays default to avoid parallax/sizing issues)
-                        )
-
-                        Log.d(TAG, "Wallpaper updated successfully: ${bitmap.width}x${bitmap.height}")
-                        // Reset retry count on success
-                        retryCount = 0
-                    } else {
-                        Log.e(TAG, "Failed to decode bitmap")
-                        scheduleRetry("bitmap decode failed")
-                    }
-
-                    response.body()?.close()
+                // LOCAL-FIRST: Check network and decide path
+                val bitmap = if (isOnline()) {
+                    // Online: Try backend first, fallback to local
+                    fetchWallpaperFromBackend(theme, resolution)
+                        ?: generateWallpaperLocally(theme)
                 } else {
-                    Log.e(TAG, "API error: ${response.code()}")
-                    // FIX 2: Retry on server errors (5xx)
-                    if (response.code() in 500..599) {
-                        scheduleRetry("server error ${response.code()}")
-                    }
+                    // Offline: Generate locally
+                    Log.d(TAG, "Offline mode: generating wallpaper locally")
+                    generateWallpaperLocally(theme)
+                }
+
+                if (bitmap != null) {
+                    setWallpaperBitmap(bitmap)
+                    retryCount = 0
+                } else {
+                    Log.e(TAG, "Failed to generate wallpaper")
+                    scheduleRetry("wallpaper generation failed")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Update failed: ${e.message}")
-                // FIX 2: Retry on network failures
-                scheduleRetry("exception: ${e.message}")
+                // Try local generation as last resort
+                try {
+                    val prefsManager = WallpaperPreferencesManager(applicationContext)
+                    val localBitmap = generateWallpaperLocally(prefsManager.getTheme())
+                    if (localBitmap != null) {
+                        setWallpaperBitmap(localBitmap)
+                        Log.d(TAG, "Fallback to local generation succeeded")
+                    } else {
+                        scheduleRetry("exception: ${e.message}")
+                    }
+                } catch (e2: Exception) {
+                    scheduleRetry("local fallback failed: ${e2.message}")
+                }
             } finally {
                 // FIX 3: Release wake lock after update completes
                 releaseWakeLock()
             }
         }
+    }
+
+    /**
+     * Fetch wallpaper from backend API
+     */
+    private suspend fun fetchWallpaperFromBackend(theme: String, resolution: String): Bitmap? {
+        return try {
+            val timestamp = System.currentTimeMillis()
+            val timezone = java.util.TimeZone.getDefault().id
+
+            Log.d(TAG, "Fetching wallpaper from backend: theme=$theme, resolution=$resolution")
+
+            val response = NetworkModule.getApi(applicationContext).getWallpaper(
+                theme = theme,
+                resolution = resolution,
+                enhanced = true,
+                timestamp = timestamp,
+                timezone = timezone
+            )
+
+            if (response.isSuccessful && response.body() != null) {
+                val bytes = response.body()!!.bytes()
+                val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                response.body()?.close()
+
+                if (bitmap != null) {
+                    Log.d(TAG, "Backend wallpaper fetched: ${bitmap.width}x${bitmap.height}")
+                }
+                bitmap
+            } else {
+                Log.e(TAG, "Backend API error: ${response.code()}")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Backend fetch failed: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Generate wallpaper locally (offline capable)
+     */
+    private suspend fun generateWallpaperLocally(themeName: String): Bitmap? {
+        return try {
+            val db = CosmicDatabase.getDatabase(applicationContext)
+            val topTask = db.starDao().getTopTask()
+            val theme = WallpaperTheme.fromString(themeName)
+            val (width, height) = getScreenResolution()
+
+            Log.d(TAG, "Generating local wallpaper: ${width}x${height}, task=${topTask?.title}")
+
+            LocalWallpaperGenerator.generate(
+                task = topTask,
+                theme = theme,
+                width = width,
+                height = height
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Local generation failed: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Set wallpaper bitmap
+     */
+    private fun setWallpaperBitmap(bitmap: Bitmap) {
+        val wallpaperManager = WallpaperManager.getInstance(applicationContext)
+        wallpaperManager.setBitmap(
+            bitmap,
+            null,
+            true,
+            WallpaperManager.FLAG_LOCK
+        )
+        Log.d(TAG, "Wallpaper set successfully: ${bitmap.width}x${bitmap.height}")
+    }
+
+    /**
+     * Get screen resolution
+     */
+    private fun getScreenResolution(): Pair<Int, Int> {
+        val windowManager = applicationContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val metrics = DisplayMetrics()
+        windowManager.defaultDisplay.getRealMetrics(metrics)
+        return Pair(metrics.widthPixels, metrics.heightPixels)
+    }
+
+    /**
+     * Check network connectivity
+     */
+    private fun isOnline(): Boolean {
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val network = connectivityManager?.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     // FIX 2: Retry logic with aggressive exponential backoff to prevent server spam
