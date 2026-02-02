@@ -315,6 +315,13 @@ class RealTimeWallpaperService : Service() {
                     val customBitmap = loadCustomWallpaper(customPath)
                     if (customBitmap != null) {
                         Log.d(TAG, "DEBUG: Custom bitmap loaded: ${customBitmap.width}x${customBitmap.height}, config=${customBitmap.config}")
+
+                        // Validate bitmap has actual content
+                        val isValid = com.cosmicocean.utils.ImageUtils.validateBitmapContent(customBitmap)
+                        if (!isValid) {
+                            Log.e(TAG, "WARNING: Custom wallpaper bitmap appears to be black/empty!")
+                        }
+
                         Log.d(TAG, "Using custom wallpaper from: $customPath")
 
                         val result = LocalWallpaperGenerator.generateWithCustomBackground(
