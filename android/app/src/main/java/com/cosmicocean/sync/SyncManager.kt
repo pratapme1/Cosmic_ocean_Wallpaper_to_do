@@ -174,6 +174,26 @@ class SyncManager(
     }
 
     /**
+     * LOCAL-FIRST FIX: Clear all tasks operation
+     * Clears sync queue and queues a clear_all sync request
+     */
+    suspend fun queueClearAll() {
+        // Clear all pending sync operations
+        syncQueueDao.deleteAll()
+
+        val entity = SyncQueueEntity(
+            localTaskId = "clear_all_${System.currentTimeMillis()}",
+            operation = "clear_all",
+            payload = "{}",
+            clientTimestamp = System.currentTimeMillis()
+        )
+        syncQueueDao.insert(entity)
+        updatePendingCount()
+        triggerSync()
+        Log.d(TAG, "Queued CLEAR_ALL operation")
+    }
+
+    /**
      * Trigger a sync (debounced)
      */
     fun triggerSync() {

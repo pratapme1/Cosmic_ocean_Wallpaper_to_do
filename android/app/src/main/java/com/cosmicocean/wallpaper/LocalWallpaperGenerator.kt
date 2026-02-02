@@ -89,13 +89,27 @@ object LocalWallpaperGenerator {
         height: Int
     ): Bitmap {
         Log.d(TAG, "Generating wallpaper with custom background: ${width}x${height}, tasks=${tasks.size}, total=$totalTaskCount")
+        Log.d(TAG, "DEBUG: Input customBackground: ${customBackground.width}x${customBackground.height}, config=${customBackground.config}, recycled=${customBackground.isRecycled}")
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
         // Layer 1: Custom background image (scaled to fit)
-        val scaledBackground = Bitmap.createScaledBitmap(customBackground, width, height, true)
-        canvas.drawBitmap(scaledBackground, 0f, 0f, null)
+        try {
+            val scaledBackground = Bitmap.createScaledBitmap(customBackground, width, height, true)
+            Log.d(TAG, "DEBUG: Scaled background: ${scaledBackground.width}x${scaledBackground.height}")
+            canvas.drawBitmap(scaledBackground, 0f, 0f, null)
+            Log.d(TAG, "DEBUG: Custom background drawn to canvas")
+
+            // Recycle scaled bitmap if it's different from original
+            if (scaledBackground != customBackground && !scaledBackground.isRecycled) {
+                scaledBackground.recycle()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "ERROR drawing custom background: ${e.message}", e)
+            // If custom background fails, fill with a dark color so user sees something
+            canvas.drawColor(Color.parseColor("#1A1A2E"))
+        }
 
         // Calculate urgency from first task
         val urgency = if (tasks.isNotEmpty()) calculateUrgency(tasks[0]) else UrgencyLevel.CLEAR
@@ -110,6 +124,7 @@ object LocalWallpaperGenerator {
         // Layer 3: Time display (optional)
         drawTimeDisplay(canvas, width, height)
 
+        Log.d(TAG, "DEBUG: Final bitmap created: ${bitmap.width}x${bitmap.height}")
         return bitmap
     }
 

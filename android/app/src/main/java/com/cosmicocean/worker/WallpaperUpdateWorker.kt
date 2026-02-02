@@ -2,14 +2,23 @@ package com.cosmicocean.worker
 
 import android.app.WallpaperManager
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.cosmicocean.auth.TokenManager
-import com.cosmicocean.network.NetworkModule
+import com.cosmicocean.data.CosmicDatabase
 import com.cosmicocean.utils.WallpaperPreferencesManager
+import com.cosmicocean.wallpaper.LocalWallpaperGenerator
+import com.cosmicocean.wallpaper.WallpaperTheme
+import java.io.File
 import java.io.IOException
 
+/**
+ * LOCAL-FIRST FIX: WallpaperUpdateWorker
+ *
+ * Now uses LocalWallpaperGenerator instead of backend API.
+ * Generates wallpaper on-device from local database.
+ */
 class WallpaperUpdateWorker(
     context: Context,
     params: WorkerParameters
@@ -17,140 +26,112 @@ class WallpaperUpdateWorker(
 
     override suspend fun doWork(): Result {
         return try {
-            val tokenManager = TokenManager(applicationContext)
-            val userId = tokenManager.getUserId() ?: "none"
-            Log.e(TAG, "======== WALLPAPER UPDATE WORKER STARTING ========")
-            Log.e(TAG, "User ID: $userId")
+            Log.d(TAG, "======== WALLPAPER UPDATE WORKER STARTING (LOCAL-FIRST) ========")
 
             // 1. Get user preferences
             val prefsManager = WallpaperPreferencesManager(applicationContext)
-            
+
             if (!prefsManager.isWallpaperEnabled()) {
-                Log.d(TAG, "Wallpaper update skipped in Worker: Consent not granted.")
+                Log.d(TAG, "Wallpaper update skipped: Consent not granted.")
                 return Result.success()
             }
 
             val theme = prefsManager.getTheme()
-            val resolution = prefsManager.getResolution()
+            val wallpaperMode = prefsManager.getWallpaperMode()
 
-            Log.e(TAG, "Reading local preferences - Theme: $theme, Resolution: $resolution")
+            Log.d(TAG, "Preferences - Theme: $theme, Mode: $wallpaperMode")
 
-            // 2. Fetch from API with preferences + timestamp to bust cache
-            val timestamp = System.currentTimeMillis()
-            val timezone = java.util.TimeZone.getDefault().id // e.g., "Asia/Kolkata"
-            Log.e(TAG, "Requesting wallpaper with timestamp: $timestamp, timezone: $timezone (cache-busting)")
+            // 2. Get screen dimensions
+            val displayMetrics = applicationContext.resources.displayMetrics
+            val screenWidth = displayMetrics.widthPixels
+            val screenHeight = displayMetrics.heightPixels
+            Log.d(TAG, "Screen dimensions: ${screenWidth}x${screenHeight}")
 
-            val response = NetworkModule.getApi(applicationContext).getWallpaper(
-                theme = theme,
-                resolution = resolution,
-                enhanced = true,
-                timestamp = timestamp,  // Force fresh generation
-                timezone = timezone
-            )
+            // 3. Get tasks from LOCAL database (no network needed!)
+            val database = CosmicDatabase.getDatabase(applicationContext)
+            val topTasks = database.starDao().getTop3Tasks()
+            val totalCount = database.starDao().getActiveTaskCount()
 
-            if (!response.isSuccessful || response.body() == null) {
-                when (response.code()) {
-                    401 -> {
-                        Log.w(TAG, "Unauthorized: User not logged in or token expired. Skipping wallpaper update.")
-                        return Result.failure() // Don't retry - auth issue needs user action
+            Log.d(TAG, "LOCAL-FIRST: Got ${topTasks.size} top tasks, total: $totalCount (from local DB)")
+
+            // 4. Generate wallpaper locally
+            val bitmap = if (wallpaperMode == WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM) {
+                // Custom wallpaper mode - load custom background
+                val customPath = prefsManager.getCustomWallpaperPath()
+                if (customPath != null && File(customPath).exists()) {
+                    val customBackground = BitmapFactory.decodeFile(customPath)
+                    if (customBackground != null) {
+                        Log.d(TAG, "Using custom background: $customPath")
+                        LocalWallpaperGenerator.generateWithCustomBackground(
+                            tasks = topTasks,
+                            totalTaskCount = totalCount,
+                            customBackground = customBackground,
+                            width = screenWidth,
+                            height = screenHeight
+                        )
+                    } else {
+                        Log.w(TAG, "Custom background decode failed, falling back to generated")
+                        generateThemedWallpaper(topTasks, totalCount, theme, screenWidth, screenHeight)
                     }
-                    403 -> {
-                        Log.w(TAG, "Forbidden: Access denied. Skipping wallpaper update.")
-                        return Result.failure()
-                    }
-                    404 -> {
-                        Log.e(TAG, "Wallpaper endpoint not found (404). Check backend URL.")
-                        return Result.failure()
-                    }
-                    500, 502, 503, 504 -> {
-                        Log.e(TAG, "Server error (${response.code()}). Will retry later.")
-                        return Result.retry()
-                    }
-                    else -> {
-                        Log.e(TAG, "API call failed: ${response.code()}")
-                        return Result.retry()
-                    }
+                } else {
+                    Log.w(TAG, "Custom wallpaper path invalid, falling back to generated")
+                    generateThemedWallpaper(topTasks, totalCount, theme, screenWidth, screenHeight)
                 }
+            } else {
+                // Generated wallpaper mode
+                generateThemedWallpaper(topTasks, totalCount, theme, screenWidth, screenHeight)
             }
 
-            // 3. Set Wallpaper
+            // 5. Set wallpaper
             val wallpaperManager = WallpaperManager.getInstance(applicationContext)
-            val responseBody = response.body()!!
 
             try {
-                // Validate content type
-                val contentType = response.headers()["Content-Type"]
-                Log.e(TAG, "Response Content-Type: $contentType")
+                wallpaperManager.setBitmap(
+                    bitmap,
+                    null,
+                    true,
+                    WallpaperManager.FLAG_LOCK  // Update LOCK screen only
+                )
 
-                if (contentType != null && !contentType.contains("image/png") && !contentType.contains("image/")) {
-                    Log.e(TAG, "❌ Invalid content type: $contentType (expected image/png)")
-                    return Result.failure()
-                }
-
-                Log.e(TAG, "Downloading full wallpaper bytes...")
-                // ROBUST IMAGE LOADING FIX: Read full byte array before decoding
-                val bytes = responseBody.bytes()
-                val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-
-                if (bitmap != null) {
-                    Log.e(TAG, "Bitmap decoded successfully: ${bitmap.width}x${bitmap.height}, config: ${bitmap.config}")
-
-                    // Get actual screen dimensions
-                    val displayMetrics = applicationContext.resources.displayMetrics
-                    val screenWidth = displayMetrics.widthPixels
-                    val screenHeight = displayMetrics.heightPixels
-                    Log.e(TAG, "Screen dimensions: ${screenWidth}x${screenHeight}")
-                    Log.e(TAG, "Bitmap dimensions: ${bitmap.width}x${bitmap.height}")
-
-                    // For lock screen, use actual screen dimensions (no parallax needed)
-                    // Don't use WallpaperManager.desiredMinimum* - those are for home screen with 2x width!
-                    Log.e(TAG, "Setting wallpaper for LOCK screen using original bitmap (no scaling)...")
-
-                    // RACE CONDITION FIX (2026-01-09):
-                    // Do NOT call clear() before setBitmap() - if setBitmap fails, wallpaper stays blank
-                    // setBitmap() with flags will replace existing wallpaper atomically
-                    val wallpaperFlags = WallpaperManager.FLAG_LOCK
-
-                    Log.e(TAG, "Setting wallpaper on BOTH home and lock screens...")
-
-                    // Set wallpaper using setBitmap without clearing first
-                    // This atomically replaces the existing wallpaper
-                    wallpaperManager.setBitmap(
-                        bitmap,
-                        null,
-                        true,
-                        wallpaperFlags  // Update LOCK screen only
-                    )
-
-                    Log.e(TAG, "✅ Wallpaper set successfully! Theme: $theme, Size: ${bitmap.width}x${bitmap.height}, Timestamp: $timestamp")
-                    Log.e(TAG, "======== WALLPAPER UPDATE COMPLETE ========")
-                    return Result.success()
-                } else {
-                    Log.e(TAG, "❌ Failed to decode wallpaper bitmap. Response may not be a valid PNG image.")
-                    Log.e(TAG, "Attempting to read response as text for debugging...")
-                    try {
-                        // Try to read first 500 chars to see what we got
-                        val errorBody = responseBody.string().take(500)
-                        Log.e(TAG, "Response body (first 500 chars): $errorBody")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Could not read response body: ${e.message}")
-                    }
-                    return Result.failure() // Don't retry invalid image data
-                }
+                Log.d(TAG, "✅ Wallpaper set successfully! Size: ${bitmap.width}x${bitmap.height}")
+                Log.d(TAG, "======== WALLPAPER UPDATE COMPLETE (LOCAL-FIRST) ========")
+                return Result.success()
             } catch (e: IOException) {
                 Log.e(TAG, "❌ IOException while setting wallpaper: ${e.message}", e)
                 return Result.failure()
             } catch (e: SecurityException) {
                 Log.e(TAG, "❌ SecurityException - Missing SET_WALLPAPER permission: ${e.message}", e)
                 return Result.failure()
-            } finally {
-                responseBody.close()
             }
 
         } catch (e: Exception) {
             Log.e(TAG, "Error updating wallpaper: ${e.message}", e)
             return Result.retry()
         }
+    }
+
+    private fun generateThemedWallpaper(
+        tasks: List<com.cosmicocean.data.StarEntity>,
+        totalCount: Int,
+        theme: String,
+        width: Int,
+        height: Int
+    ): android.graphics.Bitmap {
+        val wallpaperTheme = when (theme.lowercase()) {
+            "deep_ocean" -> WallpaperTheme.DEEP_OCEAN
+            "cosmic" -> WallpaperTheme.COSMIC
+            "forest" -> WallpaperTheme.FOREST
+            "minimal" -> WallpaperTheme.MINIMAL
+            else -> WallpaperTheme.DEEP_OCEAN
+        }
+
+        return LocalWallpaperGenerator.generate(
+            tasks = tasks,
+            totalTaskCount = totalCount,
+            theme = wallpaperTheme,
+            width = width,
+            height = height
+        )
     }
 
     companion object {

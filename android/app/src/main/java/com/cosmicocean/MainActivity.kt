@@ -160,36 +160,49 @@ class MainActivity : ComponentActivity() {
                     uri?.let { selectedUri ->
                         coroutineScope.launch {
                             isUploadingWallpaper = true
-                            Toast.makeText(context, "Uploading wallpaper...", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Setting custom wallpaper...", Toast.LENGTH_SHORT).show()
                             try {
-                                // Compress and Resize image before upload to prevent OOM and timeouts
+                                // Compress and Resize image before saving
                                 val tempFile = com.cosmicocean.utils.ImageUtils.compressAndResizeImage(context, selectedUri)
-                                
+
                                 if (tempFile == null || !tempFile.exists()) {
                                     Toast.makeText(context, "Failed to prepare image", Toast.LENGTH_SHORT).show()
                                     return@launch
                                 }
 
-                                // Prepare Multipart body
-                                val requestFile = tempFile.asRequestBody("image/jpeg".toMediaTypeOrNull())
-                                val body = MultipartBody.Part.createFormData("image", tempFile.name, requestFile)
+                                // LOCAL-FIRST FIX: Save to permanent local storage
+                                val permanentFile = File(context.filesDir, "custom_wallpaper.jpg")
+                                android.util.Log.d("MainActivity", "DEBUG: Saving from temp ${tempFile.absolutePath} (size=${tempFile.length()}) to ${permanentFile.absolutePath}")
 
-                                // Upload to API
-                                val response = NetworkModule.getApi(context).uploadWallpaper(body)
+                                tempFile.copyTo(permanentFile, overwrite = true)
+                                tempFile.delete() // Clean up temp file
 
-                                if (response.isSuccessful) {
-                                    Toast.makeText(context, "Wallpaper uploaded! Refreshing...", Toast.LENGTH_SHORT).show()
-                                    // Trigger wallpaper refresh after successful upload
-                                    triggerImmediateUpdate()
-                                } else {
-                                    Toast.makeText(context, "Upload failed: ${response.code()}", Toast.LENGTH_SHORT).show()
+                                android.util.Log.d("MainActivity", "DEBUG: Permanent file saved: exists=${permanentFile.exists()}, size=${permanentFile.length()}, canRead=${permanentFile.canRead()}")
+                                android.util.Log.d("MainActivity", "Custom wallpaper saved to: ${permanentFile.absolutePath}")
+
+                                // LOCAL-FIRST FIX: Set wallpaper mode and path in preferences
+                                wallpaperPreferences.setWallpaperMode(WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM)
+                                wallpaperPreferences.setCustomWallpaperPath(permanentFile.absolutePath)
+
+                                android.util.Log.d("MainActivity", "Wallpaper mode set to CUSTOM, path: ${permanentFile.absolutePath}")
+
+                                // Trigger immediate local wallpaper update
+                                triggerImmediateUpdate()
+                                Toast.makeText(context, "Custom wallpaper applied!", Toast.LENGTH_SHORT).show()
+
+                                // OPTIONAL: Background upload to backend for sync/backup
+                                try {
+                                    val requestFile = permanentFile.asRequestBody("image/jpeg".toMediaTypeOrNull())
+                                    val body = MultipartBody.Part.createFormData("image", permanentFile.name, requestFile)
+                                    NetworkModule.getApi(context).uploadWallpaper(body)
+                                    android.util.Log.d("MainActivity", "Custom wallpaper synced to backend")
+                                } catch (e: Exception) {
+                                    // Backend sync failure is non-critical for local-first
+                                    android.util.Log.w("MainActivity", "Backend sync failed (offline mode): ${e.message}")
                                 }
-
-                                // Cleanup temp file
-                                tempFile.delete()
                             } catch (e: Exception) {
-                                android.util.Log.e("MainActivity", "Wallpaper upload error", e)
-                                Toast.makeText(context, "Upload error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                android.util.Log.e("MainActivity", "Wallpaper setup error", e)
+                                Toast.makeText(context, "Setup error: ${e.message}", Toast.LENGTH_SHORT).show()
                             } finally {
                                 isUploadingWallpaper = false
                             }
@@ -550,16 +563,13 @@ class MainActivity : ComponentActivity() {
     private fun clearAllTasks() {
         lifecycleScope.launch {
             try {
-                val api = NetworkModule.getApi(this@MainActivity)
-                api.clearAllTasks()
+                // LOCAL-FIRST FIX: Use ViewModel which handles local DB + sync queue
+                viewModel.clearAllTasks()
 
-                // CRITICAL FIX: Also clear local Room database to prevent duplicate/zombie tasks
-                database.starDao().deleteAllStars()
+                // Also clear constellation and orbit data
                 database.constellationDao().deleteAllLinks()
                 database.orbitDao().deleteAllOrbits()
 
-                viewModel.stars.clear()
-                viewModel.completedStars.clear()
                 triggerImmediateUpdate()
                 Toast.makeText(this@MainActivity, "Ocean Cleared", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
