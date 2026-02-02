@@ -38,21 +38,24 @@ object LocalWallpaperGenerator {
     private const val PARTICLE_MAX_SIZE = 3f
 
     /**
-     * Generate wallpaper bitmap
+     * Generate wallpaper bitmap with generated theme
+     * Shows top 3 tasks with +more indicator
      */
     fun generate(
-        task: StarEntity?,
+        tasks: List<StarEntity>,
+        totalTaskCount: Int,
         theme: WallpaperTheme,
         width: Int,
         height: Int
     ): Bitmap {
-        Log.d(TAG, "Generating wallpaper: ${width}x${height}, theme=$theme, task=${task?.title}")
+        val firstTaskTitle = tasks.firstOrNull()?.title ?: "No tasks"
+        Log.d(TAG, "Generating wallpaper: ${width}x${height}, theme=$theme, tasks=${tasks.size}, total=$totalTaskCount")
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        // Calculate urgency
-        val urgency = calculateUrgency(task)
+        // Calculate urgency from first task
+        val urgency = if (tasks.isNotEmpty()) calculateUrgency(tasks[0]) else UrgencyLevel.CLEAR
         val colors = theme.getColors(urgency)
 
         // Layer 1: Gradient background
@@ -61,14 +64,50 @@ object LocalWallpaperGenerator {
         // Layer 2: Particle system
         drawParticles(canvas, colors, width, height, theme)
 
-        // Layer 3: Task display
-        if (task != null) {
-            drawTaskCard(canvas, task, colors, width, height, urgency)
+        // Layer 3: Task display (top 3 tasks)
+        if (tasks.isNotEmpty()) {
+            drawTaskList(canvas, tasks, totalTaskCount, colors, width, height)
         } else {
             drawClearState(canvas, colors, width, height)
         }
 
         // Layer 4: Time display (optional)
+        drawTimeDisplay(canvas, width, height)
+
+        return bitmap
+    }
+
+    /**
+     * Generate wallpaper bitmap with custom background image
+     * Shows top 3 tasks with +more indicator
+     */
+    fun generateWithCustomBackground(
+        tasks: List<StarEntity>,
+        totalTaskCount: Int,
+        customBackground: Bitmap,
+        width: Int,
+        height: Int
+    ): Bitmap {
+        Log.d(TAG, "Generating wallpaper with custom background: ${width}x${height}, tasks=${tasks.size}, total=$totalTaskCount")
+
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        // Layer 1: Custom background image (scaled to fit)
+        val scaledBackground = Bitmap.createScaledBitmap(customBackground, width, height, true)
+        canvas.drawBitmap(scaledBackground, 0f, 0f, null)
+
+        // Calculate urgency from first task
+        val urgency = if (tasks.isNotEmpty()) calculateUrgency(tasks[0]) else UrgencyLevel.CLEAR
+        // Use cosmic theme colors for task display overlay
+        val colors = WallpaperTheme.COSMIC.getColors(urgency)
+
+        // Layer 2: Task display (on top of custom background)
+        if (tasks.isNotEmpty()) {
+            drawTaskList(canvas, tasks, totalTaskCount, colors, width, height)
+        }
+
+        // Layer 3: Time display (optional)
         drawTimeDisplay(canvas, width, height)
 
         return bitmap
@@ -280,6 +319,95 @@ object LocalWallpaperGenerator {
                 canvas.drawText(labelText, centerX, dateY + (width * 0.05f), labelPaint)
             }
         }
+    }
+
+    /**
+     * Draw list of tasks (up to 3) with +more indicator
+     */
+    private fun drawTaskList(
+        canvas: Canvas,
+        tasks: List<StarEntity>,
+        totalTaskCount: Int,
+        colors: ThemeColors,
+        width: Int,
+        height: Int
+    ) {
+        val startY = height * 0.25f  // Start higher to fit multiple tasks
+        val taskSpacing = height * 0.12f  // Space between tasks
+        val maxWidth = (width * 0.85f).toInt()
+        
+        // Draw up to 3 tasks
+        tasks.take(3).forEachIndexed { index, task ->
+            val taskY = startY + (index * taskSpacing)
+            drawTaskItem(canvas, task, colors, width, taskY, maxWidth)
+        }
+        
+        // Draw "+N more" indicator if there are more tasks
+        val remainingCount = totalTaskCount - tasks.size
+        if (remainingCount > 0) {
+            val moreY = startY + (tasks.size.coerceAtMost(3) * taskSpacing)
+            val moreText = "+${remainingCount} more"
+            val morePaint = Paint().apply {
+                isAntiAlias = true
+                color = colors.subtitleColor
+                textSize = width * 0.035f
+                textAlign = Paint.Align.CENTER
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                alpha = 180
+            }
+            canvas.drawText(moreText, width / 2f, moreY, morePaint)
+        }
+    }
+    
+    /**
+     * Draw single task item (simplified format for list view)
+     */
+    private fun drawTaskItem(
+        canvas: Canvas,
+        task: StarEntity,
+        colors: ThemeColors,
+        width: Int,
+        y: Float,
+        maxWidth: Int
+    ) {
+        val centerX = width / 2f
+        val circleRadius = width * 0.025f
+        
+        // Draw urgency indicator circle
+        val urgency = calculateUrgency(task)
+        val circleColor = when (urgency) {
+            UrgencyLevel.CRITICAL -> Color.parseColor("#FF4444")
+            UrgencyLevel.URGENT -> Color.parseColor("#FF8800")
+            UrgencyLevel.ATTENTION -> Color.parseColor("#FFCC00")
+            else -> colors.taskCircle
+        }
+        
+        val circlePaint = Paint().apply {
+            isAntiAlias = true
+            color = circleColor
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(centerX - (maxWidth / 2f) + circleRadius, y, circleRadius, circlePaint)
+        
+        // Draw task title
+        val titlePaint = TextPaint().apply {
+            isAntiAlias = true
+            color = colors.titleColor
+            textSize = width * 0.038f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        
+        val titleLayout = StaticLayout.Builder
+            .obtain(task.title, 0, task.title.length, titlePaint, maxWidth - (circleRadius * 4).toInt())
+            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+            .setMaxLines(1)
+            .setEllipsize(android.text.TextUtils.TruncateAt.END)
+            .build()
+        
+        canvas.save()
+        canvas.translate(centerX - (maxWidth / 2f) + (circleRadius * 3), y - (titleLayout.height / 2f))
+        titleLayout.draw(canvas)
+        canvas.restore()
     }
 
     /**

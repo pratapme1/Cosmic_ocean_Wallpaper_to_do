@@ -281,24 +281,72 @@ class RealTimeWallpaperService : Service() {
 
     /**
      * Generate wallpaper locally (offline capable)
+     * CRITICAL FIX: Check wallpaper mode - custom or generated
      */
     private suspend fun generateWallpaperLocally(themeName: String): Bitmap? {
         return try {
             val db = CosmicDatabase.getDatabase(applicationContext)
-            val topTask = db.starDao().getTopTask()
-            val theme = WallpaperTheme.fromString(themeName)
+            // Get top 3 tasks for wallpaper display
+            val topTasks = db.starDao().getTop3Tasks()
+            val totalTaskCount = db.starDao().getActiveTaskCount()
             val (width, height) = getScreenResolution()
 
-            Log.d(TAG, "Generating local wallpaper: ${width}x${height}, task=${topTask?.title}")
+            Log.d(TAG, "Generating local wallpaper: ${width}x${height}, tasks=${topTasks.size}, total=$totalTaskCount")
 
+            val prefsManager = WallpaperPreferencesManager(applicationContext)
+            val wallpaperMode = prefsManager.getWallpaperMode()
+
+            if (wallpaperMode == WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM) {
+                // CRITICAL FIX: Use custom wallpaper if available
+                val customPath = prefsManager.getCustomWallpaperPath()
+                if (customPath != null) {
+                    val customBitmap = loadCustomWallpaper(customPath)
+                    if (customBitmap != null) {
+                        Log.d(TAG, "Using custom wallpaper from: $customPath")
+                        return LocalWallpaperGenerator.generateWithCustomBackground(
+                            tasks = topTasks,
+                            totalTaskCount = totalTaskCount,
+                            customBackground = customBitmap,
+                            width = width,
+                            height = height
+                        )
+                    }
+                }
+                Log.w(TAG, "Custom wallpaper mode set but no image found, falling back to generated")
+            }
+
+            // Generate themed wallpaper
+            val theme = WallpaperTheme.fromString(themeName)
             LocalWallpaperGenerator.generate(
-                task = topTask,
+                tasks = topTasks,
+                totalTaskCount = totalTaskCount,
                 theme = theme,
                 width = width,
                 height = height
             )
         } catch (e: Exception) {
             Log.e(TAG, "Local generation failed: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Load custom wallpaper from storage
+     */
+    private fun loadCustomWallpaper(path: String): Bitmap? {
+        return try {
+            // Try to load from internal storage first
+            val file = java.io.File(path)
+            if (file.exists()) {
+                return android.graphics.BitmapFactory.decodeFile(path)
+            }
+            
+            // If it's a URL, we can't load it directly without network
+            // This should be cached locally by the upload process
+            Log.w(TAG, "Custom wallpaper file not found: $path")
+            null
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load custom wallpaper: ${e.message}")
             null
         }
     }

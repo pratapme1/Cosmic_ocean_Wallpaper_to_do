@@ -15,9 +15,13 @@ class WallpaperPreferencesManager(private val context: Context) {
         private const val KEY_RESOLUTION = "resolution"
         private const val KEY_LAST_SYNC = "last_sync"
         private const val KEY_WALLPAPER_ENABLED = "wallpaper_enabled"
+        private const val KEY_WALLPAPER_MODE = "wallpaper_mode"
+        private const val KEY_CUSTOM_WALLPAPER_PATH = "custom_wallpaper_path"
 
         const val DEFAULT_THEME = "cosmic"
         const val DEFAULT_RESOLUTION = "1080x1920"
+        const val WALLPAPER_MODE_GENERATED = "generated"
+        const val WALLPAPER_MODE_CUSTOM = "custom"
 
         val AVAILABLE_THEMES = listOf("cosmic", "ocean", "fantasy")
     }
@@ -108,6 +112,29 @@ class WallpaperPreferencesManager(private val context: Context) {
 
     fun setWallpaperEnabled(enabled: Boolean): Boolean {
         return prefs.edit().putBoolean(KEY_WALLPAPER_ENABLED, enabled).commit()
+    }
+
+    fun getWallpaperMode(): String {
+        return prefs.getString(KEY_WALLPAPER_MODE, WALLPAPER_MODE_GENERATED) ?: WALLPAPER_MODE_GENERATED
+    }
+
+    fun setWallpaperMode(mode: String): Boolean {
+        if (mode != WALLPAPER_MODE_GENERATED && mode != WALLPAPER_MODE_CUSTOM) {
+            return false
+        }
+        return prefs.edit().putString(KEY_WALLPAPER_MODE, mode).commit()
+    }
+
+    fun getCustomWallpaperPath(): String? {
+        return prefs.getString(KEY_CUSTOM_WALLPAPER_PATH, null)
+    }
+
+    fun setCustomWallpaperPath(path: String?): Boolean {
+        return if (path == null) {
+            prefs.edit().remove(KEY_CUSTOM_WALLPAPER_PATH).commit()
+        } else {
+            prefs.edit().putString(KEY_CUSTOM_WALLPAPER_PATH, path).commit()
+        }
     }
 
     fun needsSync(): Boolean {

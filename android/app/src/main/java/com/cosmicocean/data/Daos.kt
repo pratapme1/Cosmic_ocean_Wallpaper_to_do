@@ -16,6 +16,12 @@ interface StarDao {
     @Query("SELECT * FROM stars WHERE isArchived = 0 AND isDeleted = 0 AND isCompleted = 0 ORDER BY urgency ASC, dueDate ASC LIMIT 1")
     suspend fun getTopTask(): StarEntity?
     
+    @Query("SELECT * FROM stars WHERE isArchived = 0 AND isDeleted = 0 AND isCompleted = 0 ORDER BY urgency ASC, dueDate ASC LIMIT 3")
+    suspend fun getTop3Tasks(): List<StarEntity>
+    
+    @Query("SELECT COUNT(*) FROM stars WHERE isArchived = 0 AND isDeleted = 0 AND isCompleted = 0")
+    suspend fun getActiveTaskCount(): Int
+    
     @Query("SELECT * FROM stars WHERE localId = :localId")
     suspend fun getByLocalId(localId: String): StarEntity?
     
