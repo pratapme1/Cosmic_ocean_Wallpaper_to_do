@@ -160,36 +160,46 @@ class MainActivity : ComponentActivity() {
                     uri?.let { selectedUri ->
                         coroutineScope.launch {
                             isUploadingWallpaper = true
-                            Toast.makeText(context, "Uploading wallpaper...", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Setting custom wallpaper...", Toast.LENGTH_SHORT).show()
                             try {
-                                // Compress and Resize image before upload to prevent OOM and timeouts
+                                // Compress and Resize image before saving
                                 val tempFile = com.cosmicocean.utils.ImageUtils.compressAndResizeImage(context, selectedUri)
-                                
+
                                 if (tempFile == null || !tempFile.exists()) {
                                     Toast.makeText(context, "Failed to prepare image", Toast.LENGTH_SHORT).show()
                                     return@launch
                                 }
 
-                                // Prepare Multipart body
-                                val requestFile = tempFile.asRequestBody("image/jpeg".toMediaTypeOrNull())
-                                val body = MultipartBody.Part.createFormData("image", tempFile.name, requestFile)
+                                // LOCAL-FIRST FIX: Save to permanent local storage
+                                val permanentFile = File(context.filesDir, "custom_wallpaper.jpg")
+                                tempFile.copyTo(permanentFile, overwrite = true)
+                                tempFile.delete() // Clean up temp file
 
-                                // Upload to API
-                                val response = NetworkModule.getApi(context).uploadWallpaper(body)
+                                android.util.Log.d("MainActivity", "Custom wallpaper saved to: ${permanentFile.absolutePath}")
 
-                                if (response.isSuccessful) {
-                                    Toast.makeText(context, "Wallpaper uploaded! Refreshing...", Toast.LENGTH_SHORT).show()
-                                    // Trigger wallpaper refresh after successful upload
-                                    triggerImmediateUpdate()
-                                } else {
-                                    Toast.makeText(context, "Upload failed: ${response.code()}", Toast.LENGTH_SHORT).show()
+                                // LOCAL-FIRST FIX: Set wallpaper mode and path in preferences
+                                wallpaperPreferences.setWallpaperMode(WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM)
+                                wallpaperPreferences.setCustomWallpaperPath(permanentFile.absolutePath)
+
+                                android.util.Log.d("MainActivity", "Wallpaper mode set to CUSTOM, path: ${permanentFile.absolutePath}")
+
+                                // Trigger immediate local wallpaper update
+                                triggerImmediateUpdate()
+                                Toast.makeText(context, "Custom wallpaper applied!", Toast.LENGTH_SHORT).show()
+
+                                // OPTIONAL: Background upload to backend for sync/backup
+                                try {
+                                    val requestFile = permanentFile.asRequestBody("image/jpeg".toMediaTypeOrNull())
+                                    val body = MultipartBody.Part.createFormData("image", permanentFile.name, requestFile)
+                                    NetworkModule.getApi(context).uploadWallpaper(body)
+                                    android.util.Log.d("MainActivity", "Custom wallpaper synced to backend")
+                                } catch (e: Exception) {
+                                    // Backend sync failure is non-critical for local-first
+                                    android.util.Log.w("MainActivity", "Backend sync failed (offline mode): ${e.message}")
                                 }
-
-                                // Cleanup temp file
-                                tempFile.delete()
                             } catch (e: Exception) {
-                                android.util.Log.e("MainActivity", "Wallpaper upload error", e)
-                                Toast.makeText(context, "Upload error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                android.util.Log.e("MainActivity", "Wallpaper setup error", e)
+                                Toast.makeText(context, "Setup error: ${e.message}", Toast.LENGTH_SHORT).show()
                             } finally {
                                 isUploadingWallpaper = false
                             }
