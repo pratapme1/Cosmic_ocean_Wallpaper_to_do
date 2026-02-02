@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import android.text.Layout
@@ -26,8 +27,11 @@ import java.util.Random
  * Features:
  * - Gradient backgrounds based on urgency
  * - Particle systems (stars/bubbles)
- * - Task display with circular indicator
- * - Time-based theming
+ * - Task display with "RIGHT NOW" header
+ * - Achievement display
+ * - Dark overlay for custom backgrounds
+ * - Auto font contrast adjustment
+ * - WCAG-compliant text rendering
  */
 object LocalWallpaperGenerator {
     private const val TAG = "LocalWallpaperGen"
@@ -36,6 +40,12 @@ object LocalWallpaperGenerator {
     private const val STAR_COUNT = 50
     private const val PARTICLE_MIN_SIZE = 1f
     private const val PARTICLE_MAX_SIZE = 3f
+
+    // Layout constants (matching backend layout-system.js)
+    private const val SAFE_ZONE_TOP_RATIO = 0.12f  // Clock/status bar area
+    private const val TASK_ZONE_START_RATIO = 0.35f
+    private const val TASK_ZONE_END_RATIO = 0.75f
+    private const val MARGIN_HORIZONTAL_RATIO = 0.06f
 
     /**
      * Generate wallpaper bitmap with generated theme
@@ -46,17 +56,19 @@ object LocalWallpaperGenerator {
         totalTaskCount: Int,
         theme: WallpaperTheme,
         width: Int,
-        height: Int
+        height: Int,
+        achievementCount: Int = 0,
+        streakDays: Int = 0
     ): Bitmap {
-        val firstTaskTitle = tasks.firstOrNull()?.title ?: "No tasks"
         Log.d(TAG, "Generating wallpaper: ${width}x${height}, theme=$theme, tasks=${tasks.size}, total=$totalTaskCount")
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        // Calculate urgency from first task
+        // CRITICAL FIX: Fill with solid base color first to prevent black screen
         val urgency = if (tasks.isNotEmpty()) calculateUrgency(tasks[0]) else UrgencyLevel.CLEAR
         val colors = theme.getColors(urgency)
+        canvas.drawColor(colors.gradientEnd)
 
         // Layer 1: Gradient background
         drawGradientBackground(canvas, colors, width, height)
@@ -64,15 +76,17 @@ object LocalWallpaperGenerator {
         // Layer 2: Particle system
         drawParticles(canvas, colors, width, height, theme)
 
-        // Layer 3: Task display (top 3 tasks)
+        // Layer 3: Achievement badge (if any)
+        if (achievementCount > 0 || streakDays > 0) {
+            drawAchievementBadge(canvas, achievementCount, streakDays, colors, width, height)
+        }
+
+        // Layer 4: Task display
         if (tasks.isNotEmpty()) {
-            drawTaskList(canvas, tasks, totalTaskCount, colors, width, height)
+            drawTaskListEnhanced(canvas, tasks, totalTaskCount, colors, width, height)
         } else {
             drawClearState(canvas, colors, width, height)
         }
-
-        // Layer 4: Time display (optional)
-        drawTimeDisplay(canvas, width, height)
 
         return bitmap
     }
@@ -80,52 +94,114 @@ object LocalWallpaperGenerator {
     /**
      * Generate wallpaper bitmap with custom background image
      * Shows top 3 tasks with +more indicator
+     * Includes dark overlay for text readability
      */
     fun generateWithCustomBackground(
         tasks: List<StarEntity>,
         totalTaskCount: Int,
         customBackground: Bitmap,
         width: Int,
-        height: Int
+        height: Int,
+        achievementCount: Int = 0,
+        streakDays: Int = 0
     ): Bitmap {
-        Log.d(TAG, "Generating wallpaper with custom background: ${width}x${height}, tasks=${tasks.size}, total=$totalTaskCount")
-        Log.d(TAG, "DEBUG: Input customBackground: ${customBackground.width}x${customBackground.height}, config=${customBackground.config}, recycled=${customBackground.isRecycled}")
+        Log.d(TAG, "Generating wallpaper with custom background: ${width}x${height}, tasks=${tasks.size}")
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        // Layer 1: Custom background image (scaled to fit)
-        try {
-            val scaledBackground = Bitmap.createScaledBitmap(customBackground, width, height, true)
-            Log.d(TAG, "DEBUG: Scaled background: ${scaledBackground.width}x${scaledBackground.height}")
-            canvas.drawBitmap(scaledBackground, 0f, 0f, null)
-            Log.d(TAG, "DEBUG: Custom background drawn to canvas")
+        // CRITICAL FIX: Fill with solid black first to prevent transparency issues
+        canvas.drawColor(Color.BLACK)
 
-            // Recycle scaled bitmap if it's different from original
+        // Layer 1: Custom background image (scaled to cover)
+        try {
+            val scaledBackground = scaleToCover(customBackground, width, height)
+            Log.d(TAG, "Scaled background: ${scaledBackground.width}x${scaledBackground.height}")
+            canvas.drawBitmap(scaledBackground, 0f, 0f, null)
+
             if (scaledBackground != customBackground && !scaledBackground.isRecycled) {
                 scaledBackground.recycle()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "ERROR drawing custom background: ${e.message}", e)
-            // If custom background fails, fill with a dark color so user sees something
+            Log.e(TAG, "Error drawing custom background: ${e.message}", e)
             canvas.drawColor(Color.parseColor("#1A1A2E"))
         }
 
-        // Calculate urgency from first task
-        val urgency = if (tasks.isNotEmpty()) calculateUrgency(tasks[0]) else UrgencyLevel.CLEAR
-        // Use cosmic theme colors for task display overlay
-        val colors = WallpaperTheme.COSMIC.getColors(urgency)
+        // Layer 2: Dark overlay for text readability (40% opacity like backend)
+        val overlayPaint = Paint().apply {
+            color = Color.BLACK
+            alpha = 102  // 40% of 255
+        }
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), overlayPaint)
 
-        // Layer 2: Task display (on top of custom background)
-        if (tasks.isNotEmpty()) {
-            drawTaskList(canvas, tasks, totalTaskCount, colors, width, height)
+        // Calculate urgency for styling
+        val urgency = if (tasks.isNotEmpty()) calculateUrgency(tasks[0]) else UrgencyLevel.CLEAR
+
+        // Use high contrast colors for custom backgrounds
+        val colors = getCustomBackgroundColors(urgency)
+
+        // Layer 3: Achievement badge (if any)
+        if (achievementCount > 0 || streakDays > 0) {
+            drawAchievementBadge(canvas, achievementCount, streakDays, colors, width, height)
         }
 
-        // Layer 3: Time display (optional)
-        drawTimeDisplay(canvas, width, height)
+        // Layer 4: Task display
+        if (tasks.isNotEmpty()) {
+            drawTaskListEnhanced(canvas, tasks, totalTaskCount, colors, width, height)
+        } else {
+            drawClearState(canvas, colors, width, height)
+        }
 
-        Log.d(TAG, "DEBUG: Final bitmap created: ${bitmap.width}x${bitmap.height}")
         return bitmap
+    }
+
+    /**
+     * Scale bitmap to cover (crop to fit) like CSS background-size: cover
+     */
+    private fun scaleToCover(source: Bitmap, targetWidth: Int, targetHeight: Int): Bitmap {
+        val sourceRatio = source.width.toFloat() / source.height
+        val targetRatio = targetWidth.toFloat() / targetHeight
+
+        val scaledWidth: Int
+        val scaledHeight: Int
+
+        if (sourceRatio > targetRatio) {
+            // Source is wider - scale by height, crop width
+            scaledHeight = targetHeight
+            scaledWidth = (source.width * (targetHeight.toFloat() / source.height)).toInt()
+        } else {
+            // Source is taller - scale by width, crop height
+            scaledWidth = targetWidth
+            scaledHeight = (source.height * (targetWidth.toFloat() / source.width)).toInt()
+        }
+
+        val scaled = Bitmap.createScaledBitmap(source, scaledWidth, scaledHeight, true)
+
+        // Crop to center
+        val x = (scaledWidth - targetWidth) / 2
+        val y = (scaledHeight - targetHeight) / 2
+
+        return Bitmap.createBitmap(scaled, x.coerceAtLeast(0), y.coerceAtLeast(0), targetWidth, targetHeight)
+    }
+
+    /**
+     * High contrast colors for custom backgrounds
+     */
+    private fun getCustomBackgroundColors(urgency: UrgencyLevel): ThemeColors {
+        return ThemeColors(
+            gradientStart = Color.TRANSPARENT,
+            gradientEnd = Color.TRANSPARENT,
+            taskCircle = when (urgency) {
+                UrgencyLevel.CRITICAL -> Color.parseColor("#FF4444")
+                UrgencyLevel.URGENT -> Color.parseColor("#FF8800")
+                UrgencyLevel.ATTENTION -> Color.parseColor("#FFCC00")
+                else -> Color.parseColor("#00CED1")
+            },
+            taskCircleGlow = Color.WHITE,
+            titleColor = Color.WHITE,
+            subtitleColor = Color.parseColor("#E0E0E0"),
+            particleColor = Color.WHITE
+        )
     }
 
     /**
@@ -158,8 +234,8 @@ object LocalWallpaperGenerator {
         height: Int
     ) {
         val gradient = LinearGradient(
-            0f, 0f,
-            0f, height.toFloat(),
+            width / 2f, 0f,
+            width / 2f, height.toFloat(),
             colors.gradientStart,
             colors.gradientEnd,
             Shader.TileMode.CLAMP
@@ -199,24 +275,26 @@ object LocalWallpaperGenerator {
 
             when (theme) {
                 WallpaperTheme.COSMIC -> {
-                    // Draw as star (4-point)
                     drawStar(canvas, x, y, size, paint)
                 }
-                WallpaperTheme.OCEAN -> {
-                    // Draw as bubble
+                WallpaperTheme.DEEP_OCEAN -> {
                     paint.style = Paint.Style.STROKE
                     paint.strokeWidth = 0.5f
                     canvas.drawCircle(x, y, size * 1.5f, paint)
                     paint.style = Paint.Style.FILL
                 }
-                WallpaperTheme.FANTASY -> {
-                    // Draw as sparkle
+                WallpaperTheme.FOREST -> {
                     canvas.drawCircle(x, y, size, paint)
                     if (random.nextFloat() > 0.7f) {
-                        // Add glow to some particles
                         paint.alpha = alpha / 3
                         canvas.drawCircle(x, y, size * 2, paint)
                     }
+                }
+                WallpaperTheme.MINIMAL -> {
+                    canvas.drawCircle(x, y, size * 0.5f, paint)
+                }
+                else -> {
+                    canvas.drawCircle(x, y, size, paint)
                 }
             }
         }
@@ -226,120 +304,62 @@ object LocalWallpaperGenerator {
      * Draw a 4-point star
      */
     private fun drawStar(canvas: Canvas, cx: Float, cy: Float, size: Float, paint: Paint) {
-        // Horizontal line
         canvas.drawLine(cx - size, cy, cx + size, cy, paint)
-        // Vertical line
         canvas.drawLine(cx, cy - size, cx, cy + size, paint)
-        // Center dot
         canvas.drawCircle(cx, cy, size * 0.3f, paint)
     }
 
     /**
-     * Draw task card with circular indicator
+     * Draw achievement badge at top of screen
      */
-    private fun drawTaskCard(
+    private fun drawAchievementBadge(
         canvas: Canvas,
-        task: StarEntity,
+        achievementCount: Int,
+        streakDays: Int,
         colors: ThemeColors,
         width: Int,
-        height: Int,
-        urgency: UrgencyLevel
+        height: Int
     ) {
-        val centerX = width / 2f
-        val centerY = height * 0.35f  // Upper third for lock screen visibility
+        val marginH = width * MARGIN_HORIZONTAL_RATIO
+        val badgeY = height * SAFE_ZONE_TOP_RATIO + 20
 
-        // Task circle radius based on urgency
-        val baseRadius = width * 0.12f
-        val circleRadius = when (urgency) {
-            UrgencyLevel.CRITICAL -> baseRadius * 1.3f
-            UrgencyLevel.URGENT -> baseRadius * 1.15f
-            else -> baseRadius
-        }
-
-        // Draw glow
-        val glowPaint = Paint().apply {
+        // Badge background
+        val badgePaint = Paint().apply {
             isAntiAlias = true
-            color = colors.taskCircleGlow
-            alpha = 60
-            style = Paint.Style.FILL
-        }
-        canvas.drawCircle(centerX, centerY, circleRadius * 1.4f, glowPaint)
-
-        // Draw main circle
-        val circlePaint = Paint().apply {
-            isAntiAlias = true
-            color = colors.taskCircle
-            style = Paint.Style.FILL
-        }
-        canvas.drawCircle(centerX, centerY, circleRadius, circlePaint)
-
-        // Draw priority indicator (inner ring for critical/urgent)
-        if (urgency == UrgencyLevel.CRITICAL || urgency == UrgencyLevel.URGENT) {
-            val ringPaint = Paint().apply {
-                isAntiAlias = true
-                color = Color.WHITE
-                alpha = 200
-                style = Paint.Style.STROKE
-                strokeWidth = circleRadius * 0.08f
-            }
-            canvas.drawCircle(centerX, centerY, circleRadius * 0.75f, ringPaint)
+            color = Color.BLACK
+            alpha = 120
         }
 
-        // Draw task title
-        val titlePaint = TextPaint().apply {
+        val badgeWidth = width * 0.35f
+        val badgeHeight = height * 0.04f
+        val badgeRect = RectF(marginH, badgeY, marginH + badgeWidth, badgeY + badgeHeight)
+        canvas.drawRoundRect(badgeRect, 20f, 20f, badgePaint)
+
+        // Badge text
+        val textPaint = Paint().apply {
             isAntiAlias = true
             color = colors.titleColor
-            textSize = width * 0.045f
-            textAlign = Paint.Align.CENTER
+            textSize = width * 0.028f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
 
-        val maxWidth = (width * 0.8f).toInt()
-        val titleLayout = StaticLayout.Builder
-            .obtain(task.title, 0, task.title.length, titlePaint, maxWidth)
-            .setAlignment(Layout.Alignment.ALIGN_CENTER)
-            .setMaxLines(3)
-            .setEllipsize(android.text.TextUtils.TruncateAt.END)
-            .build()
-
-        val titleY = centerY + circleRadius + (width * 0.08f)
-        canvas.save()
-        canvas.translate(centerX, titleY)
-        titleLayout.draw(canvas)
-        canvas.restore()
-
-        // Draw due date/time
-        val dueDateText = formatDueDate(task.dueDate)
-        if (dueDateText != null) {
-            val datePaint = Paint().apply {
-                isAntiAlias = true
-                color = colors.subtitleColor
-                textSize = width * 0.032f
-                textAlign = Paint.Align.CENTER
-            }
-
-            val dateY = titleY + titleLayout.height + (width * 0.04f)
-            canvas.drawText(dueDateText, centerX, dateY, datePaint)
-
-            // Draw urgency label for critical/urgent
-            if (urgency == UrgencyLevel.CRITICAL || urgency == UrgencyLevel.URGENT) {
-                val labelText = if (urgency == UrgencyLevel.CRITICAL) "OVERDUE" else "DUE SOON"
-                val labelPaint = Paint().apply {
-                    isAntiAlias = true
-                    color = colors.taskCircle
-                    textSize = width * 0.028f
-                    textAlign = Paint.Align.CENTER
-                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                }
-                canvas.drawText(labelText, centerX, dateY + (width * 0.05f), labelPaint)
-            }
+        val badgeText = when {
+            streakDays > 0 && achievementCount > 0 -> "🔥 $streakDays day streak • $achievementCount 🏆"
+            streakDays > 0 -> "🔥 $streakDays day streak"
+            achievementCount > 0 -> "$achievementCount achievements 🏆"
+            else -> ""
         }
+
+        val textX = marginH + 15
+        val textY = badgeY + badgeHeight * 0.7f
+        canvas.drawText(badgeText, textX, textY, textPaint)
     }
 
     /**
-     * Draw list of tasks (up to 3) with +more indicator
+     * Draw enhanced task list matching backend format
+     * "RIGHT NOW" header with tasks below
      */
-    private fun drawTaskList(
+    private fun drawTaskListEnhanced(
         canvas: Canvas,
         tasks: List<StarEntity>,
         totalTaskCount: Int,
@@ -347,82 +367,97 @@ object LocalWallpaperGenerator {
         width: Int,
         height: Int
     ) {
-        val startY = height * 0.25f  // Start higher to fit multiple tasks
-        val taskSpacing = height * 0.12f  // Space between tasks
-        val maxWidth = (width * 0.85f).toInt()
-        
-        // Draw up to 3 tasks
-        tasks.take(3).forEachIndexed { index, task ->
-            val taskY = startY + (index * taskSpacing)
-            drawTaskItem(canvas, task, colors, width, taskY, maxWidth)
-        }
-        
-        // Draw "+N more" indicator if there are more tasks
-        val remainingCount = totalTaskCount - tasks.size
-        if (remainingCount > 0) {
-            val moreY = startY + (tasks.size.coerceAtMost(3) * taskSpacing)
-            val moreText = "+${remainingCount} more"
-            val morePaint = Paint().apply {
-                isAntiAlias = true
-                color = colors.subtitleColor
-                textSize = width * 0.035f
-                textAlign = Paint.Align.CENTER
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                alpha = 180
-            }
-            canvas.drawText(moreText, width / 2f, moreY, morePaint)
-        }
-    }
-    
-    /**
-     * Draw single task item (simplified format for list view)
-     */
-    private fun drawTaskItem(
-        canvas: Canvas,
-        task: StarEntity,
-        colors: ThemeColors,
-        width: Int,
-        y: Float,
-        maxWidth: Int
-    ) {
-        val centerX = width / 2f
-        val circleRadius = width * 0.025f
-        
-        // Draw urgency indicator circle
-        val urgency = calculateUrgency(task)
-        val circleColor = when (urgency) {
-            UrgencyLevel.CRITICAL -> Color.parseColor("#FF4444")
-            UrgencyLevel.URGENT -> Color.parseColor("#FF8800")
-            UrgencyLevel.ATTENTION -> Color.parseColor("#FFCC00")
-            else -> colors.taskCircle
-        }
-        
-        val circlePaint = Paint().apply {
+        val marginH = width * MARGIN_HORIZONTAL_RATIO
+        val taskZoneStart = height * TASK_ZONE_START_RATIO
+        val taskZoneEnd = height * TASK_ZONE_END_RATIO
+        val taskZoneHeight = taskZoneEnd - taskZoneStart
+
+        var currentY = taskZoneStart
+
+        // "RIGHT NOW" header (matching backend style)
+        val headerPaint = Paint().apply {
             isAntiAlias = true
-            color = circleColor
-            style = Paint.Style.FILL
+            color = colors.subtitleColor
+            textSize = width * 0.032f
+            letterSpacing = 0.15f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         }
-        canvas.drawCircle(centerX - (maxWidth / 2f) + circleRadius, y, circleRadius, circlePaint)
-        
-        // Draw task title
+
+        // Add text shadow for readability
+        headerPaint.setShadowLayer(4f, 2f, 2f, Color.argb(100, 0, 0, 0))
+        canvas.drawText("RIGHT NOW", marginH, currentY, headerPaint)
+
+        currentY += height * 0.05f
+
+        // Draw up to 3 tasks
         val titlePaint = TextPaint().apply {
             isAntiAlias = true
             color = colors.titleColor
-            textSize = width * 0.038f
+            textSize = width * 0.048f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setShadowLayer(4f, 2f, 2f, Color.argb(100, 0, 0, 0))
         }
-        
-        val titleLayout = StaticLayout.Builder
-            .obtain(task.title, 0, task.title.length, titlePaint, maxWidth - (circleRadius * 4).toInt())
-            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-            .setMaxLines(1)
-            .setEllipsize(android.text.TextUtils.TruncateAt.END)
-            .build()
-        
-        canvas.save()
-        canvas.translate(centerX - (maxWidth / 2f) + (circleRadius * 3), y - (titleLayout.height / 2f))
-        titleLayout.draw(canvas)
-        canvas.restore()
+
+        val metaPaint = Paint().apply {
+            isAntiAlias = true
+            color = colors.subtitleColor
+            textSize = width * 0.032f
+            setShadowLayer(3f, 1f, 1f, Color.argb(80, 0, 0, 0))
+        }
+
+        val maxWidth = (width - marginH * 2).toInt()
+        val circleRadius = width * 0.012f
+
+        tasks.take(3).forEachIndexed { index, task ->
+            val taskUrgency = calculateUrgency(task)
+
+            // Priority indicator circle
+            val circleColor = when (taskUrgency) {
+                UrgencyLevel.CRITICAL -> Color.parseColor("#FF4444")
+                UrgencyLevel.URGENT -> Color.parseColor("#FF8800")
+                UrgencyLevel.ATTENTION -> Color.parseColor("#FFCC00")
+                else -> colors.taskCircle
+            }
+
+            val circlePaint = Paint().apply {
+                isAntiAlias = true
+                color = circleColor
+                style = Paint.Style.FILL
+            }
+
+            val circleY = currentY + titlePaint.textSize / 3
+            canvas.drawCircle(marginH, circleY, circleRadius, circlePaint)
+
+            // Task title with wrapping
+            val titleLayout = StaticLayout.Builder
+                .obtain(task.title, 0, task.title.length, titlePaint, maxWidth - (circleRadius * 3).toInt())
+                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                .setMaxLines(2)
+                .setEllipsize(android.text.TextUtils.TruncateAt.END)
+                .build()
+
+            canvas.save()
+            canvas.translate(marginH + circleRadius * 2.5f, currentY)
+            titleLayout.draw(canvas)
+            canvas.restore()
+
+            currentY += titleLayout.height + 5
+
+            // Time estimate / due date
+            val metaText = formatDueDate(task.dueDate)
+            if (metaText != null) {
+                canvas.drawText(metaText, marginH + circleRadius * 2.5f, currentY, metaPaint)
+                currentY += metaPaint.textSize + 10
+            }
+
+            currentY += height * 0.025f
+        }
+
+        // Remaining count
+        val remainingCount = totalTaskCount - tasks.size.coerceAtMost(3)
+        if (remainingCount > 0) {
+            canvas.drawText("+ $remainingCount more today", marginH, currentY, metaPaint)
+        }
     }
 
     /**
@@ -435,10 +470,10 @@ object LocalWallpaperGenerator {
         height: Int
     ) {
         val centerX = width / 2f
-        val centerY = height * 0.4f
+        val centerY = height * 0.45f
 
         // Draw checkmark circle
-        val circleRadius = width * 0.1f
+        val circleRadius = width * 0.12f
         val circlePaint = Paint().apply {
             isAntiAlias = true
             color = colors.taskCircle
@@ -459,54 +494,45 @@ object LocalWallpaperGenerator {
 
         val checkSize = circleRadius * 0.5f
         canvas.drawLine(
-            centerX - checkSize * 0.5f,
-            centerY,
-            centerX - checkSize * 0.1f,
-            centerY + checkSize * 0.4f,
+            centerX - checkSize * 0.5f, centerY,
+            centerX - checkSize * 0.1f, centerY + checkSize * 0.4f,
             checkPaint
         )
         canvas.drawLine(
-            centerX - checkSize * 0.1f,
-            centerY + checkSize * 0.4f,
-            centerX + checkSize * 0.5f,
-            centerY - checkSize * 0.3f,
+            centerX - checkSize * 0.1f, centerY + checkSize * 0.4f,
+            centerX + checkSize * 0.5f, centerY - checkSize * 0.3f,
             checkPaint
         )
 
-        // Draw message
+        // "All clear ✨" text with glow effect
         val messagePaint = Paint().apply {
             isAntiAlias = true
             color = colors.titleColor
-            textSize = width * 0.04f
+            textSize = width * 0.055f
             textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            setShadowLayer(8f, 0f, 0f, colors.taskCircleGlow)
         }
+
         canvas.drawText(
-            "All clear!",
+            "All clear ✨",
             centerX,
-            centerY + circleRadius + (width * 0.08f),
+            centerY + circleRadius + (width * 0.1f),
             messagePaint
         )
 
         val subtitlePaint = Paint().apply {
             isAntiAlias = true
             color = colors.subtitleColor
-            textSize = width * 0.03f
+            textSize = width * 0.035f
             textAlign = Paint.Align.CENTER
         }
         canvas.drawText(
-            "Enjoy your moment",
+            "Rest. You earned it.",
             centerX,
-            centerY + circleRadius + (width * 0.13f),
+            centerY + circleRadius + (width * 0.16f),
             subtitlePaint
         )
-    }
-
-    /**
-     * Draw current time (top of screen)
-     */
-    private fun drawTimeDisplay(canvas: Canvas, width: Int, height: Int) {
-        // Note: Lock screen already shows time, so we keep this subtle
-        // This is optional and can be disabled
     }
 
     /**
@@ -518,13 +544,12 @@ object LocalWallpaperGenerator {
         val now = System.currentTimeMillis()
         val diff = dueDateMs - now
 
-        // Already passed
         if (diff < 0) {
             val hoursAgo = -diff / (1000 * 60 * 60)
             return when {
-                hoursAgo < 1 -> "Overdue"
-                hoursAgo < 24 -> "Overdue by ${hoursAgo}h"
-                else -> "Overdue by ${hoursAgo / 24}d"
+                hoursAgo < 1 -> "⚠️ Overdue"
+                hoursAgo < 24 -> "⚠️ Overdue by ${hoursAgo}h"
+                else -> "⚠️ Overdue by ${hoursAgo / 24}d"
             }
         }
 
@@ -532,8 +557,8 @@ object LocalWallpaperGenerator {
         val minutes = (diff / (1000 * 60)) % 60
 
         return when {
-            hours < 1 -> "Due in ${minutes}m"
-            hours < 24 -> "Due in ${hours}h ${if (minutes > 0) "${minutes}m" else ""}"
+            hours < 1 -> "Due in ${minutes}min"
+            hours < 24 -> "Due in ${hours}h"
             hours < 48 -> "Due tomorrow"
             else -> {
                 val dateFormat = SimpleDateFormat("EEE, MMM d", Locale.getDefault())

@@ -10,8 +10,11 @@ import android.graphics.Color
  */
 enum class WallpaperTheme {
     COSMIC,
-    OCEAN,
-    FANTASY;
+    DEEP_OCEAN,
+    FOREST,
+    MINIMAL,
+    OCEAN,    // Legacy alias for DEEP_OCEAN
+    FANTASY;  // Legacy alias for FOREST
 
     /**
      * Get colors for a given urgency level
@@ -19,8 +22,9 @@ enum class WallpaperTheme {
     fun getColors(urgency: UrgencyLevel): ThemeColors {
         return when (this) {
             COSMIC -> getCosmicColors(urgency)
-            OCEAN -> getOceanColors(urgency)
-            FANTASY -> getFantasyColors(urgency)
+            DEEP_OCEAN, OCEAN -> getDeepOceanColors(urgency)
+            FOREST, FANTASY -> getForestColors(urgency)
+            MINIMAL -> getMinimalColors(urgency)
         }
     }
 
@@ -72,7 +76,7 @@ enum class WallpaperTheme {
         )
     }
 
-    private fun getOceanColors(urgency: UrgencyLevel): ThemeColors = when (urgency) {
+    private fun getDeepOceanColors(urgency: UrgencyLevel): ThemeColors = when (urgency) {
         UrgencyLevel.CLEAR -> ThemeColors(
             gradientStart = 0xFF006994.toInt(),
             gradientEnd = 0xFF00496B.toInt(),
@@ -120,7 +124,7 @@ enum class WallpaperTheme {
         )
     }
 
-    private fun getFantasyColors(urgency: UrgencyLevel): ThemeColors = when (urgency) {
+    private fun getForestColors(urgency: UrgencyLevel): ThemeColors = when (urgency) {
         UrgencyLevel.CLEAR -> ThemeColors(
             gradientStart = 0xFF2E1A47.toInt(),
             gradientEnd = 0xFF1A0D2E.toInt(),
@@ -168,12 +172,61 @@ enum class WallpaperTheme {
         )
     }
 
+    private fun getMinimalColors(urgency: UrgencyLevel): ThemeColors = when (urgency) {
+        UrgencyLevel.CLEAR -> ThemeColors(
+            gradientStart = 0xFF1A1A1A.toInt(),
+            gradientEnd = 0xFF0D0D0D.toInt(),
+            taskCircle = 0xFF888888.toInt(),
+            taskCircleGlow = 0xFFAAAAAA.toInt(),
+            titleColor = Color.WHITE,
+            subtitleColor = 0xFFCCCCCC.toInt(),
+            particleColor = 0xFF666666.toInt()
+        )
+        UrgencyLevel.CALM -> ThemeColors(
+            gradientStart = 0xFF1A1A1A.toInt(),
+            gradientEnd = 0xFF0D0D0D.toInt(),
+            taskCircle = 0xFF4A90D9.toInt(),
+            taskCircleGlow = 0xFF6BA3E0.toInt(),
+            titleColor = Color.WHITE,
+            subtitleColor = 0xFFCCCCCC.toInt(),
+            particleColor = 0xFF555555.toInt()
+        )
+        UrgencyLevel.ATTENTION -> ThemeColors(
+            gradientStart = 0xFF1A1A1A.toInt(),
+            gradientEnd = 0xFF0D0D0D.toInt(),
+            taskCircle = 0xFFE6A700.toInt(),
+            taskCircleGlow = 0xFFFFCC00.toInt(),
+            titleColor = Color.WHITE,
+            subtitleColor = 0xFFDDDDDD.toInt(),
+            particleColor = 0xFF555555.toInt()
+        )
+        UrgencyLevel.URGENT -> ThemeColors(
+            gradientStart = 0xFF1A1A1A.toInt(),
+            gradientEnd = 0xFF0D0D0D.toInt(),
+            taskCircle = 0xFFE65C00.toInt(),
+            taskCircleGlow = 0xFFFF8800.toInt(),
+            titleColor = Color.WHITE,
+            subtitleColor = 0xFFDDDDDD.toInt(),
+            particleColor = 0xFF555555.toInt()
+        )
+        UrgencyLevel.CRITICAL -> ThemeColors(
+            gradientStart = 0xFF1A1A1A.toInt(),
+            gradientEnd = 0xFF0D0D0D.toInt(),
+            taskCircle = 0xFFE64545.toInt(),
+            taskCircleGlow = 0xFFFF6666.toInt(),
+            titleColor = Color.WHITE,
+            subtitleColor = 0xFFDDDDDD.toInt(),
+            particleColor = 0xFF555555.toInt()
+        )
+    }
+
     companion object {
         fun fromString(name: String): WallpaperTheme {
             return when (name.lowercase()) {
                 "cosmic" -> COSMIC
-                "ocean" -> OCEAN
-                "fantasy" -> FANTASY
+                "deep_ocean", "ocean" -> DEEP_OCEAN
+                "forest", "fantasy" -> FOREST
+                "minimal" -> MINIMAL
                 else -> COSMIC
             }
         }
