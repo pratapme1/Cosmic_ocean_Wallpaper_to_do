@@ -300,21 +300,42 @@ class RealTimeWallpaperService : Service() {
             val prefsManager = WallpaperPreferencesManager(applicationContext)
             val wallpaperMode = prefsManager.getWallpaperMode()
 
+            Log.d(TAG, "DEBUG: wallpaperMode = '$wallpaperMode'")
+
             if (wallpaperMode == WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM) {
                 // CRITICAL FIX: Use custom wallpaper if available
                 val customPath = prefsManager.getCustomWallpaperPath()
+                Log.d(TAG, "DEBUG: customPath = '$customPath'")
+
                 if (customPath != null) {
+                    // Verify file exists
+                    val file = File(customPath)
+                    Log.d(TAG, "DEBUG: File exists = ${file.exists()}, size = ${file.length()} bytes")
+
                     val customBitmap = loadCustomWallpaper(customPath)
                     if (customBitmap != null) {
+                        Log.d(TAG, "DEBUG: Custom bitmap loaded: ${customBitmap.width}x${customBitmap.height}, config=${customBitmap.config}")
                         Log.d(TAG, "Using custom wallpaper from: $customPath")
-                        return LocalWallpaperGenerator.generateWithCustomBackground(
+
+                        val result = LocalWallpaperGenerator.generateWithCustomBackground(
                             tasks = topTasks,
                             totalTaskCount = totalTaskCount,
                             customBackground = customBitmap,
                             width = width,
                             height = height
                         )
+
+                        // Recycle original bitmap to free memory
+                        if (!customBitmap.isRecycled) {
+                            customBitmap.recycle()
+                        }
+
+                        return result
+                    } else {
+                        Log.e(TAG, "DEBUG: loadCustomWallpaper returned NULL for path: $customPath")
                     }
+                } else {
+                    Log.w(TAG, "DEBUG: customPath is NULL")
                 }
                 Log.w(TAG, "Custom wallpaper mode set but no image found, falling back to generated")
             }
@@ -329,7 +350,7 @@ class RealTimeWallpaperService : Service() {
                 height = height
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Local generation failed: ${e.message}")
+            Log.e(TAG, "Local generation failed: ${e.message}", e)
             null
         }
     }
@@ -343,35 +364,55 @@ class RealTimeWallpaperService : Service() {
             // Check if path is a URL (starts with http)
             if (path.startsWith("http")) {
                 Log.d(TAG, "Downloading custom wallpaper from URL: $path")
-                
+
                 // Download the image to local cache
                 val url = URL(path)
                 val localFile = File(applicationContext.filesDir, "custom_wallpaper_cache.jpg")
-                
+
                 // Download and save
                 url.openStream().use { input ->
                     FileOutputStream(localFile).use { output ->
                         input.copyTo(output)
                     }
                 }
-                
+
                 Log.d(TAG, "Custom wallpaper downloaded and cached to: ${localFile.absolutePath}")
-                
-                // Load the downloaded bitmap
-                return@withContext android.graphics.BitmapFactory.decodeFile(localFile.absolutePath)
+
+                // Load the downloaded bitmap with proper options
+                val options = android.graphics.BitmapFactory.Options().apply {
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                }
+                val bitmap = android.graphics.BitmapFactory.decodeFile(localFile.absolutePath, options)
+                Log.d(TAG, "Downloaded bitmap: ${bitmap?.width}x${bitmap?.height}, config=${bitmap?.config}")
+                return@withContext bitmap
             } else {
                 // It's a local file path
                 val file = File(path)
-                if (file.exists()) {
+                Log.d(TAG, "DEBUG loadCustomWallpaper: Checking file at $path")
+                Log.d(TAG, "DEBUG loadCustomWallpaper: exists=${file.exists()}, canRead=${file.canRead()}, length=${file.length()}")
+
+                if (file.exists() && file.length() > 0) {
                     Log.d(TAG, "Loading custom wallpaper from local file: $path")
-                    return@withContext android.graphics.BitmapFactory.decodeFile(path)
+
+                    // Use proper bitmap options
+                    val options = android.graphics.BitmapFactory.Options().apply {
+                        inPreferredConfig = Bitmap.Config.ARGB_8888
+                    }
+                    val bitmap = android.graphics.BitmapFactory.decodeFile(path, options)
+
+                    if (bitmap != null) {
+                        Log.d(TAG, "DEBUG loadCustomWallpaper: Loaded bitmap ${bitmap.width}x${bitmap.height}, config=${bitmap.config}")
+                    } else {
+                        Log.e(TAG, "DEBUG loadCustomWallpaper: decodeFile returned NULL for valid file!")
+                    }
+                    return@withContext bitmap
                 } else {
-                    Log.w(TAG, "Custom wallpaper file not found: $path")
+                    Log.w(TAG, "Custom wallpaper file not found or empty: $path (exists=${file.exists()}, size=${file.length()})")
                     return@withContext null
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load/download custom wallpaper: ${e.message}")
+            Log.e(TAG, "Failed to load/download custom wallpaper: ${e.message}", e)
             null
         }
     }

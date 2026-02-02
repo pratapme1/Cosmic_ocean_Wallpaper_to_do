@@ -172,9 +172,12 @@ class MainActivity : ComponentActivity() {
 
                                 // LOCAL-FIRST FIX: Save to permanent local storage
                                 val permanentFile = File(context.filesDir, "custom_wallpaper.jpg")
+                                android.util.Log.d("MainActivity", "DEBUG: Saving from temp ${tempFile.absolutePath} (size=${tempFile.length()}) to ${permanentFile.absolutePath}")
+
                                 tempFile.copyTo(permanentFile, overwrite = true)
                                 tempFile.delete() // Clean up temp file
 
+                                android.util.Log.d("MainActivity", "DEBUG: Permanent file saved: exists=${permanentFile.exists()}, size=${permanentFile.length()}, canRead=${permanentFile.canRead()}")
                                 android.util.Log.d("MainActivity", "Custom wallpaper saved to: ${permanentFile.absolutePath}")
 
                                 // LOCAL-FIRST FIX: Set wallpaper mode and path in preferences
