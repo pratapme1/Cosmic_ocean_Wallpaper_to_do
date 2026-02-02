@@ -34,6 +34,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
+import java.net.URL
 
 /**
  * Foreground Service for real-time wallpaper updates.
@@ -331,22 +335,43 @@ class RealTimeWallpaperService : Service() {
     }
 
     /**
-     * Load custom wallpaper from storage
+     * Load custom wallpaper from storage or download from URL
+     * CRITICAL FIX: Downloads image from URL and caches it locally
      */
-    private fun loadCustomWallpaper(path: String): Bitmap? {
-        return try {
-            // Try to load from internal storage first
-            val file = java.io.File(path)
-            if (file.exists()) {
-                return android.graphics.BitmapFactory.decodeFile(path)
+    private suspend fun loadCustomWallpaper(path: String): Bitmap? = withContext(Dispatchers.IO) {
+        try {
+            // Check if path is a URL (starts with http)
+            if (path.startsWith("http")) {
+                Log.d(TAG, "Downloading custom wallpaper from URL: $path")
+                
+                // Download the image to local cache
+                val url = URL(path)
+                val localFile = File(applicationContext.filesDir, "custom_wallpaper_cache.jpg")
+                
+                // Download and save
+                url.openStream().use { input ->
+                    FileOutputStream(localFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                
+                Log.d(TAG, "Custom wallpaper downloaded and cached to: ${localFile.absolutePath}")
+                
+                // Load the downloaded bitmap
+                return@withContext android.graphics.BitmapFactory.decodeFile(localFile.absolutePath)
+            } else {
+                // It's a local file path
+                val file = File(path)
+                if (file.exists()) {
+                    Log.d(TAG, "Loading custom wallpaper from local file: $path")
+                    return@withContext android.graphics.BitmapFactory.decodeFile(path)
+                } else {
+                    Log.w(TAG, "Custom wallpaper file not found: $path")
+                    return@withContext null
+                }
             }
-            
-            // If it's a URL, we can't load it directly without network
-            // This should be cached locally by the upload process
-            Log.w(TAG, "Custom wallpaper file not found: $path")
-            null
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load custom wallpaper: ${e.message}")
+            Log.e(TAG, "Failed to load/download custom wallpaper: ${e.message}")
             null
         }
     }
