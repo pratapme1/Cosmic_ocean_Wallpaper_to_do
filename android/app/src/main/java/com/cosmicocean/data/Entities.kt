@@ -37,12 +37,16 @@ data class StarEntity(
     val isArchived: Boolean,
     val archivedAt: Long?,
     
+    // Snooze fields (LOCAL-FIRST FIX: Store snooze state locally)
+    val isSnoozed: Boolean = false,
+    val snoozeUntil: Long? = null,
+
     // Local-first sync fields
     val syncStatus: String = "pending",  // pending, synced, conflict, error
     val syncVersion: Long = 0,
     val updatedAt: Long = System.currentTimeMillis(),
     val isDeleted: Boolean = false,  // Soft delete for sync
-    
+
     // Server timestamp for conflict resolution (CRITICAL FIX: Use server time)
     val serverUpdatedAt: Long? = null
 )

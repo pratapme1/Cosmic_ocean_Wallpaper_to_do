@@ -409,7 +409,127 @@ class SyncManagerTest {
     }
 
     // =========================================================================
-    // Test Suite 8: User Isolation
+    // Test Suite 8: Snooze Operations
+    // =========================================================================
+
+    @Test
+    fun `snooze operation queues correctly`() {
+        val userId = "user_1"
+        testDb.createUser(userId)
+
+        val task = testDb.createTask(userId, mapOf("title" to "Task to Snooze"), System.currentTimeMillis() - 1000)
+        val snoozeDuration = 30 // minutes
+        val snoozeUntil = System.currentTimeMillis() + (snoozeDuration * 60 * 1000)
+
+        val changes = listOf(
+            SyncChange(
+                type = "snooze",
+                clientId = "snooze_1",
+                timestamp = System.currentTimeMillis(),
+                data = mapOf(
+                    "id" to task.id,
+                    "snooze_until" to snoozeUntil,
+                    "is_snoozed" to true
+                )
+            )
+        )
+
+        val result = testDb.sync(userId, 0, changes)
+
+        assertEquals(1, result.applied)
+        val snoozedTask = testDb.getTask(task.id, userId)
+        assertNotNull(snoozedTask)
+        assertTrue(snoozedTask?.snoozed == true)
+        assertEquals(snoozeUntil, snoozedTask?.snoozeUntil)
+    }
+
+    @Test
+    fun `snooze non-existent task returns task_not_found`() {
+        val userId = "user_1"
+        testDb.createUser(userId)
+
+        val changes = listOf(
+            SyncChange(
+                type = "snooze",
+                clientId = "snooze_1",
+                timestamp = System.currentTimeMillis(),
+                data = mapOf(
+                    "id" to "non_existent",
+                    "snooze_until" to System.currentTimeMillis() + 3600000,
+                    "is_snoozed" to true
+                )
+            )
+        )
+
+        val result = testDb.sync(userId, 0, changes)
+
+        assertEquals(0, result.applied)
+        assertEquals(1, result.rejected)
+        assertEquals("task_not_found", result.conflicts[0].reason)
+    }
+
+    // =========================================================================
+    // Test Suite 9: Clear All Operations
+    // =========================================================================
+
+    @Test
+    fun `clear all tasks removes all user tasks`() {
+        val userId = "user_1"
+        testDb.createUser(userId)
+
+        // Create multiple tasks
+        testDb.createTask(userId, mapOf("title" to "Task 1"), System.currentTimeMillis() - 3000)
+        testDb.createTask(userId, mapOf("title" to "Task 2"), System.currentTimeMillis() - 2000)
+        testDb.createTask(userId, mapOf("title" to "Task 3"), System.currentTimeMillis() - 1000)
+
+        assertEquals(3, testDb.getTasks(userId).size)
+
+        val changes = listOf(
+            SyncChange(
+                type = "clear_all",
+                clientId = "clear_1",
+                timestamp = System.currentTimeMillis(),
+                data = emptyMap()
+            )
+        )
+
+        val result = testDb.sync(userId, 0, changes)
+
+        assertEquals(1, result.applied)
+        assertEquals(0, testDb.getTasks(userId).size)
+    }
+
+    @Test
+    fun `clear all only affects own tasks not other users`() {
+        val user1 = "user_1"
+        val user2 = "user_2"
+        testDb.createUser(user1)
+        testDb.createUser(user2)
+
+        // Create tasks for both users
+        testDb.createTask(user1, mapOf("title" to "User 1 Task"), System.currentTimeMillis())
+        testDb.createTask(user2, mapOf("title" to "User 2 Task"), System.currentTimeMillis())
+
+        val changes = listOf(
+            SyncChange(
+                type = "clear_all",
+                clientId = "clear_1",
+                timestamp = System.currentTimeMillis(),
+                data = emptyMap()
+            )
+        )
+
+        // User 1 clears their tasks
+        testDb.sync(user1, 0, changes)
+
+        // User 1 should have no tasks
+        assertEquals(0, testDb.getTasks(user1).size)
+        // User 2 should still have their task
+        assertEquals(1, testDb.getTasks(user2).size)
+    }
+
+    // =========================================================================
+    // Test Suite 10: User Isolation
     // =========================================================================
 
     @Test
@@ -494,7 +614,9 @@ data class TestTask(
     val completed: Boolean,
     val deleted: Boolean,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val snoozed: Boolean = false,
+    val snoozeUntil: Long? = null
 )
 
 /**
@@ -592,6 +714,17 @@ class TestDatabase {
                         result.second?.let { conflicts.add(it) }
                     }
                 }
+                "snooze" -> {
+                    val result = applySnooze(userId, change)
+                    if (result.first) applied++ else {
+                        rejected++
+                        result.second?.let { conflicts.add(it) }
+                    }
+                }
+                "clear_all" -> {
+                    applyClearAll(userId)
+                    applied++
+                }
                 else -> skipped++
             }
         }
@@ -648,5 +781,33 @@ class TestDatabase {
 
         deleteTask(taskId, userId)
         return true to null
+    }
+
+    private fun applySnooze(userId: String, change: SyncChange): Pair<Boolean, SyncConflict?> {
+        val taskId = change.data["id"]?.toString() ?: change.clientId
+        val serverTask = getTask(taskId, userId)
+            ?: return false to SyncConflict(change.clientId, "task_not_found")
+
+        if (change.timestamp < serverTask.updatedAt) {
+            return false to SyncConflict(change.clientId, "stale_data", serverTask)
+        }
+
+        val snoozed = change.data["is_snoozed"] as? Boolean ?: true
+        val snoozeUntil = (change.data["snooze_until"] as? Number)?.toLong()
+
+        val updated = serverTask.copy(
+            snoozed = snoozed,
+            snoozeUntil = snoozeUntil,
+            updatedAt = change.timestamp
+        )
+        tasks[taskId] = updated
+        return true to null
+    }
+
+    private fun applyClearAll(userId: String) {
+        val userTasks = tasks.values.filter { it.userId == userId && !it.deleted }
+        userTasks.forEach { task ->
+            tasks[task.id] = task.copy(deleted = true, updatedAt = System.currentTimeMillis())
+        }
     }
 }

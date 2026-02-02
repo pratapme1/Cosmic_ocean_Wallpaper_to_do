@@ -222,6 +222,25 @@ class TaskRepository(
     }
 
     /**
+     * LOCAL-FIRST FIX: Clear all tasks
+     *
+     * 1. Clear local DB FIRST (instant UI feedback)
+     * 2. Queue clear_all to SyncManager (background sync)
+     * 3. Trigger wallpaper update
+     */
+    suspend fun clearAllTasks() {
+        // CRITICAL: Clear local DB FIRST for instant UI feedback
+        starDao.deleteAllStars()
+        Log.d(TAG, "Cleared all stars from local DB")
+
+        // Queue to SyncManager for backend sync
+        syncManager.queueClearAll()
+
+        // Trigger wallpaper update
+        triggerImmediateWallpaperUpdate()
+    }
+
+    /**
      * CRITICAL FIX: Immediate wallpaper update (NO throttling)
      * Every task change triggers instant wallpaper refresh
      * 

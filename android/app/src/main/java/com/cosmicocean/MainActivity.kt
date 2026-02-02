@@ -563,16 +563,13 @@ class MainActivity : ComponentActivity() {
     private fun clearAllTasks() {
         lifecycleScope.launch {
             try {
-                val api = NetworkModule.getApi(this@MainActivity)
-                api.clearAllTasks()
+                // LOCAL-FIRST FIX: Use ViewModel which handles local DB + sync queue
+                viewModel.clearAllTasks()
 
-                // CRITICAL FIX: Also clear local Room database to prevent duplicate/zombie tasks
-                database.starDao().deleteAllStars()
+                // Also clear constellation and orbit data
                 database.constellationDao().deleteAllLinks()
                 database.orbitDao().deleteAllOrbits()
 
-                viewModel.stars.clear()
-                viewModel.completedStars.clear()
                 triggerImmediateUpdate()
                 Toast.makeText(this@MainActivity, "Ocean Cleared", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {

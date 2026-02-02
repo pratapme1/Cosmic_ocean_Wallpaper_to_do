@@ -109,4 +109,21 @@ class MainViewModel(
         // EPIC 9: Save star properties (including position) to DB and backend
         repository.updateStar(star)
     }
+
+    /**
+     * LOCAL-FIRST FIX: Clear all tasks
+     * Uses repository to clear local DB first, then sync
+     */
+    suspend fun clearAllTasks() {
+        android.util.Log.d("MainViewModel", "clearAllTasks called")
+
+        // Clear in-memory lists
+        stars.clear()
+        completedStars.clear()
+
+        // Clear through repository (handles local DB + sync queue)
+        repository.clearAllTasks()
+
+        android.util.Log.d("MainViewModel", "clearAllTasks completed")
+    }
 }
