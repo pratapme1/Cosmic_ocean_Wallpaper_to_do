@@ -12,7 +12,6 @@ import com.cosmicocean.model.TaskResponse
 import com.cosmicocean.network.ApiService
 import com.cosmicocean.sync.SyncManager
 import com.cosmicocean.service.RealTimeWallpaperService
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -66,6 +65,10 @@ class TaskRepository(
     // === LLM Parsing ===
 
     suspend fun parseTaskInput(input: String): ParsedTaskResult {
+        if (com.cosmicocean.BuildConfig.LOCAL_ONLY) {
+            Log.d(TAG, "LLM Parser: Local-only mode, using local fallback")
+            return createLocalFallback(input, "local_only")
+        }
         if (!isNetworkAvailable()) {
             Log.d(TAG, "LLM Parser: Network unavailable, using local fallback")
             return createLocalFallback(input, "network_unavailable")
@@ -243,14 +246,9 @@ class TaskRepository(
     /**
      * CRITICAL FIX: Immediate wallpaper update (NO throttling)
      * Every task change triggers instant wallpaper refresh
-     * 
-     * CRITICAL: Add 100ms delay to ensure database transaction commits
-     * before wallpaper service queries the database. Prevents race condition
-     * where wallpaper shows stale data (completed tasks still appearing).
      */
     private fun triggerImmediateWallpaperUpdate() {
-        kotlinx.coroutines.GlobalScope.launch {
-            kotlinx.coroutines.delay(100) // Wait for DB transaction to commit
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             try {
                 wallpaperUpdater(context)
                 Log.d(TAG, "Triggered immediate wallpaper update after DB commit")

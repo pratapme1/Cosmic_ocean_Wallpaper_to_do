@@ -104,6 +104,10 @@ class EnvironmentSettingsViewModel(
      */
     private fun syncWithBackend() {
         viewModelScope.launch {
+            if (com.cosmicocean.BuildConfig.LOCAL_ONLY) {
+                Log.d(TAG, "Local-only mode: skipping backend sync")
+                return@launch
+            }
             try {
                 val response = apiService.getPreferences()
                 if (response.isSuccessful && response.body() != null) {
@@ -157,6 +161,10 @@ class EnvironmentSettingsViewModel(
 
             // Background sync to backend (non-blocking)
             try {
+                if (com.cosmicocean.BuildConfig.LOCAL_ONLY) {
+                    Log.d(TAG, "Local-only mode: skipping backend update for $key")
+                    return@launch
+                }
                 val body = mapOf(key to value)
                 val response = apiService.updatePreferences(body)
                 if (response.isSuccessful) {

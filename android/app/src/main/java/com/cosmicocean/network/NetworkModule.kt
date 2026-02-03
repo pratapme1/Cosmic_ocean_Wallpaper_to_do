@@ -22,6 +22,10 @@ object NetworkModule {
     private var isRefreshing = false
 
     fun getApi(context: Context): ApiService {
+        if (com.cosmicocean.BuildConfig.LOCAL_ONLY) {
+            return LocalOnlyApiService(context.applicationContext)
+        }
+
         val tokenManager = TokenManager(context)
 
         val logging = HttpLoggingInterceptor().apply {

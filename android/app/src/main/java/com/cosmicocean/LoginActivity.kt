@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.lifecycleScope
 import com.cosmicocean.auth.TokenManager
 import com.cosmicocean.network.NetworkModule
+import com.cosmicocean.network.LocalOnlyUserStore
 import com.cosmicocean.ui.components.AuthScreen
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
@@ -22,6 +23,19 @@ class LoginActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         tokenManager = TokenManager(this)
+
+        if (com.cosmicocean.BuildConfig.LOCAL_ONLY && !tokenManager.isLoggedIn()) {
+            val userStore = LocalOnlyUserStore(this)
+            val user = userStore.getOrCreateUser()
+            tokenManager.saveTokens(
+                "local-access-${user.id}",
+                "local-refresh-${user.id}",
+                user.id,
+                user.email
+            )
+            navigateToMain()
+            return
+        }
 
         // Check if already logged in
         if (tokenManager.isLoggedIn()) {
