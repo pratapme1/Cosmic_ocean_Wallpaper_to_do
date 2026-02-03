@@ -10,13 +10,18 @@ import com.cosmicocean.model.ParsedTaskResult
 import com.cosmicocean.model.Star
 import com.cosmicocean.model.TaskResponse
 import com.cosmicocean.network.ApiService
+import com.cosmicocean.network.LocalOnlyUserStore
 import com.cosmicocean.sync.SyncManager
 import com.cosmicocean.service.RealTimeWallpaperService
+import com.cosmicocean.utils.LocalTaskParser
+import com.cosmicocean.systems.TrophyManager
+import com.cosmicocean.auth.TokenManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.util.UUID
+import com.cosmicocean.data.CosmicDatabase
 
 /**
  * CRITICAL FIX: TaskRepository - Unified Local-First Repository
@@ -92,19 +97,9 @@ class TaskRepository(
     }
 
     private fun createLocalFallback(input: String, reason: String): ParsedTaskResult {
-        return ParsedTaskResult(
-            title = input.trim(),
-            dueDate = null,
-            dueTime = null,
-            estimateMinutes = null,
-            priority = 2,
-            category = null,
-            energyLevel = "medium",
-            contextTags = extractContextTags(input),
-            isRecurring = false,
-            recurringPattern = null,
-            confidence = 0.5,
-            source = "local_fallback",
+        val parsed = LocalTaskParser.parse(input)
+        return parsed.copy(
+            source = parsed.source.ifBlank { "local_parser" },
             reason = reason
         )
     }
@@ -157,7 +152,8 @@ class TaskRepository(
                 "is_recurring" to star.isRecurring,
                 "echo_interval" to (star.echoInterval?.name ?: ""),
                 "is_subtask" to star.isSubtask,
-                "priority" to star.urgency
+                "priority" to star.urgency,
+                "due_date" to star.dueDate
             )
         )
 
@@ -172,6 +168,7 @@ class TaskRepository(
      * CRITICAL FIX: Update star - Local-first with unified sync
      */
     suspend fun updateStar(star: Star) {
+        val existing = starDao.getByLocalId(star.id)
         // Update local DB immediately with pending status
         val entity = star.toEntity().copy(
             syncStatus = "pending",
@@ -180,6 +177,17 @@ class TaskRepository(
         
         starDao.insertStarWithTransaction(entity)
         Log.d(TAG, "Updated star locally: ${star.id}")
+
+        // Achievement tracking for new completions
+        if (star.isCompleted && existing?.isCompleted != true) {
+            try {
+                val userId = resolveUserId()
+                val trophyManager = TrophyManager(CosmicDatabase.getDatabase(context), userId)
+                trophyManager.recordCompletion()
+            } catch (e: Exception) {
+                Log.w(TAG, "Achievement update failed: ${e.message}")
+            }
+        }
 
         // Queue to SyncManager
         val updateData = when {
@@ -199,7 +207,8 @@ class TaskRepository(
                 "rawTitle" to star.title,
                 "priority" to star.urgency,
                 "x" to star.particle.x,
-                "y" to star.particle.y
+                "y" to star.particle.y,
+                "due_date" to star.dueDate
             )
         }
         
@@ -255,6 +264,15 @@ class TaskRepository(
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to trigger wallpaper update: ${e.message}")
             }
+        }
+    }
+
+    private fun resolveUserId(): String {
+        return if (com.cosmicocean.BuildConfig.LOCAL_ONLY) {
+            LocalOnlyUserStore(context).getOrCreateUser().id
+        } else {
+            TokenManager(context).getUserId()
+                ?: LocalOnlyUserStore(context).getOrCreateUser().id
         }
     }
 

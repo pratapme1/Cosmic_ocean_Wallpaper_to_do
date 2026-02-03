@@ -12,6 +12,7 @@ import com.cosmicocean.systems.CommandHistory
 import com.cosmicocean.sync.ConflictResolution
 import com.cosmicocean.sync.SyncManager
 import com.cosmicocean.sync.SyncState
+import com.cosmicocean.model.ParsedTaskResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -77,6 +78,10 @@ class MainViewModel(
         if (parent != null) {
             orbitalSystem.createOrbit(parent, star)
         }
+    }
+
+    suspend fun parseTaskInput(input: String): ParsedTaskResult {
+        return repository.parseTaskInput(input)
     }
 
     suspend fun completeStar(star: Star) {

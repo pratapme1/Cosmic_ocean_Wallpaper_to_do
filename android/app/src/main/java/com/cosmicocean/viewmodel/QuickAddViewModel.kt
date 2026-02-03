@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cosmicocean.data.TaskRepository
 import com.cosmicocean.model.Star
+import com.cosmicocean.utils.TaskDateUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,6 +29,11 @@ class QuickAddViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
+                val parsed = repository.parseTaskInput(title)
+                val dueDateMs = TaskDateUtils.parseToMillis(parsed.dueDate, parsed.dueTime)
+                val cleanedTitle = parsed.title.ifBlank { title }
+                val urgency = parsed.priority
+
                 // Calculate random position
                 val random = Random()
                 val horizontalPadding = screenWidth * 0.15f
@@ -36,8 +42,8 @@ class QuickAddViewModel(
                 val x = horizontalPadding + random.nextFloat() * (screenWidth - 2 * horizontalPadding)
                 val y = verticalPadding + random.nextFloat() * (screenHeight - 2 * verticalPadding)
                 
-                // Create star (Priority default 2, no description)
-                val star = Star(x, y, title, 2, null)
+                // Create star with parsed priority and due date (if available)
+                val star = Star(x, y, cleanedTitle, urgency, dueDateMs)
                 
                 // Save
                 repository.addStar(star)

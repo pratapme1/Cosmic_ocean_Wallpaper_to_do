@@ -23,6 +23,8 @@ import com.cosmicocean.model.UserPreferencesResponse
 import com.cosmicocean.model.UserProfile
 import com.cosmicocean.model.WallpaperTokenResponse
 import com.cosmicocean.utils.WallpaperPreferencesManager
+import com.cosmicocean.utils.LocalTaskParser
+import com.cosmicocean.utils.TaskDateUtils
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.first
 import okhttp3.MediaType.Companion.toMediaType
@@ -83,6 +85,7 @@ class LocalOnlyApiService(
     override suspend fun createTask(body: Map<String, String>): Response<TaskResponse> {
         val title = body["rawTitle"] ?: body["title"] ?: "New Task"
         val priority = body["priority"]?.toIntOrNull() ?: 2
+        val dueDateMs = TaskDateUtils.parseToMillis(body["due_date"] ?: body["dueDate"], body["due_time"] ?: body["dueTime"])
         val localId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
         val entity = com.cosmicocean.data.StarEntity(
@@ -90,7 +93,7 @@ class LocalOnlyApiService(
             serverId = null,
             title = title,
             urgency = priority,
-            dueDate = null,
+            dueDate = dueDateMs,
             x = 0f,
             y = 0f,
             createdAt = now,
@@ -112,21 +115,7 @@ class LocalOnlyApiService(
     }
 
     override suspend fun parseTaskLLM(body: ParseRequest): Response<ParseLLMResponse> {
-        val fallback = ParsedTaskResult(
-            title = body.title.trim(),
-            dueDate = null,
-            dueTime = null,
-            estimateMinutes = null,
-            priority = 2,
-            category = null,
-            energyLevel = "medium",
-            contextTags = extractContextTags(body.title),
-            isRecurring = false,
-            recurringPattern = null,
-            confidence = 0.5,
-            source = "local_fallback",
-            reason = "local_only"
-        )
+        val fallback = LocalTaskParser.parse(body.title)
         return Response.success(
             ParseLLMResponse(
                 success = true,
@@ -149,6 +138,9 @@ class LocalOnlyApiService(
 
     override suspend fun updateTask(id: String, body: Map<String, Any>): Response<TaskResponse> {
         val existing = db.starDao().getById(id) ?: return Response.error(404, emptyResponse())
+        val dueDateValue = body["due_date"] ?: body["dueDate"]
+        val dueTimeValue = body["due_time"] ?: body["dueTime"]
+        val parsedDueDate = TaskDateUtils.parseToMillis(dueDateValue, dueTimeValue)
         val updated = existing.copy(
             title = body["rawTitle"]?.toString() ?: body["title"]?.toString() ?: existing.title,
             urgency = (body["priority"] as? Number)?.toInt() ?: existing.urgency,
@@ -158,6 +150,7 @@ class LocalOnlyApiService(
             archivedAt = if (body["archived"] as? Boolean == true) System.currentTimeMillis() else existing.archivedAt,
             x = (body["x"] as? Number)?.toFloat() ?: existing.x,
             y = (body["y"] as? Number)?.toFloat() ?: existing.y,
+            dueDate = parsedDueDate ?: existing.dueDate,
             updatedAt = System.currentTimeMillis(),
             syncStatus = "synced"
         )

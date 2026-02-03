@@ -547,14 +547,7 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             try {
-                NetworkModule.getApi(this@MainActivity).updateTask(
-                    star.id,
-                    mapOf(
-                        "title" to title,
-                        "priority" to urgency.toString(),
-                        "due_date" to star.dueDate.toString()
-                    )
-                )
+                viewModel.updateStar(star)
                 triggerImmediateUpdate()
             } catch (e: Exception) {}
         }
@@ -596,11 +589,14 @@ class MainActivity : ComponentActivity() {
         val x = offset?.x ?: (horizontalPadding + random.nextFloat() * (screenWidth - 2 * horizontalPadding))
         val y = offset?.y ?: (verticalPadding + random.nextFloat() * (screenHeight - 2 * verticalPadding))
 
-        // Create star with default P2 (will be updated from backend after NLP parsing)
-        // TaskRepository.addStar() handles both local DB insert AND backend sync
-        val star = Star(x, y, title, 2, null)
-
         lifecycleScope.launch {
+            val parsed = viewModel.parseTaskInput(title)
+            val dueDateMs = com.cosmicocean.utils.TaskDateUtils.parseToMillis(parsed.dueDate, parsed.dueTime)
+            val cleanedTitle = parsed.title.ifBlank { title }
+            val urgency = parsed.priority
+
+            // TaskRepository.addStar() handles both local DB insert AND backend sync
+            val star = Star(x, y, cleanedTitle, urgency, dueDateMs)
             viewModel.addStar(star)
             // No need for local delay here anymore, as RealTimeWallpaperService.ACTION_FORCE_UPDATE 
             // now includes a 500ms delay internally for consistency.
@@ -628,6 +624,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun schedulePeriodicWallpaperUpdates() {
+        // LOCAL-FIRST: Auto-enable wallpaper updates if preference not set
+        if (com.cosmicocean.BuildConfig.LOCAL_ONLY && !wallpaperPreferences.hasSetWallpaperPreference()) {
+            wallpaperPreferences.setWallpaperEnabled(true)
+        }
         // Only proceed if wallpaper integration is explicitly enabled by the user
         if (!wallpaperPreferences.isWallpaperEnabled()) {
             android.util.Log.d("MainActivity", "Wallpaper updates skipped: Consent not granted.")
@@ -635,20 +635,14 @@ class MainActivity : ComponentActivity() {
         }
 
         // Start real-time wallpaper service (1-minute updates)
-        if (tokenManager.isLoggedIn()) {
-            RealTimeWallpaperService.start(this)
-        }
+        RealTimeWallpaperService.start(this)
 
         // Keep WorkManager as fallback (every 15 minutes) in case service is killed
         val periodicWorkRequest = androidx.work.PeriodicWorkRequestBuilder<com.cosmicocean.worker.WallpaperUpdateWorker>(
             15, java.util.concurrent.TimeUnit.MINUTES
         )
-            .setConstraints(
-                androidx.work.Constraints.Builder()
-                    .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
-                    // FIX: Removed setRequiresBatteryNotLow(true) - was blocking updates when battery <20%
-                    .build()
-            )
+            // LOCAL-FIRST: No network required for local wallpaper generation
+            .setConstraints(androidx.work.Constraints.Builder().build())
             .build()
 
         // FIX: Changed from KEEP to UPDATE - ensures fresh scheduling even if worker was in failed state
@@ -668,7 +662,8 @@ class MainActivity : ComponentActivity() {
         // FIX: Added setExpedited for truly immediate execution
         val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.cosmicocean.worker.WallpaperUpdateWorker>()
             .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-            .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
+            // LOCAL-FIRST: No network required for local wallpaper generation
+            .setConstraints(androidx.work.Constraints.Builder().build())
             .build()
         androidx.work.WorkManager.getInstance(this).enqueue(workRequest)
     }

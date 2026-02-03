@@ -7,16 +7,16 @@ import kotlinx.coroutines.flow.Flow
 interface StarDao {
     // === Query Methods ===
     
-    @Query("SELECT * FROM stars WHERE isArchived = 0 AND isDeleted = 0 ORDER BY urgency ASC, dueDate ASC")
+    @Query("SELECT * FROM stars WHERE isArchived = 0 AND isDeleted = 0 ORDER BY CASE WHEN dueDate IS NULL THEN 1 ELSE 0 END, dueDate ASC, urgency ASC")
     fun getAllActiveStars(): Flow<List<StarEntity>>
     
     @Query("SELECT * FROM stars WHERE isArchived = 0 AND isDeleted = 0")
     suspend fun getAllActiveStarsSync(): List<StarEntity>
     
-    @Query("SELECT * FROM stars WHERE isArchived = 0 AND isDeleted = 0 AND isCompleted = 0 ORDER BY urgency ASC, dueDate ASC LIMIT 1")
+    @Query("SELECT * FROM stars WHERE isArchived = 0 AND isDeleted = 0 AND isCompleted = 0 ORDER BY CASE WHEN dueDate IS NULL THEN 1 ELSE 0 END, dueDate ASC, urgency ASC LIMIT 1")
     suspend fun getTopTask(): StarEntity?
     
-    @Query("SELECT * FROM stars WHERE isArchived = 0 AND isDeleted = 0 AND isCompleted = 0 ORDER BY urgency ASC, dueDate ASC LIMIT 3")
+    @Query("SELECT * FROM stars WHERE isArchived = 0 AND isDeleted = 0 AND isCompleted = 0 ORDER BY CASE WHEN dueDate IS NULL THEN 1 ELSE 0 END, dueDate ASC, urgency ASC LIMIT 3")
     suspend fun getTop3Tasks(): List<StarEntity>
     
     @Query("SELECT COUNT(*) FROM stars WHERE isArchived = 0 AND isDeleted = 0 AND isCompleted = 0")

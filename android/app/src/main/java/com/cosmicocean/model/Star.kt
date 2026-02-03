@@ -2,6 +2,9 @@ package com.cosmicocean.model
 
 import androidx.compose.ui.geometry.Offset
 import com.cosmicocean.physics.Particle
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import kotlin.math.*
 
 enum class Temperature { BLUE, ORANGE, RED }
@@ -56,13 +59,20 @@ class Star(
             val diffMs = it - System.currentTimeMillis()
             dueIn = diffMs / 60000f
         }
-        // EPIC 9: SIMPLIFIED COLOR LOGIC - Priority-based only
-        // P1 = RED (urgent), P2 = ORANGE (normal), P3 = BLUE (future)
-        temperature = when (urgency) {
-            1 -> Temperature.RED      // P1 = urgent
-            2 -> Temperature.ORANGE   // P2 = normal
-            3 -> Temperature.BLUE     // P3 = future
-            else -> Temperature.ORANGE // Default to P2
+        // Color should reflect due-date urgency:
+        // Red = overdue or due today, Orange = due tomorrow, Blue = future/no date.
+        temperature = if (dueDate == null) {
+            Temperature.BLUE
+        } else {
+            val zone = ZoneId.systemDefault()
+            val today = LocalDate.now(zone)
+            val dueLocalDate = Instant.ofEpochMilli(dueDate!!).atZone(zone).toLocalDate()
+            when {
+                dueLocalDate.isBefore(today) -> Temperature.RED
+                dueLocalDate.isEqual(today) -> Temperature.RED
+                dueLocalDate.isEqual(today.plusDays(1)) -> Temperature.ORANGE
+                else -> Temperature.BLUE
+            }
         }
     }
 

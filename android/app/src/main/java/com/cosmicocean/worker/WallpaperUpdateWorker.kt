@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.cosmicocean.data.CosmicDatabase
+import com.cosmicocean.utils.AchievementUtils
 import com.cosmicocean.utils.WallpaperPreferencesManager
 import com.cosmicocean.wallpaper.LocalWallpaperGenerator
 import com.cosmicocean.wallpaper.WallpaperTheme
@@ -41,16 +42,15 @@ class WallpaperUpdateWorker(
 
             Log.d(TAG, "Preferences - Theme: $theme, Mode: $wallpaperMode")
 
-            // 2. Get screen dimensions
-            val displayMetrics = applicationContext.resources.displayMetrics
-            val screenWidth = displayMetrics.widthPixels
-            val screenHeight = displayMetrics.heightPixels
-            Log.d(TAG, "Screen dimensions: ${screenWidth}x${screenHeight}")
+            // 2. Get target dimensions (use stored resolution for backend alignment)
+            val (screenWidth, screenHeight) = getTargetResolution(prefsManager)
+            Log.d(TAG, "Target dimensions: ${screenWidth}x${screenHeight}")
 
             // 3. Get tasks from LOCAL database (no network needed!)
             val database = CosmicDatabase.getDatabase(applicationContext)
             val topTasks = database.starDao().getTop3Tasks()
             val totalCount = database.starDao().getActiveTaskCount()
+            val achievements = AchievementUtils.getSnapshot(applicationContext)
 
             Log.d(TAG, "LOCAL-FIRST: Got ${topTasks.size} top tasks, total: $totalCount (from local DB)")
 
@@ -67,19 +67,21 @@ class WallpaperUpdateWorker(
                             totalTaskCount = totalCount,
                             customBackground = customBackground,
                             width = screenWidth,
-                            height = screenHeight
+                            height = screenHeight,
+                            achievementCount = achievements.achievementCount,
+                            streakDays = achievements.streakDays
                         )
                     } else {
                         Log.w(TAG, "Custom background decode failed, falling back to generated")
-                        generateThemedWallpaper(topTasks, totalCount, theme, screenWidth, screenHeight)
+                        generateThemedWallpaper(topTasks, totalCount, theme, screenWidth, screenHeight, achievements.achievementCount, achievements.streakDays)
                     }
                 } else {
                     Log.w(TAG, "Custom wallpaper path invalid, falling back to generated")
-                    generateThemedWallpaper(topTasks, totalCount, theme, screenWidth, screenHeight)
+                    generateThemedWallpaper(topTasks, totalCount, theme, screenWidth, screenHeight, achievements.achievementCount, achievements.streakDays)
                 }
             } else {
                 // Generated wallpaper mode
-                generateThemedWallpaper(topTasks, totalCount, theme, screenWidth, screenHeight)
+                generateThemedWallpaper(topTasks, totalCount, theme, screenWidth, screenHeight, achievements.achievementCount, achievements.streakDays)
             }
 
             // 5. Set wallpaper
@@ -115,7 +117,9 @@ class WallpaperUpdateWorker(
         totalCount: Int,
         theme: String,
         width: Int,
-        height: Int
+        height: Int,
+        achievementCount: Int,
+        streakDays: Int
     ): android.graphics.Bitmap {
         val wallpaperTheme = when (theme.lowercase()) {
             "deep_ocean" -> WallpaperTheme.DEEP_OCEAN
@@ -130,11 +134,39 @@ class WallpaperUpdateWorker(
             totalTaskCount = totalCount,
             theme = wallpaperTheme,
             width = width,
-            height = height
+            height = height,
+            achievementCount = achievementCount,
+            streakDays = streakDays
         )
     }
 
     companion object {
         const val TAG = "WallpaperUpdateWorker"
+    }
+
+    private fun getTargetResolution(prefsManager: WallpaperPreferencesManager): Pair<Int, Int> {
+        val parsed = parseResolution(prefsManager.getResolution())
+        val (rawWidth, rawHeight) = if (parsed != null) {
+            parsed
+        } else {
+            val displayMetrics = applicationContext.resources.displayMetrics
+            Pair(displayMetrics.widthPixels, displayMetrics.heightPixels)
+        }
+
+        // Always return portrait for lock screen alignment
+        return if (rawHeight >= rawWidth) {
+            Pair(rawWidth, rawHeight)
+        } else {
+            Pair(rawHeight, rawWidth)
+        }
+    }
+
+    private fun parseResolution(resolution: String): Pair<Int, Int>? {
+        val parts = resolution.lowercase().split("x")
+        if (parts.size != 2) return null
+        val width = parts[0].toIntOrNull() ?: return null
+        val height = parts[1].toIntOrNull() ?: return null
+        if (width <= 0 || height <= 0) return null
+        return Pair(width, height)
     }
 }

@@ -16,13 +16,15 @@ import java.util.concurrent.TimeUnit
 object NetworkModule {
     private const val TAG = "NetworkModule"
     private var baseUrl = com.cosmicocean.BuildConfig.API_BASE_URL
+    private const val FORCE_LOCAL_ONLY = true
 
     // Flag to prevent concurrent token refresh
     @Volatile
     private var isRefreshing = false
 
     fun getApi(context: Context): ApiService {
-        if (com.cosmicocean.BuildConfig.LOCAL_ONLY) {
+        if (FORCE_LOCAL_ONLY || com.cosmicocean.BuildConfig.LOCAL_ONLY) {
+            Log.d(TAG, "Local-only mode enabled: using LocalOnlyApiService (network disabled)")
             return LocalOnlyApiService(context.applicationContext)
         }
 

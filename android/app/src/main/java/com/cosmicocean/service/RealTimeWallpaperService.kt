@@ -29,6 +29,7 @@ import com.cosmicocean.data.CosmicDatabase
 import com.cosmicocean.network.NetworkModule
 import com.cosmicocean.auth.TokenManager
 import com.cosmicocean.utils.WallpaperPreferencesManager
+import com.cosmicocean.utils.AchievementUtils
 import com.cosmicocean.wallpaper.LocalWallpaperGenerator
 import com.cosmicocean.wallpaper.WallpaperTheme
 import kotlinx.coroutines.CoroutineScope
@@ -324,7 +325,8 @@ class RealTimeWallpaperService : Service() {
             // Get top 3 tasks for wallpaper display
             val topTasks = db.starDao().getTop3Tasks()
             val totalTaskCount = db.starDao().getActiveTaskCount()
-            val (width, height) = getScreenResolution()
+            val achievements = AchievementUtils.getSnapshot(applicationContext)
+            val (width, height) = getTargetResolution()
 
             Log.d(TAG, "Generating local wallpaper: ${width}x${height}, tasks=${topTasks.size}, total=$totalTaskCount")
 
@@ -360,7 +362,9 @@ class RealTimeWallpaperService : Service() {
                             totalTaskCount = totalTaskCount,
                             customBackground = customBitmap,
                             width = width,
-                            height = height
+                            height = height,
+                            achievementCount = achievements.achievementCount,
+                            streakDays = achievements.streakDays
                         )
 
                         // Recycle original bitmap to free memory
@@ -385,7 +389,9 @@ class RealTimeWallpaperService : Service() {
                 totalTaskCount = totalTaskCount,
                 theme = theme,
                 width = width,
-                height = height
+                height = height,
+                achievementCount = achievements.achievementCount,
+                streakDays = achievements.streakDays
             )
         } catch (e: Exception) {
             Log.e(TAG, "Local generation failed: ${e.message}", e)
@@ -449,11 +455,35 @@ class RealTimeWallpaperService : Service() {
     /**
      * Get screen resolution
      */
-    private fun getScreenResolution(): Pair<Int, Int> {
-        val windowManager = applicationContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val metrics = DisplayMetrics()
-        windowManager.defaultDisplay.getRealMetrics(metrics)
-        return Pair(metrics.widthPixels, metrics.heightPixels)
+    private fun getTargetResolution(): Pair<Int, Int> {
+        val prefs = WallpaperPreferencesManager(applicationContext)
+
+        val parsed = parseResolution(prefs.getResolution())
+        val (rawWidth, rawHeight) = if (parsed != null) {
+            parsed
+        } else {
+            val windowManager = applicationContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay.getRealMetrics(metrics)
+            Pair(metrics.widthPixels, metrics.heightPixels)
+        }
+
+        // Always return portrait orientation for lock screen alignment
+        return if (rawHeight >= rawWidth) {
+            Pair(rawWidth, rawHeight)
+        } else {
+            Pair(rawHeight, rawWidth)
+        }
+    }
+
+    private fun parseResolution(resolution: String): Pair<Int, Int>? {
+        val parts = resolution.lowercase().split("x")
+        if (parts.size != 2) return null
+        val width = parts[0].toIntOrNull() ?: return null
+        val height = parts[1].toIntOrNull() ?: return null
+        if (width <= 0 || height <= 0) return null
+        return Pair(width, height)
     }
 
     /**
