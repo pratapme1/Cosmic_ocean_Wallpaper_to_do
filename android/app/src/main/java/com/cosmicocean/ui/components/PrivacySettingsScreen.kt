@@ -581,7 +581,7 @@ fun PrivacySettingsWrapper(
 
     // Load preferences from API on first composition
     LaunchedEffect(Unit) {
-        Log.d(TAG, "🔄 Loading preferences from API...")
+        Log.d(TAG, "🔄 Loading preferences ${if (com.cosmicocean.BuildConfig.LOCAL_ONLY) "locally" else "from API"}...")
         try {
             val response = apiService.getPreferences()
             Log.d(TAG, "📥 API Response: ${response.code()} - isSuccessful: ${response.isSuccessful}")
@@ -606,8 +606,12 @@ fun PrivacySettingsWrapper(
                     biometricRevealEnabled = apiPrefs.biometricRevealEnabled,
                     hideAllTasksMode = apiPrefs.hideAllTasksMode
                 )
-                loadedFromApi = true
-                successMessage = "Settings loaded from server"
+                loadedFromApi = !com.cosmicocean.BuildConfig.LOCAL_ONLY
+                successMessage = if (com.cosmicocean.BuildConfig.LOCAL_ONLY) {
+                    "Settings loaded locally"
+                } else {
+                    "Settings loaded from server"
+                }
             } else {
                 val errorBody = response.errorBody()?.string()
                 Log.e(TAG, "❌ API Error: ${response.code()} - $errorBody")
@@ -623,7 +627,7 @@ fun PrivacySettingsWrapper(
 
     // Helper function to save preferences to API
     fun savePreference(key: String, value: Any) {
-        Log.d(TAG, "💾 Saving to API: $key = $value")
+        Log.d(TAG, "💾 Saving ${if (com.cosmicocean.BuildConfig.LOCAL_ONLY) "locally" else "to API"}: $key = $value")
         scope.launch {
             try {
                 val body = mapOf(key to value)
@@ -631,7 +635,11 @@ fun PrivacySettingsWrapper(
 
                 if (response.isSuccessful) {
                     Log.d(TAG, "✅ Saved successfully: $key")
-                    successMessage = "Saved: $key"
+                    successMessage = if (com.cosmicocean.BuildConfig.LOCAL_ONLY) {
+                        "Saved locally: $key"
+                    } else {
+                        "Saved: $key"
+                    }
                 } else {
                     val errorBody = response.errorBody()?.string()
                     Log.e(TAG, "❌ Save failed: ${response.code()} - $errorBody")
@@ -672,7 +680,11 @@ fun PrivacySettingsWrapper(
                         CircularProgressIndicator(color = Color(0xFF9C27B0))
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            "Loading settings from server...",
+                            if (com.cosmicocean.BuildConfig.LOCAL_ONLY) {
+                                "Loading settings locally..."
+                            } else {
+                                "Loading settings from server..."
+                            },
                             color = Color.White.copy(alpha = 0.7f),
                             fontSize = 14.sp
                         )
@@ -694,6 +706,23 @@ fun PrivacySettingsWrapper(
                                 "✅ Connected to server - changes sync automatically",
                                 modifier = Modifier.padding(8.dp),
                                 color = Color(0xFF81C784),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                    if (com.cosmicocean.BuildConfig.LOCAL_ONLY) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFF1B1B2F).copy(alpha = 0.3f)
+                            )
+                        ) {
+                            Text(
+                                "🔒 Local-only mode - settings stay on this device",
+                                modifier = Modifier.padding(8.dp),
+                                color = Color(0xFF90CAF9),
                                 fontSize = 12.sp
                             )
                         }

@@ -22,6 +22,7 @@ import android.util.DisplayMetrics
 import android.util.Log
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
+import androidx.room.InvalidationTracker
 import com.cosmicocean.MainActivity
 import com.cosmicocean.R
 import com.cosmicocean.data.CosmicDatabase
@@ -36,8 +37,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileOutputStream
-import java.net.URL
 
 /**
  * Foreground Service for real-time wallpaper updates.
@@ -55,16 +54,19 @@ class RealTimeWallpaperService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
     private var isUpdating = false  // Tracks if periodic updates are scheduled
     private var wallpaperGenerationInProgress = false  // CRITICAL FIX: Tracks actual wallpaper generation
+    private var pendingUpdate = false  // Tracks updates requested while generation is running
     private var screenReceiver: BroadcastReceiver? = null
     private var retryCount = 0
     private var wakeLock: PowerManager.WakeLock? = null
     private var currentUpdateJob: Job? = null
+    private var taskObserver: InvalidationTracker.Observer? = null
 
     companion object {
         private const val TAG = "RealTimeWallpaper"
         private const val CHANNEL_ID = "wallpaper_update_channel"
         private const val NOTIFICATION_ID = 1001
-        private const val UPDATE_INTERVAL_MS = 5_000L // 5 seconds - frequent updates for responsive UI
+        private const val UPDATE_INTERVAL_MS = 30_000L // 30 seconds - fallback for clock refresh
+        private const val TASK_UPDATE_DEBOUNCE_MS = 200L // Debounce rapid task edits
         private const val MAX_RETRY_COUNT = 3
         private const val INITIAL_RETRY_DELAY_MS = 5_000L // 5 seconds
         private const val WAKE_LOCK_TIMEOUT_MS = 30_000L // 30 seconds max
@@ -114,6 +116,7 @@ class RealTimeWallpaperService : Service() {
         createNotificationChannel()
         initWakeLock()
         registerScreenReceiver()
+        registerTaskObserver()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -145,6 +148,7 @@ class RealTimeWallpaperService : Service() {
         super.onDestroy()
         stopUpdates()
         unregisterScreenReceiver()
+        unregisterTaskObserver()
         releaseWakeLock()
         Log.d(TAG, "Service destroyed")
     }
@@ -204,6 +208,7 @@ class RealTimeWallpaperService : Service() {
         // isUpdating tracks periodic scheduling, not actual generation
         if (wallpaperGenerationInProgress) {
             Log.d(TAG, "Wallpaper generation already in progress, skipping")
+            pendingUpdate = true
             return
         }
 
@@ -242,8 +247,34 @@ class RealTimeWallpaperService : Service() {
                 wallpaperGenerationInProgress = false
                 // FIX 3: Release wake lock after update completes
                 releaseWakeLock()
+                if (pendingUpdate) {
+                    pendingUpdate = false
+                    updateWallpaper()
+                }
             }
         }
+    }
+
+    private val taskUpdateRunnable = Runnable {
+        updateWallpaper()
+    }
+
+    private fun registerTaskObserver() {
+        val db = CosmicDatabase.getDatabase(applicationContext)
+        taskObserver = object : InvalidationTracker.Observer("stars") {
+            override fun onInvalidated(tables: Set<String>) {
+                Log.d(TAG, "Tasks changed, scheduling wallpaper update")
+                handler.removeCallbacks(taskUpdateRunnable)
+                handler.postDelayed(taskUpdateRunnable, TASK_UPDATE_DEBOUNCE_MS)
+            }
+        }
+        db.invalidationTracker.addObserver(taskObserver!!)
+    }
+
+    private fun unregisterTaskObserver() {
+        val db = CosmicDatabase.getDatabase(applicationContext)
+        taskObserver?.let { db.invalidationTracker.removeObserver(it) }
+        taskObserver = null
     }
 
     /**
@@ -363,63 +394,40 @@ class RealTimeWallpaperService : Service() {
     }
 
     /**
-     * Load custom wallpaper from storage or download from URL
-     * CRITICAL FIX: Downloads image from URL and caches it locally
+     * Load custom wallpaper from local storage only.
+     * CRITICAL: Local-first approach avoids network dependency.
      */
     private suspend fun loadCustomWallpaper(path: String): Bitmap? = withContext(Dispatchers.IO) {
         try {
-            // Check if path is a URL (starts with http)
             if (path.startsWith("http")) {
-                Log.d(TAG, "Downloading custom wallpaper from URL: $path")
+                Log.w(TAG, "Custom wallpaper URL not supported in local-first mode: $path")
+                return@withContext null
+            }
 
-                // Download the image to local cache
-                val url = URL(path)
-                val localFile = File(applicationContext.filesDir, "custom_wallpaper_cache.jpg")
+            val file = File(path)
+            Log.d(TAG, "DEBUG loadCustomWallpaper: Checking file at $path")
+            Log.d(TAG, "DEBUG loadCustomWallpaper: exists=${file.exists()}, canRead=${file.canRead()}, length=${file.length()}")
 
-                // Download and save
-                url.openStream().use { input ->
-                    FileOutputStream(localFile).use { output ->
-                        input.copyTo(output)
-                    }
-                }
+            if (file.exists() && file.length() > 0) {
+                Log.d(TAG, "Loading custom wallpaper from local file: $path")
 
-                Log.d(TAG, "Custom wallpaper downloaded and cached to: ${localFile.absolutePath}")
-
-                // Load the downloaded bitmap with proper options
                 val options = android.graphics.BitmapFactory.Options().apply {
                     inPreferredConfig = Bitmap.Config.ARGB_8888
                 }
-                val bitmap = android.graphics.BitmapFactory.decodeFile(localFile.absolutePath, options)
-                Log.d(TAG, "Downloaded bitmap: ${bitmap?.width}x${bitmap?.height}, config=${bitmap?.config}")
-                return@withContext bitmap
-            } else {
-                // It's a local file path
-                val file = File(path)
-                Log.d(TAG, "DEBUG loadCustomWallpaper: Checking file at $path")
-                Log.d(TAG, "DEBUG loadCustomWallpaper: exists=${file.exists()}, canRead=${file.canRead()}, length=${file.length()}")
+                val bitmap = android.graphics.BitmapFactory.decodeFile(path, options)
 
-                if (file.exists() && file.length() > 0) {
-                    Log.d(TAG, "Loading custom wallpaper from local file: $path")
-
-                    // Use proper bitmap options
-                    val options = android.graphics.BitmapFactory.Options().apply {
-                        inPreferredConfig = Bitmap.Config.ARGB_8888
-                    }
-                    val bitmap = android.graphics.BitmapFactory.decodeFile(path, options)
-
-                    if (bitmap != null) {
-                        Log.d(TAG, "DEBUG loadCustomWallpaper: Loaded bitmap ${bitmap.width}x${bitmap.height}, config=${bitmap.config}")
-                    } else {
-                        Log.e(TAG, "DEBUG loadCustomWallpaper: decodeFile returned NULL for valid file!")
-                    }
-                    return@withContext bitmap
+                if (bitmap != null) {
+                    Log.d(TAG, "DEBUG loadCustomWallpaper: Loaded bitmap ${bitmap.width}x${bitmap.height}, config=${bitmap.config}")
                 } else {
-                    Log.w(TAG, "Custom wallpaper file not found or empty: $path (exists=${file.exists()}, size=${file.length()})")
-                    return@withContext null
+                    Log.e(TAG, "DEBUG loadCustomWallpaper: decodeFile returned NULL for valid file!")
                 }
+                return@withContext bitmap
             }
+
+            Log.w(TAG, "Custom wallpaper file not found or empty: $path (exists=${file.exists()}, size=${file.length()})")
+            return@withContext null
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load/download custom wallpaper: ${e.message}", e)
+            Log.e(TAG, "Failed to load custom wallpaper: ${e.message}", e)
             null
         }
     }

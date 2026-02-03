@@ -40,11 +40,13 @@ android {
     buildTypes {
         debug {
             buildConfigField "String", "API_BASE_URL", '"https://cosmic-ocean-api.vercel.app/"'
+            buildConfigField "boolean", "LOCAL_ONLY", "true"
         }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             buildConfigField "String", "API_BASE_URL", '"https://cosmic-ocean-api.vercel.app/"'
+            buildConfigField "boolean", "LOCAL_ONLY", "true"
             signingConfig signingConfigs.release
         }
     }

@@ -214,6 +214,10 @@ class SyncManager(
      * CRITICAL FIX: Perform sync with throttling and server timestamps
      */
     private suspend fun performSync() {
+        if (com.cosmicocean.BuildConfig.LOCAL_ONLY) {
+            applyLocalOnlySync()
+            return
+        }
         // CRITICAL FIX: Throttle syncs (Issue #9)
         val now = System.currentTimeMillis()
         if (now - lastSyncTime < SYNC_THROTTLE_MS) {
@@ -294,6 +298,30 @@ class SyncManager(
             } finally {
                 updatePendingCount()
             }
+        }
+    }
+
+    private suspend fun applyLocalOnlySync() {
+        syncMutex.withLock {
+            _syncState.value = SyncState.Syncing
+            val pending = syncQueueDao.getAllPending()
+            if (pending.isEmpty()) {
+                _syncState.value = SyncState.Idle
+                return
+            }
+
+            val now = System.currentTimeMillis()
+            pending.forEach { entry ->
+                when (entry.operation) {
+                    "delete" -> starDao.deleteStarByLocalId(entry.localTaskId)
+                    else -> starDao.updateSyncStatus(entry.localTaskId, "synced", now)
+                }
+                syncQueueDao.deleteById(entry.id)
+            }
+
+            updatePendingCount()
+            _syncState.value = SyncState.Idle
+            Log.d(TAG, "Local-only sync applied: cleared ${pending.size} queued changes")
         }
     }
 
