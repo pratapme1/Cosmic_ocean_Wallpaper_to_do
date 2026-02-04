@@ -2,6 +2,7 @@ package com.cosmicocean.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,6 +14,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,6 +41,11 @@ fun PrivacySettingsScreen(
     modifier: Modifier = Modifier
 ) {
     var showPrivacyLevelDialog by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+    val density = LocalDensity.current
+    val swipeThresholdPx = with(density) { 120.dp.toPx() }
+    var swipeAccumulated by remember { mutableStateOf(0f) }
+    var swipeTriggered by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -55,21 +63,52 @@ fun PrivacySettingsScreen(
         },
         containerColor = Color(0xFF0F0F1E)
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .pointerInput(scrollState.value) {
+                    detectVerticalDragGestures(
+                        onVerticalDrag = { _, dragAmount ->
+                            if (scrollState.value != 0) {
+                                swipeAccumulated = 0f
+                                return@detectVerticalDragGestures
+                            }
+                            if (dragAmount > 0) {
+                                swipeAccumulated += dragAmount
+                                if (!swipeTriggered && swipeAccumulated > swipeThresholdPx) {
+                                    swipeTriggered = true
+                                    onNavigateBack()
+                                }
+                            } else {
+                                swipeAccumulated = 0f
+                            }
+                        },
+                        onDragEnd = {
+                            swipeAccumulated = 0f
+                            swipeTriggered = false
+                        },
+                        onDragCancel = {
+                            swipeAccumulated = 0f
+                            swipeTriggered = false
+                        }
+                    )
+                }
         ) {
-            // Header
-            Text(
-                text = "Control how your tasks appear on the wallpaper",
-                fontSize = 14.sp,
-                color = Color.White.copy(alpha = 0.7f),
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Header
+                Text(
+                    text = "Control how your tasks appear on the wallpaper",
+                    fontSize = 14.sp,
+                    color = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
 
             // ===== MASTER CONTROLS SECTION =====
             SectionHeader(title = "Master Controls", icon = "🔐")
@@ -136,6 +175,7 @@ fun PrivacySettingsScreen(
         )
     }
 
+    }
 }
 
 @Composable

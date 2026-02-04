@@ -37,6 +37,10 @@ fun TutorialOverlay(
                 body = "Enable haptics to feel when tasks are due soon or overdue."
             ),
             TutorialStep(
+                title = "Create, Edit, Complete",
+                body = "Tap + to add tasks, tap a task to edit, and mark done to complete."
+            ),
+            TutorialStep(
                 title = "Privacy First",
                 body = "Everything works locally. You control what’s shared."
             ),

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -26,6 +27,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -87,6 +90,11 @@ fun EnvironmentSettingsScreen(
     var showRateLimitDialog by remember { mutableStateOf(false) }
     val environmentEnabled = preferences.environmentEnabled
     val context = LocalContext.current
+    val scrollState = rememberScrollState()
+    val density = LocalDensity.current
+    val swipeThresholdPx = with(density) { 120.dp.toPx() }
+    var swipeAccumulated by remember { mutableStateOf(0f) }
+    var swipeTriggered by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -104,21 +112,52 @@ fun EnvironmentSettingsScreen(
         },
         containerColor = Color(0xFF0F0F1E)
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .pointerInput(scrollState.value) {
+                    detectVerticalDragGestures(
+                        onVerticalDrag = { _, dragAmount ->
+                            if (scrollState.value != 0) {
+                                swipeAccumulated = 0f
+                                return@detectVerticalDragGestures
+                            }
+                            if (dragAmount > 0) {
+                                swipeAccumulated += dragAmount
+                                if (!swipeTriggered && swipeAccumulated > swipeThresholdPx) {
+                                    swipeTriggered = true
+                                    onNavigateBack()
+                                }
+                            } else {
+                                swipeAccumulated = 0f
+                            }
+                        },
+                        onDragEnd = {
+                            swipeAccumulated = 0f
+                            swipeTriggered = false
+                        },
+                        onDragCancel = {
+                            swipeAccumulated = 0f
+                            swipeTriggered = false
+                        }
+                    )
+                }
         ) {
-            // Header
-            Text(
-                text = "Customize your wallpaper's dynamic environment",
-                fontSize = 14.sp,
-                color = Color.White.copy(alpha = 0.7f),
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Header
+                Text(
+                    text = "Customize your wallpaper's dynamic environment",
+                    fontSize = 14.sp,
+                    color = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
 
             // ===== MASTER TOGGLE =====
             EnvironmentSectionHeader(title = "Environment Effects", icon = "🌍")
@@ -620,6 +659,7 @@ fun EnvironmentSettingsScreen(
             },
             onDismiss = { showRateLimitDialog = false }
         )
+    }
     }
 }
 
