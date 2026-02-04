@@ -1064,7 +1064,7 @@ private fun ContextDialog(
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val options = listOf("home", "work", "grocery", "gym", "commute", "custom")
+    val options = listOf("home", "work", "grocery", "gym", "commute", "health", "custom")
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Select Context") },

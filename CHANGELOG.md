@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.7.1] - 2026-02-04 (Parsing Intelligence + UX)
+
+### Added
+- **Health Context**: Manual context selector now includes `health`.
+- **Parsing QA Matrix**: Deterministic 100-phrase parsing results saved at `docs/qa/parsing-results.md`.
+- **Overlay Close Buttons**: Quick Add and Edit Task overlays now include a close button.
+
+### Changed
+- **Hybrid Parser Gating**: Context/priority/energy now use raw score + margin thresholds (better tag reliability).
+- **Context Weights Expansion**: Added work/home/grocery/commute/health keywords (standup/retro/pto/expense/pharmacy/doctor/etc.).
+- **Energy Override**: When confident, energy prediction now overrides default `medium`.
+- **Local Parsing**: Weekend parsing added; titles strip trailing prepositions (`by`, `on`, `at`).
+
+### Fixed
+- **Priority Heuristics**: “Overdue” now elevates to P1 priority.
+
 ## [2.7.0] - 2026-02-04 (Local Engagement + Guidance)
 
 ### Added
@@ -7,6 +23,9 @@
 - **Tutorial Overlay**: 5-step onboarding tour with CRUD guidance and persistent “seen” state.
 - **Swipe-Down Dismiss**: Privacy and Environment settings can be dismissed with a downward swipe.
 - **Wallpaper Signals**: Next-task highlight, short-task badge, ambient reminder pulse, focus/context badges, and completion burst on wallpaper refresh.
+- **Hybrid Local Parser**: Token-weighted classifier for context, priority, and energy (no network required).
+- **Context-Aware Highlight**: Wallpaper highlights the most relevant task for the active context.
+- **Intent Forecast Path**: Faint constellation path connecting next tasks.
 - **Context Mode**: Manual context selector for task-aware suggestions.
 - **Overdue Heatmap**: Optional urgency layer on wallpapers.
 - **Focus Sessions**: Timed focus with overlay + wallpaper dimming.

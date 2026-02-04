@@ -23,7 +23,7 @@ import com.cosmicocean.model.UserPreferencesResponse
 import com.cosmicocean.model.UserProfile
 import com.cosmicocean.model.WallpaperTokenResponse
 import com.cosmicocean.utils.WallpaperPreferencesManager
-import com.cosmicocean.utils.LocalTaskParser
+import com.cosmicocean.utils.HybridTaskParser
 import com.cosmicocean.utils.TaskDateUtils
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.first
@@ -104,6 +104,7 @@ class LocalOnlyApiService(
             completedAt = null,
             isArchived = false,
             archivedAt = null,
+            contextTag = null,
             syncStatus = "synced",
             syncVersion = 0,
             updatedAt = now,
@@ -115,7 +116,7 @@ class LocalOnlyApiService(
     }
 
     override suspend fun parseTaskLLM(body: ParseRequest): Response<ParseLLMResponse> {
-        val fallback = LocalTaskParser.parse(body.title)
+        val fallback = HybridTaskParser(context).parse(body.title)
         return Response.success(
             ParseLLMResponse(
                 success = true,

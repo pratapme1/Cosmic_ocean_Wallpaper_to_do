@@ -853,9 +853,13 @@ class MainActivity : ComponentActivity() {
             val dueDateMs = com.cosmicocean.utils.TaskDateUtils.parseToMillis(parsed.dueDate, parsed.dueTime)
             val cleanedTitle = parsed.title.ifBlank { title }
             val urgency = parsed.priority
+            val contextTag = parsed.contextTags?.firstOrNull()
+                ?.removePrefix("@")
+                ?.trim()
+                ?.ifBlank { null }
 
             // TaskRepository.addStar() handles both local DB insert AND backend sync
-            val star = Star(x, y, cleanedTitle, urgency, dueDateMs)
+            val star = Star(x, y, cleanedTitle, urgency, dueDateMs, contextTag = contextTag)
             viewModel.addStar(star)
             // No need for local delay here anymore, as RealTimeWallpaperService.ACTION_FORCE_UPDATE 
             // now includes a 500ms delay internally for consistency.

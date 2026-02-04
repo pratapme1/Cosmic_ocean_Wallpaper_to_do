@@ -34,6 +34,7 @@
 - **Outcome**: Tasks auto-suggest a context
 - **Dependencies**: Task metadata, parsing engine
 - **Est.**: 1–2 weeks
+- **Status**: In progress (hybrid parser adds context tags + manual context selection)
 - **Acceptance Criteria**:
   - Context suggestion shown on task create/edit
   - User can override suggestion
@@ -45,6 +46,7 @@
 - **Outcome**: Extract time, priority, location/context, recurrence
 - **Dependencies**: On-device ML model, fallback rules
 - **Est.**: 2–3 weeks
+- **Status**: In progress (rule-based hybrid + confidence gating + QA matrix; on-device ML pending)
 - **Acceptance Criteria**:
   - Extracts date/time for common phrases
   - Extracts priority cues (urgent, critical, ASAP)

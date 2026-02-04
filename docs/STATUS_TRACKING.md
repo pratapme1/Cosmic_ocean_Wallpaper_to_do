@@ -12,6 +12,8 @@
 |---|---|---|---|---|
 | 2026-02-04 | Codex | Tutorial overlay persistence fix + automated tests | Pass | android/app/build/reports/tests/testDebugUnitTest, android/app/build/reports/androidTests/connected |
 | 2026-02-04 | Codex | Wallpaper signals + cosmic tutorial update + unit tests | Pass | android/app/build/reports/tests/testDebugUnitTest |
+| 2026-02-04 | Codex | Hybrid parser + context highlight + unit tests | Pass | android/app/build/reports/tests/testDebugUnitTest |
+| 2026-02-04 | Codex | Parsing intelligence upgrades + 100-phrase matrix + overlay close buttons | Pass | docs/qa/parsing-results.md, android/app/build/reports/tests/testDebugUnitTest, android/app/build/reports/androidTests/connected |
 
 ## Blockers
 | Date | Item | Reason | Owner |

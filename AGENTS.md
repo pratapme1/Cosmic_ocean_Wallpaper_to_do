@@ -9,3 +9,7 @@
 
 ## Release Discipline
 - Every release APK build must follow this order: update `CHANGELOG.md` → commit/push → rebuild APK named from changelog version.
+
+## Post-Feature Test Gate
+- After every feature is implemented, run unit tests and automated UI tests on an emulator.
+- Only after those tests pass, proceed to commit/push and generate the APK.

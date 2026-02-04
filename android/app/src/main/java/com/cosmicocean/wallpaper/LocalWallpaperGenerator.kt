@@ -369,6 +369,7 @@ object LocalWallpaperGenerator {
         val allTasks = weatherTasks ?: tasks
         val focusEnabled = environmentPreferences?.focusModeEnabled == true
         val contextBadge = buildContextBadge(environmentPreferences)
+        val highlightIndex = findContextHighlightIndex(sortedTasks, environmentPreferences)
         val shortSuggestion = findShortSuggestion(allTasks, environmentPreferences)
         val showAmbientPulse = environmentPreferences?.ambientRemindersEnabled == true &&
             shouldShowAmbientPulse(allTasks, now)
@@ -442,7 +443,7 @@ object LocalWallpaperGenerator {
                 width,
                 height,
                 achievementReservedSpace,
-                highlightFirstTask = true,
+                highlightIndex = highlightIndex,
                 badges = buildBadgeRow(
                     focusEnabled = focusEnabled,
                     contextBadge = contextBadge,
@@ -481,6 +482,7 @@ object LocalWallpaperGenerator {
         val allTasks = weatherTasks ?: tasks
         val focusEnabled = environmentPreferences?.focusModeEnabled == true
         val contextBadge = buildContextBadge(environmentPreferences)
+        val highlightIndex = findContextHighlightIndex(sortedTasks, environmentPreferences)
         val shortSuggestion = findShortSuggestion(allTasks, environmentPreferences)
         val showAmbientPulse = environmentPreferences?.ambientRemindersEnabled == true &&
             shouldShowAmbientPulse(allTasks, now)
@@ -567,7 +569,7 @@ object LocalWallpaperGenerator {
                 width,
                 height,
                 achievementReservedSpace,
-                highlightFirstTask = true,
+                highlightIndex = highlightIndex,
                 badges = buildBadgeRow(
                     focusEnabled = focusEnabled,
                     contextBadge = contextBadge,
@@ -1164,7 +1166,7 @@ object LocalWallpaperGenerator {
             val estimate = extractEstimateMinutes(task.title) ?: return@mapNotNull null
             if (estimate > 15) return@mapNotNull null
             if (contextMode == ContextMode.MANUAL && manualContext.isNotEmpty()) {
-                if (!matchesContext(task.title, manualContext)) return@mapNotNull null
+                if (!matchesContext(task, manualContext)) return@mapNotNull null
             }
             task to estimate
         }
@@ -1194,12 +1196,31 @@ object LocalWallpaperGenerator {
         return null
     }
 
-    private fun matchesContext(title: String, contextValue: String): Boolean {
+    private fun matchesContext(task: StarEntity, contextValue: String): Boolean {
         if (contextValue.isBlank()) return true
         if (contextValue.lowercase(Locale.US) == "custom") return true
-        val lower = title.lowercase(Locale.US)
-        val token = "@${contextValue.lowercase(Locale.US)}"
-        return lower.contains(token) || lower.contains(contextValue.lowercase(Locale.US))
+        val normalized = contextValue.lowercase(Locale.US)
+        val tag = task.contextTag?.lowercase(Locale.US)
+        if (!tag.isNullOrBlank() && tag == normalized) return true
+        val lower = task.title.lowercase(Locale.US)
+        val token = "@$normalized"
+        return lower.contains(token) || lower.contains(normalized)
+    }
+
+    private fun findContextHighlightIndex(
+        tasks: List<StarEntity>,
+        prefs: EnvironmentPreferences?
+    ): Int? {
+        if (tasks.isEmpty()) return null
+        val contextMode = prefs?.contextMode ?: ContextMode.AUTO
+        if (contextMode == ContextMode.MANUAL) {
+            val manual = prefs?.manualContext?.trim().orEmpty()
+            if (manual.isNotEmpty()) {
+                val idx = tasks.indexOfFirst { matchesContext(it, manual) }
+                if (idx >= 0) return idx
+            }
+        }
+        return 0
     }
 
     private fun buildContextBadge(prefs: EnvironmentPreferences?): String? {
@@ -2112,7 +2133,7 @@ object LocalWallpaperGenerator {
         width: Int,
         height: Int,
         reservedRightSpace: Float = 0f,
-        highlightFirstTask: Boolean = false,
+        highlightIndex: Int? = null,
         badges: List<String> = emptyList()
     ) {
         val layout = getLayoutConfig(width, height)
@@ -2173,10 +2194,61 @@ object LocalWallpaperGenerator {
         val maxWidth = (width - marginH - textStartX - reservedRightSpace)
             .toInt()
             .coerceAtLeast(100)
+        data class TaskRenderInfo(
+            val task: StarEntity,
+            val circleY: Float,
+            val titleLayout: StaticLayout,
+            val titleTop: Float,
+            val metaText: String?,
+            val metaY: Float?
+        )
 
-        tasks.take(3).forEachIndexed { index, task ->
+        val renderItems = mutableListOf<TaskRenderInfo>()
+        val startY = currentY
+
+        tasks.take(3).forEach { task ->
+            val circleY = currentY - typography.titleLarge / 3f
+            val titleLayout = StaticLayout.Builder
+                .obtain(task.title, 0, task.title.length, titlePaint, maxWidth)
+                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                .setMaxLines(2)
+                .setEllipsize(android.text.TextUtils.TruncateAt.END)
+                .build()
+            val titleTop = currentY - titleLayout.getLineBaseline(0)
+            var nextY = currentY + titleLayout.height + 5f
+
+            val metaText = formatDueDate(task.dueDate)
+            val metaY = if (metaText != null) {
+                val y = nextY
+                nextY += metaPaint.textSize + 10f
+                y
+            } else {
+                null
+            }
+
+            renderItems.add(
+                TaskRenderInfo(
+                    task = task,
+                    circleY = circleY,
+                    titleLayout = titleLayout,
+                    titleTop = titleTop,
+                    metaText = metaText,
+                    metaY = metaY
+                )
+            )
+
+            currentY = nextY + layout.margins.vertical
+        }
+
+        drawIntentForecastPath(
+            canvas = canvas,
+            points = renderItems.map { android.graphics.PointF(marginH, it.circleY) },
+            colors = colors
+        )
+
+        renderItems.forEachIndexed { index, info ->
             // Priority indicator circle
-            val circleColor = getDueDatePriorityColor(task.dueDate)
+            val circleColor = getDueDatePriorityColor(info.task.dueDate)
 
             val circlePaint = Paint().apply {
                 isAntiAlias = true
@@ -2184,17 +2256,15 @@ object LocalWallpaperGenerator {
                 style = Paint.Style.FILL
             }
 
-            val circleY = currentY - typography.titleLarge / 3f
-
-            if (highlightFirstTask && index == 0) {
+            if (highlightIndex != null && index == highlightIndex) {
                 val glowPaint = Paint().apply {
                     isAntiAlias = true
                     color = colors.taskCircleGlow
-                    alpha = 180
-                    maskFilter = BlurMaskFilter(circleRadius * 2.4f, BlurMaskFilter.Blur.NORMAL)
+                    alpha = 200
+                    maskFilter = BlurMaskFilter(circleRadius * 2.8f, BlurMaskFilter.Blur.NORMAL)
                     style = Paint.Style.FILL
                 }
-                canvas.drawCircle(marginH, circleY, circleRadius * 2.4f, glowPaint)
+                canvas.drawCircle(marginH, info.circleY, circleRadius * 2.8f, glowPaint)
 
                 val nextPaint = Paint().apply {
                     isAntiAlias = true
@@ -2202,36 +2272,24 @@ object LocalWallpaperGenerator {
                     textSize = typography.labelSmall
                     typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
                 }
-                canvas.drawText("NEXT", textStartX, circleY - circleRadius * 1.6f, nextPaint)
+                canvas.drawText("NEXT", textStartX, info.circleY - circleRadius * 1.8f, nextPaint)
             }
 
-            canvas.drawCircle(marginH, circleY, circleRadius, circlePaint)
+            canvas.drawCircle(marginH, info.circleY, circleRadius, circlePaint)
 
-            // Task title with wrapping
-            val titleLayout = StaticLayout.Builder
-                .obtain(task.title, 0, task.title.length, titlePaint, maxWidth)
-                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-                .setMaxLines(2)
-                .setEllipsize(android.text.TextUtils.TruncateAt.END)
-                .build()
-
-            val titleTop = currentY - titleLayout.getLineBaseline(0)
             canvas.save()
-            canvas.translate(textStartX, titleTop)
-            titleLayout.draw(canvas)
+            canvas.translate(textStartX, info.titleTop)
+            info.titleLayout.draw(canvas)
             canvas.restore()
 
-            currentY += titleLayout.height + 5f
-
-            // Time estimate / due date
-            val metaText = formatDueDate(task.dueDate)
-            if (metaText != null) {
-                canvas.drawText(metaText, textStartX, currentY, metaPaint)
-                currentY += metaPaint.textSize + 10f
+            info.metaText?.let { meta ->
+                info.metaY?.let { y ->
+                    canvas.drawText(meta, textStartX, y, metaPaint)
+                }
             }
-
-            currentY += layout.margins.vertical
         }
+
+        currentY = if (renderItems.isEmpty()) startY else currentY
 
         // Remaining count
         val remainingCount = totalTaskCount - tasks.size.coerceAtMost(3)
@@ -2290,6 +2348,33 @@ object LocalWallpaperGenerator {
         }
 
         return maxY - startY
+    }
+
+    private fun drawIntentForecastPath(
+        canvas: Canvas,
+        points: List<android.graphics.PointF>,
+        colors: ThemeColors
+    ) {
+        if (points.size < 2) return
+        val path = android.graphics.Path()
+        path.moveTo(points.first().x, points.first().y)
+        for (i in 1 until points.size) {
+            val prev = points[i - 1]
+            val curr = points[i]
+            val midX = (prev.x + curr.x) / 2f
+            val midY = (prev.y + curr.y) / 2f
+            path.quadTo(midX, prev.y, curr.x, curr.y)
+            path.quadTo(midX, curr.y, curr.x, curr.y)
+        }
+
+        val paint = Paint().apply {
+            isAntiAlias = true
+            color = applyAlpha(colors.taskCircleGlow, 120)
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+            pathEffect = android.graphics.DashPathEffect(floatArrayOf(14f, 10f), 0f)
+        }
+        canvas.drawPath(path, paint)
     }
 
     /**

@@ -17,7 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AchievementStatsEntity::class,
         SyncQueueEntity::class
     ],
-    version = 4,  // CRITICAL FIX: Bumped for ID management fix
+    version = 5,  // Bump for context tag support
     exportSchema = false
 )
 abstract class CosmicDatabase : RoomDatabase() {
@@ -161,6 +161,12 @@ abstract class CosmicDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE stars ADD COLUMN contextTag TEXT")
+            }
+        }
+
         fun getDatabase(context: Context): CosmicDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -168,7 +174,7 @@ abstract class CosmicDatabase : RoomDatabase() {
                     CosmicDatabase::class.java,
                     "cosmic_ocean_db"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

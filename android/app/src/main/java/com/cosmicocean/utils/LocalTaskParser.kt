@@ -1,6 +1,7 @@
 package com.cosmicocean.utils
 
 import com.cosmicocean.model.ParsedTaskResult
+import java.time.Clock
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -43,7 +44,7 @@ object LocalTaskParser {
         Regex("\\b(\\d+(?:\\.\\d+)?)\\s*h(?:ours?)?\\b", RegexOption.IGNORE_CASE)
     )
 
-    private val highPriorityKeywords = listOf("urgent", "asap", "critical", "important", "priority 1", "p1")
+    private val highPriorityKeywords = listOf("urgent", "asap", "critical", "important", "priority 1", "p1", "overdue")
     private val mediumPriorityKeywords = listOf("priority 2", "p2", "medium priority", "normal priority")
     private val lowPriorityKeywords = listOf("low priority", "later", "someday", "whenever", "maybe", "not urgent", "p3", "priority 3")
 
@@ -55,6 +56,7 @@ object LocalTaskParser {
     )
 
     private val dayMonthRegex = Regex("\\b(\\d{1,2})-(\\d{1,2})(?:-(\\d{2,4}))?\\b")
+    private val weekendRegex = Regex("\\b(this|next)\\s+weekend\\b", RegexOption.IGNORE_CASE)
 
     private val recurringPatterns = listOf(
         Regex("\\bevery\\s+day\\b", RegexOption.IGNORE_CASE) to "daily",
@@ -64,7 +66,8 @@ object LocalTaskParser {
         Regex("\\bevery\\s+week\\b", RegexOption.IGNORE_CASE) to "weekly"
     )
 
-    fun parse(input: String?): ParsedTaskResult {
+    @JvmOverloads
+    fun parse(input: String?, clock: Clock = Clock.systemDefaultZone()): ParsedTaskResult {
         if (input.isNullOrBlank()) {
             return ParsedTaskResult(
                 title = "New Task",
@@ -119,7 +122,7 @@ object LocalTaskParser {
             }
         }
 
-        val now = ZonedDateTime.now(ZoneId.systemDefault())
+        val now = ZonedDateTime.now(clock)
 
         var dueDateTime: LocalDateTime? = null
         var dueTime: LocalTime? = null
@@ -206,6 +209,18 @@ object LocalTaskParser {
                 }
                 dueDateTime = LocalDateTime.of(date, LocalTime.MIDNIGHT)
                 working = removeRange(working, nextRangeMatch.range)
+                extractions.add("due_date")
+            }
+        }
+
+        if (dueDateTime == null) {
+            val weekendMatch = weekendRegex.find(working)
+            if (weekendMatch != null) {
+                val qualifier = weekendMatch.groupValues[1].lowercase()
+                val saturday = now.toLocalDate().with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY))
+                val target = if (qualifier == "next") saturday.plusWeeks(1) else saturday
+                dueDateTime = LocalDateTime.of(target, LocalTime.MIDNIGHT)
+                working = removeRange(working, weekendMatch.range)
                 extractions.add("due_date")
             }
         }
@@ -361,7 +376,7 @@ object LocalTaskParser {
             extractions.add("estimate")
         }
 
-        val priority = inferPriority(original, dueDateTime)
+        val priority = inferPriority(original, dueDateTime, clock)
         if (priority != 2) {
             extractions.add("priority")
         }
@@ -415,7 +430,7 @@ object LocalTaskParser {
         return null
     }
 
-    private fun inferPriority(text: String, dueDateTime: LocalDateTime?): Int {
+    private fun inferPriority(text: String, dueDateTime: LocalDateTime?, clock: Clock): Int {
         val lower = text.lowercase()
 
         for (keyword in lowPriorityKeywords) {
@@ -429,7 +444,7 @@ object LocalTaskParser {
         }
 
         if (dueDateTime != null) {
-            val today = LocalDate.now()
+            val today = LocalDate.now(clock)
             val dueDate = dueDateTime.toLocalDate()
             return when {
                 dueDate.isBefore(today) -> 1
@@ -447,7 +462,17 @@ object LocalTaskParser {
         val normalized = whitespaceRegex.replace(text, " ").trim()
         val stripped = normalized.replace(Regex("^[,:;.\\-!?]+|[,:;.\\-!?]+$"), "").trim()
         if (stripped.isBlank()) return "New Task"
-        return stripped.replaceFirstChar { it.uppercase() }
+        val tokens = stripped.split(" ").filter { it.isNotBlank() }
+        if (tokens.isEmpty()) return "New Task"
+        val trailing = setOf("by", "on", "at")
+        val cleanedTokens = if (tokens.size > 1 && trailing.contains(tokens.last().lowercase())) {
+            tokens.dropLast(1)
+        } else {
+            tokens
+        }
+        val cleaned = cleanedTokens.joinToString(" ").trim()
+        if (cleaned.isBlank()) return "New Task"
+        return cleaned.replaceFirstChar { it.uppercase() }
     }
 
     private fun calculateConfidence(extractions: List<String>, title: String, original: String): Double {

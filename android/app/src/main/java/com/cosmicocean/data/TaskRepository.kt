@@ -13,7 +13,7 @@ import com.cosmicocean.network.ApiService
 import com.cosmicocean.network.LocalOnlyUserStore
 import com.cosmicocean.sync.SyncManager
 import com.cosmicocean.service.RealTimeWallpaperService
-import com.cosmicocean.utils.LocalTaskParser
+import com.cosmicocean.utils.HybridTaskParser
 import com.cosmicocean.systems.TrophyManager
 import com.cosmicocean.auth.TokenManager
 import kotlinx.coroutines.delay
@@ -53,6 +53,7 @@ class TaskRepository(
         // All task changes trigger immediate wallpaper refresh
     }
 
+    private val hybridParser = HybridTaskParser(context)
 
 
     // === Query Methods ===
@@ -97,7 +98,7 @@ class TaskRepository(
     }
 
     private fun createLocalFallback(input: String, reason: String): ParsedTaskResult {
-        val parsed = LocalTaskParser.parse(input)
+        val parsed = hybridParser.parse(input)
         return parsed.copy(
             source = parsed.source.ifBlank { "local_parser" },
             reason = reason
@@ -285,6 +286,7 @@ class TaskRepository(
             title = title,
             urgency = urgency,
             dueDate = dueDate,
+            contextTag = contextTag,
             isSubtask = isSubtask,
             isRecurring = isRecurring,
             echoInterval = echoInterval?.let { EchoInterval.valueOf(it) },
@@ -315,6 +317,7 @@ class TaskRepository(
             completedAt = completedAt,
             isArchived = isArchived,
             archivedAt = archivedAt,
+            contextTag = contextTag,
             syncStatus = "pending",
             syncVersion = 0,
             updatedAt = System.currentTimeMillis(),

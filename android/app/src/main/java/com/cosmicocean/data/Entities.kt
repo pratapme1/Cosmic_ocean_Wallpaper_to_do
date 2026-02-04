@@ -36,6 +36,7 @@ data class StarEntity(
     val completedAt: Long?,
     val isArchived: Boolean,
     val archivedAt: Long?,
+    val contextTag: String? = null,
     
     // Snooze fields (LOCAL-FIRST FIX: Store snooze state locally)
     val isSnoozed: Boolean = false,

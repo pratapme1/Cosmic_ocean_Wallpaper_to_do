@@ -32,6 +32,7 @@ All core features run **locally on Android**: tasks, wallpaper generation, priva
 - **Contextual short-task suggestions** (<= 15 minutes)
 - **“Next task” chip** for highest-impact task
 - **Wallpaper signals** (next-task highlight, short-task badge, ambient pulse, focus/context badges, completion burst)
+- **Hybrid local parsing** (token-weighted context/priority/energy inference)
 - **Completion celebration** on task finish
 - **One-tap snooze all overdue**
 - **Daily focus widget** (local DB + streaks)

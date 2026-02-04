@@ -1,6 +1,8 @@
 package com.cosmicocean.ui.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,7 +43,16 @@ fun EditStarOverlay(
         contentColor = Color.White
     ) {
         Column(modifier = Modifier.padding(24.dp).padding(bottom = 48.dp)) {
-            Text("Edit Task", style = MaterialTheme.typography.titleLarge, color = Color(0xFF3AA0FF))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Edit Task", style = MaterialTheme.typography.titleLarge, color = Color(0xFF3AA0FF))
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                }
+            }
             Spacer(modifier = Modifier.height(16.dp))
             
             OutlinedTextField(

@@ -16,6 +16,7 @@ class Star(
     var title: String,
     var urgency: Int, // 1, 2, 3
     var dueDate: Long?, // Timestamp
+    var contextTag: String? = null,
     val isSubtask: Boolean = false,
     val isRecurring: Boolean = false,
     val echoInterval: EchoInterval? = null,
