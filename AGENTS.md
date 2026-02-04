@@ -6,3 +6,6 @@
 
 ## Session Closeout
 - Before ending a session, update `docs/STATUS_TRACKING.md`, `docs/FEATURE_BACKLOG.md`, `CHANGELOG.md`, and `AGENTS.md` to reflect completed work.
+
+## Release Discipline
+- Every release APK build must follow this order: update `CHANGELOG.md` → commit/push → rebuild APK named from changelog version.
