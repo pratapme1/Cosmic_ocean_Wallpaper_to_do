@@ -19,6 +19,7 @@ yarn-error.log*
 *.log
 
 # ===== ANDROID =====
+/.gradle/
 android/.gradle/
 android/build/
 android/app/build/
