@@ -55,6 +55,7 @@ class WallpaperUpdateWorker(
             val topTasks = database.starDao().getTop3Tasks()
             val allTasks = database.starDao().getAllActiveStarsSync()
             val totalCount = database.starDao().getActiveTaskCount()
+            val recentCompletionAt = database.starDao().getLatestCompletionTimestamp()
             val privacyMasked = applyWallpaperPrivacy(applicationContext, topTasks, totalCount)
             val achievements = AchievementUtils.getSnapshot(applicationContext)
             val environmentPrefs = runCatching {
@@ -81,7 +82,8 @@ class WallpaperUpdateWorker(
                             streakDays = achievements.streakDays,
                             theme = WallpaperTheme.fromString(theme),
                             environmentPreferences = environmentPrefs,
-                            weatherTasks = allTasks
+                            weatherTasks = allTasks,
+                            recentCompletionAt = recentCompletionAt
                         )
                     } else {
                         Log.w(TAG, "Custom background decode failed, falling back to generated")
@@ -94,7 +96,8 @@ class WallpaperUpdateWorker(
                             achievements.achievementCount,
                             achievements.streakDays,
                             environmentPrefs,
-                            allTasks
+                            allTasks,
+                            recentCompletionAt
                         )
                     }
                 } else {
@@ -108,7 +111,8 @@ class WallpaperUpdateWorker(
                         achievements.achievementCount,
                         achievements.streakDays,
                         environmentPrefs,
-                        allTasks
+                        allTasks,
+                        recentCompletionAt
                     )
                 }
             } else {
@@ -122,7 +126,8 @@ class WallpaperUpdateWorker(
                     achievements.achievementCount,
                     achievements.streakDays,
                     environmentPrefs,
-                    allTasks
+                    allTasks,
+                    recentCompletionAt
                 )
             }
 
@@ -163,7 +168,8 @@ class WallpaperUpdateWorker(
         achievementCount: Int,
         streakDays: Int,
         environmentPreferences: EnvironmentPreferences,
-        weatherTasks: List<com.cosmicocean.data.StarEntity>
+        weatherTasks: List<com.cosmicocean.data.StarEntity>,
+        recentCompletionAt: Long?
     ): android.graphics.Bitmap {
         val wallpaperTheme = when (theme.lowercase()) {
             "deep_ocean" -> WallpaperTheme.DEEP_OCEAN
@@ -182,7 +188,8 @@ class WallpaperUpdateWorker(
             achievementCount = achievementCount,
             streakDays = streakDays,
             environmentPreferences = environmentPreferences,
-            weatherTasks = weatherTasks
+            weatherTasks = weatherTasks,
+            recentCompletionAt = recentCompletionAt
         )
     }
 

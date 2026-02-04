@@ -6,6 +6,7 @@
 - **Due Haptics**: Configurable thresholds with quiet hours, DND respect, and rate limiting.
 - **Tutorial Overlay**: 5-step onboarding tour with CRUD guidance and persistent “seen” state.
 - **Swipe-Down Dismiss**: Privacy and Environment settings can be dismissed with a downward swipe.
+- **Wallpaper Signals**: Next-task highlight, short-task badge, ambient reminder pulse, focus/context badges, and completion burst on wallpaper refresh.
 - **Context Mode**: Manual context selector for task-aware suggestions.
 - **Overdue Heatmap**: Optional urgency layer on wallpapers.
 - **Focus Sessions**: Timed focus with overlay + wallpaper dimming.

@@ -37,8 +37,8 @@ fun TutorialOverlay(
                 body = "Enable haptics to feel when tasks are due soon or overdue."
             ),
             TutorialStep(
-                title = "Create, Edit, Complete",
-                body = "Tap + to add tasks, tap a task to edit, and mark done to complete."
+                title = "Move Stars to Complete",
+                body = "Drag a star into the Sun (right) to complete, or into the Black Hole (left) to archive. Tap a star to edit, double-tap empty space to create."
             ),
             TutorialStep(
                 title = "Privacy First",

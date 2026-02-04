@@ -106,6 +106,9 @@ interface StarDao {
     
     @Query("SELECT COUNT(*) FROM stars WHERE syncStatus = 'error'")
     suspend fun getErrorTaskCount(): Int
+
+    @Query("SELECT MAX(completedAt) FROM stars WHERE isCompleted = 1")
+    suspend fun getLatestCompletionTimestamp(): Long?
 }
 
 @Dao

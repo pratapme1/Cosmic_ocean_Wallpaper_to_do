@@ -1,6 +1,7 @@
 package com.cosmicocean.wallpaper
 
 import android.graphics.Bitmap
+import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
@@ -14,6 +15,7 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import android.util.Log
 import com.cosmicocean.data.StarEntity
+import com.cosmicocean.ui.state.ContextMode
 import com.cosmicocean.ui.state.EnvironmentPreferences
 import com.cosmicocean.ui.state.ParticleIntensity
 import com.cosmicocean.ui.state.TimeOfDayMode
@@ -28,6 +30,8 @@ import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sin
+import kotlin.math.PI
 import kotlin.math.sin
 
 /**
@@ -136,11 +140,18 @@ object LocalWallpaperGenerator {
         val isAllClear: Boolean
     )
 
+    private data class ShortSuggestion(
+        val title: String,
+        val estimateMinutes: Int
+    )
+
     // Layout constants (matching backend layout-system.js)
     private const val SAFE_ZONE_TOP_RATIO = 0.12f  // Clock/status bar area
     private const val TASK_ZONE_START_RATIO = 0.35f
     private const val TASK_ZONE_END_RATIO = 0.75f
     private const val MARGIN_HORIZONTAL_RATIO = 0.06f
+    private const val COMPLETION_CELEBRATION_WINDOW_MS = 2 * 60 * 1000L
+    private const val AMBIENT_DUE_SOON_WINDOW_MS = 2 * 60 * 60 * 1000L
 
     // Backend-aligned layout config (ported from backend/services/layout-system.js)
     private data class SafeInsets(
@@ -348,11 +359,21 @@ object LocalWallpaperGenerator {
         achievementCount: Int = 0,
         streakDays: Int = 0,
         environmentPreferences: EnvironmentPreferences? = null,
-        weatherTasks: List<StarEntity>? = null
+        weatherTasks: List<StarEntity>? = null,
+        recentCompletionAt: Long? = null
     ): Bitmap {
         Log.d(TAG, "Generating wallpaper: ${width}x${height}, theme=$theme, tasks=${tasks.size}, total=$totalTaskCount")
 
+        val now = System.currentTimeMillis()
         val sortedTasks = sortTasksByDueDate(tasks)
+        val allTasks = weatherTasks ?: tasks
+        val focusEnabled = environmentPreferences?.focusModeEnabled == true
+        val contextBadge = buildContextBadge(environmentPreferences)
+        val shortSuggestion = findShortSuggestion(allTasks, environmentPreferences)
+        val showAmbientPulse = environmentPreferences?.ambientRemindersEnabled == true &&
+            shouldShowAmbientPulse(allTasks, now)
+        val showCelebration = recentCompletionAt != null &&
+            now - recentCompletionAt < COMPLETION_CELEBRATION_WINDOW_MS
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -364,7 +385,6 @@ object LocalWallpaperGenerator {
 
         // Layer 1: Environment gradient + overlays (time of day, weather)
         val envEnabled = environmentPreferences?.environmentEnabled ?: true
-        val focusEnabled = environmentPreferences?.focusModeEnabled == true
         val intensityMultiplier = if (envEnabled) {
             drawEnvironmentLayers(
                 canvas = canvas,
@@ -386,12 +406,20 @@ object LocalWallpaperGenerator {
         }
 
         if (envEnabled && environmentPreferences?.overdueHeatmapEnabled == true) {
-            val metrics = calculateProductivityMetrics(tasks, System.currentTimeMillis())
+            val metrics = calculateProductivityMetrics(allTasks, now)
             drawOverdueHeatmap(canvas, metrics, width, height)
+        }
+
+        if (showAmbientPulse) {
+            drawAmbientPulse(canvas, width, height, colors, now)
         }
 
         if (focusEnabled) {
             drawFocusOverlay(canvas, width, height)
+        }
+
+        if (showCelebration) {
+            drawCompletionBurst(canvas, width, height, colors, now)
         }
 
         // Layer 2.5: Transition gradient (scene → task zone)
@@ -413,7 +441,13 @@ object LocalWallpaperGenerator {
                 colors,
                 width,
                 height,
-                achievementReservedSpace
+                achievementReservedSpace,
+                highlightFirstTask = true,
+                badges = buildBadgeRow(
+                    focusEnabled = focusEnabled,
+                    contextBadge = contextBadge,
+                    shortSuggestion = shortSuggestion
+                )
             )
         } else {
             drawClearState(canvas, colors, width, height)
@@ -437,11 +471,21 @@ object LocalWallpaperGenerator {
         streakDays: Int = 0,
         theme: WallpaperTheme = WallpaperTheme.DEEP_OCEAN,
         environmentPreferences: EnvironmentPreferences? = null,
-        weatherTasks: List<StarEntity>? = null
+        weatherTasks: List<StarEntity>? = null,
+        recentCompletionAt: Long? = null
     ): Bitmap {
         Log.d(TAG, "Generating wallpaper with custom background: ${width}x${height}, tasks=${tasks.size}")
 
+        val now = System.currentTimeMillis()
         val sortedTasks = sortTasksByDueDate(tasks)
+        val allTasks = weatherTasks ?: tasks
+        val focusEnabled = environmentPreferences?.focusModeEnabled == true
+        val contextBadge = buildContextBadge(environmentPreferences)
+        val shortSuggestion = findShortSuggestion(allTasks, environmentPreferences)
+        val showAmbientPulse = environmentPreferences?.ambientRemindersEnabled == true &&
+            shouldShowAmbientPulse(allTasks, now)
+        val showCelebration = recentCompletionAt != null &&
+            now - recentCompletionAt < COMPLETION_CELEBRATION_WINDOW_MS
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -490,12 +534,20 @@ object LocalWallpaperGenerator {
         }
 
         if (environmentPreferences?.environmentEnabled != false && environmentPreferences?.overdueHeatmapEnabled == true) {
-            val metrics = calculateProductivityMetrics(tasks, System.currentTimeMillis())
+            val metrics = calculateProductivityMetrics(allTasks, now)
             drawOverdueHeatmap(canvas, metrics, width, height)
         }
 
-        if (environmentPreferences?.focusModeEnabled == true) {
+        if (showAmbientPulse) {
+            drawAmbientPulse(canvas, width, height, colors, now)
+        }
+
+        if (focusEnabled) {
             drawFocusOverlay(canvas, width, height)
+        }
+
+        if (showCelebration) {
+            drawCompletionBurst(canvas, width, height, colors, now)
         }
 
         // Layer 3: Achievement panel (if any)
@@ -514,7 +566,13 @@ object LocalWallpaperGenerator {
                 colors,
                 width,
                 height,
-                achievementReservedSpace
+                achievementReservedSpace,
+                highlightFirstTask = true,
+                badges = buildBadgeRow(
+                    focusEnabled = focusEnabled,
+                    contextBadge = contextBadge,
+                    shortSuggestion = shortSuggestion
+                )
             )
         } else {
             drawClearState(canvas, colors, width, height)
@@ -605,11 +663,101 @@ object LocalWallpaperGenerator {
     }
 
     private fun drawFocusOverlay(canvas: Canvas, width: Int, height: Int) {
-        val paint = Paint().apply {
+        val basePaint = Paint().apply {
             color = Color.parseColor("#00121f")
-            alpha = 64
+            alpha = 90
+        }
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), basePaint)
+
+        val centerX = width / 2f
+        val centerY = height / 2f
+        val vignette = Paint().apply {
+            shader = RadialGradient(
+                centerX,
+                centerY,
+                width * 0.7f,
+                intArrayOf(Color.argb(0, 0, 0, 0), Color.argb(140, 0, 0, 0)),
+                floatArrayOf(0.4f, 1f),
+                Shader.TileMode.CLAMP
+            )
+        }
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), vignette)
+    }
+
+    private fun drawAmbientPulse(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
+        colors: ThemeColors,
+        now: Long
+    ) {
+        val layout = getLayoutConfig(width, height)
+        val centerX = width / 2f
+        val centerY = layout.layoutZones.task.centerY
+        val phase = (now % 60000L).toFloat() / 60000f
+        val pulse = 0.35f + 0.25f * sin(phase * 2f * PI.toFloat())
+        val alpha = (pulse * 160f).toInt().coerceIn(30, 160)
+
+        val glow = applyAlpha(colors.taskCircleGlow, alpha)
+        val paint = Paint().apply {
+            shader = RadialGradient(
+                centerX,
+                centerY,
+                width * 0.45f,
+                intArrayOf(glow, Color.TRANSPARENT),
+                floatArrayOf(0f, 1f),
+                Shader.TileMode.CLAMP
+            )
         }
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+    }
+
+    private fun drawCompletionBurst(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
+        colors: ThemeColors,
+        now: Long
+    ) {
+        val layout = getLayoutConfig(width, height)
+        val centerX = width - layout.margins.horizontal * 2.5f
+        val centerY = layout.layoutZones.task.y + layout.margins.vertical * 2f
+        val baseRadius = width * 0.03f
+        val phase = (now % 4000L).toFloat() / 4000f
+        val pulse = 0.6f + 0.4f * sin(phase * 2f * PI.toFloat())
+        val radius = baseRadius * (1.0f + pulse * 0.4f)
+
+        val linePaint = Paint().apply {
+            isAntiAlias = true
+            color = applyAlpha(colors.taskCircleGlow, 200)
+            strokeWidth = max(2f, baseRadius * 0.2f)
+            style = Paint.Style.STROKE
+        }
+
+        for (i in 0 until 8) {
+            val angle = i * (PI.toFloat() / 4f)
+            val startX = centerX + cos(angle) * radius * 0.3f
+            val startY = centerY + sin(angle) * radius * 0.3f
+            val endX = centerX + cos(angle) * radius * 1.4f
+            val endY = centerY + sin(angle) * radius * 1.4f
+            canvas.drawLine(startX, startY, endX, endY, linePaint)
+        }
+
+        val corePaint = Paint().apply {
+            isAntiAlias = true
+            color = applyAlpha(colors.titleColor, 220)
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(centerX, centerY, radius * 0.35f, corePaint)
+    }
+
+    private fun applyAlpha(color: Int, alpha: Int): Int {
+        return Color.argb(
+            alpha.coerceIn(0, 255),
+            Color.red(color),
+            Color.green(color),
+            Color.blue(color)
+        )
     }
 
     private fun resolveEnvironment(
@@ -992,6 +1140,89 @@ object LocalWallpaperGenerator {
             maxOverdueHours = maxOverdueHours,
             isAllClear = isAllClear
         )
+    }
+
+    private fun shouldShowAmbientPulse(tasks: List<StarEntity>, now: Long): Boolean {
+        return tasks.any { task ->
+            if (task.isCompleted || task.isArchived) return@any false
+            val dueDate = task.dueDate ?: return@any false
+            val diff = dueDate - now
+            diff < 0 || diff <= AMBIENT_DUE_SOON_WINDOW_MS
+        }
+    }
+
+    private fun findShortSuggestion(
+        tasks: List<StarEntity>,
+        prefs: EnvironmentPreferences?
+    ): ShortSuggestion? {
+        if (tasks.isEmpty()) return null
+        val contextMode = prefs?.contextMode ?: ContextMode.AUTO
+        val manualContext = prefs?.manualContext?.trim().orEmpty()
+
+        val candidates = tasks.mapNotNull { task ->
+            if (task.isCompleted || task.isArchived) return@mapNotNull null
+            val estimate = extractEstimateMinutes(task.title) ?: return@mapNotNull null
+            if (estimate > 15) return@mapNotNull null
+            if (contextMode == ContextMode.MANUAL && manualContext.isNotEmpty()) {
+                if (!matchesContext(task.title, manualContext)) return@mapNotNull null
+            }
+            task to estimate
+        }
+
+        val sorted = candidates.sortedWith(
+            compareBy<Pair<StarEntity, Int>> { it.first.dueDate == null }
+                .thenBy { it.first.dueDate ?: Long.MAX_VALUE }
+                .thenBy { it.second }
+        )
+
+        return sorted.firstOrNull()?.let { ShortSuggestion(it.first.title, it.second) }
+    }
+
+    private fun extractEstimateMinutes(title: String): Int? {
+        val lower = title.lowercase(Locale.US)
+        val minRegex = Regex("(\\d{1,3})\\s*(m|min|mins|minutes)")
+        val hourRegex = Regex("(\\d{1,3})\\s*(h|hr|hrs|hours)")
+        val minMatch = minRegex.find(lower)
+        if (minMatch != null) {
+            return minMatch.groupValues[1].toIntOrNull()
+        }
+        val hourMatch = hourRegex.find(lower)
+        if (hourMatch != null) {
+            val hours = hourMatch.groupValues[1].toIntOrNull() ?: return null
+            return hours * 60
+        }
+        return null
+    }
+
+    private fun matchesContext(title: String, contextValue: String): Boolean {
+        if (contextValue.isBlank()) return true
+        if (contextValue.lowercase(Locale.US) == "custom") return true
+        val lower = title.lowercase(Locale.US)
+        val token = "@${contextValue.lowercase(Locale.US)}"
+        return lower.contains(token) || lower.contains(contextValue.lowercase(Locale.US))
+    }
+
+    private fun buildContextBadge(prefs: EnvironmentPreferences?): String? {
+        if (prefs == null) return null
+        return when (prefs.contextMode) {
+            ContextMode.MANUAL -> {
+                val label = prefs.manualContext.trim()
+                if (label.isEmpty()) null else label.replaceFirstChar { it.uppercase() }
+            }
+            ContextMode.AUTO -> "Auto"
+        }
+    }
+
+    private fun buildBadgeRow(
+        focusEnabled: Boolean,
+        contextBadge: String?,
+        shortSuggestion: ShortSuggestion?
+    ): List<String> {
+        val badges = mutableListOf<String>()
+        if (focusEnabled) badges.add("🪐 FOCUS")
+        if (!contextBadge.isNullOrBlank()) badges.add("🧭 ${contextBadge.uppercase()}")
+        if (shortSuggestion != null) badges.add("☄️ ${shortSuggestion.estimateMinutes}m QUICK")
+        return badges
     }
 
     private fun determineWeatherState(metrics: ProductivityMetrics): String {
@@ -1880,7 +2111,9 @@ object LocalWallpaperGenerator {
         colors: ThemeColors,
         width: Int,
         height: Int,
-        reservedRightSpace: Float = 0f
+        reservedRightSpace: Float = 0f,
+        highlightFirstTask: Boolean = false,
+        badges: List<String> = emptyList()
     ) {
         val layout = getLayoutConfig(width, height)
         val marginH = layout.margins.horizontal
@@ -1903,6 +2136,20 @@ object LocalWallpaperGenerator {
         canvas.drawText("RIGHT NOW", marginH, currentY, headerPaint)
 
         currentY += layout.margins.vertical + 10f
+
+        if (badges.isNotEmpty()) {
+            val badgeHeight = drawBadgeRow(
+                canvas = canvas,
+                badges = badges,
+                colors = colors,
+                startX = marginH,
+                startY = currentY,
+                maxWidth = width - marginH - reservedRightSpace
+            )
+            if (badgeHeight > 0f) {
+                currentY += badgeHeight + layout.margins.vertical * 0.5f
+            }
+        }
 
         // Draw up to 3 tasks
         val titlePaint = TextPaint().apply {
@@ -1938,6 +2185,26 @@ object LocalWallpaperGenerator {
             }
 
             val circleY = currentY - typography.titleLarge / 3f
+
+            if (highlightFirstTask && index == 0) {
+                val glowPaint = Paint().apply {
+                    isAntiAlias = true
+                    color = colors.taskCircleGlow
+                    alpha = 180
+                    maskFilter = BlurMaskFilter(circleRadius * 2.4f, BlurMaskFilter.Blur.NORMAL)
+                    style = Paint.Style.FILL
+                }
+                canvas.drawCircle(marginH, circleY, circleRadius * 2.4f, glowPaint)
+
+                val nextPaint = Paint().apply {
+                    isAntiAlias = true
+                    color = colors.subtitleColor
+                    textSize = typography.labelSmall
+                    typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                }
+                canvas.drawText("NEXT", textStartX, circleY - circleRadius * 1.6f, nextPaint)
+            }
+
             canvas.drawCircle(marginH, circleY, circleRadius, circlePaint)
 
             // Task title with wrapping
@@ -1971,6 +2238,58 @@ object LocalWallpaperGenerator {
         if (remainingCount > 0) {
             canvas.drawText("+ $remainingCount more today", marginH, currentY, metaPaint)
         }
+    }
+
+    private fun drawBadgeRow(
+        canvas: Canvas,
+        badges: List<String>,
+        colors: ThemeColors,
+        startX: Float,
+        startY: Float,
+        maxWidth: Float
+    ): Float {
+        if (badges.isEmpty()) return 0f
+
+        val textPaint = TextPaint().apply {
+            isAntiAlias = true
+            color = colors.titleColor
+            textSize = max(10f, maxWidth * 0.02f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        }
+
+        val paddingH = 12f
+        val paddingV = 6f
+        val gap = 8f
+        val badgeHeight = textPaint.textSize + paddingV * 2f
+        var x = startX
+        var y = startY
+        var maxY = y + badgeHeight
+
+        val bgPaint = Paint().apply {
+            isAntiAlias = true
+            color = Color.argb(140, 10, 18, 30)
+            style = Paint.Style.FILL
+        }
+
+        badges.forEach { label ->
+            val textWidth = textPaint.measureText(label)
+            val badgeWidth = textWidth + paddingH * 2f
+
+            if (x + badgeWidth > startX + maxWidth) {
+                x = startX
+                y += badgeHeight + gap
+            }
+
+            val rect = RectF(x, y, x + badgeWidth, y + badgeHeight)
+            canvas.drawRoundRect(rect, badgeHeight / 2f, badgeHeight / 2f, bgPaint)
+            val textY = y + badgeHeight - paddingV - 2f
+            canvas.drawText(label, x + paddingH, textY, textPaint)
+
+            x += badgeWidth + gap
+            maxY = max(maxY, y + badgeHeight)
+        }
+
+        return maxY - startY
     }
 
     /**

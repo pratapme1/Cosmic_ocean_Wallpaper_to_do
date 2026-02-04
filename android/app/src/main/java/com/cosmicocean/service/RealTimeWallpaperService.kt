@@ -330,6 +330,7 @@ class RealTimeWallpaperService : Service() {
             val topTasks = db.starDao().getTop3Tasks()
             val allTasks = db.starDao().getAllActiveStarsSync()
             val totalTaskCount = db.starDao().getActiveTaskCount()
+            val recentCompletionAt = db.starDao().getLatestCompletionTimestamp()
             val privacyMasked = applyWallpaperPrivacy(applicationContext, topTasks, totalTaskCount)
             val achievements = AchievementUtils.getSnapshot(applicationContext)
             val (width, height) = getTargetResolution()
@@ -376,7 +377,8 @@ class RealTimeWallpaperService : Service() {
                             streakDays = achievements.streakDays,
                             theme = WallpaperTheme.fromString(themeName),
                             environmentPreferences = environmentPrefs,
-                            weatherTasks = allTasks
+                            weatherTasks = allTasks,
+                            recentCompletionAt = recentCompletionAt
                         )
 
                         // Recycle original bitmap to free memory
@@ -405,7 +407,8 @@ class RealTimeWallpaperService : Service() {
                 achievementCount = achievements.achievementCount,
                 streakDays = achievements.streakDays,
                 environmentPreferences = environmentPrefs,
-                weatherTasks = allTasks
+                weatherTasks = allTasks,
+                recentCompletionAt = recentCompletionAt
             )
         } catch (e: Exception) {
             Log.e(TAG, "Local generation failed: ${e.message}", e)
