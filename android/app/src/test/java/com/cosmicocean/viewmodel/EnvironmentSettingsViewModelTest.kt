@@ -3,6 +3,7 @@ package com.cosmicocean.viewmodel
 import com.cosmicocean.model.UserPreferencesResponse
 import com.cosmicocean.network.ApiService
 import com.cosmicocean.ui.state.*
+import com.cosmicocean.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.*
@@ -10,7 +11,7 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
-import org.mockito.ArgumentMatchers.anyMap
+import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.*
 import retrofit2.Response
 
@@ -53,11 +54,19 @@ class EnvironmentSettingsViewModelTest {
 
     @Test
     fun `updatePreference should trigger API call`() = runTest {
-        // anyMap() is usually non-null, but let's be safe and explicit
-        `when`(mockApi.updatePreferences(anyMap<String, Any>() ?: emptyMap())).thenReturn(Response.success(UserPreferencesResponse()))
+        `when`(mockApi.updatePreferences(anyPrefsMap())).thenReturn(Response.success(UserPreferencesResponse()))
 
         viewModel.updatePreference("time_of_day_mode", "manual")
 
-        verify(mockApi).updatePreferences(anyMap<String, Any>() ?: emptyMap())
+        if (BuildConfig.LOCAL_ONLY) {
+            verify(mockApi, never()).updatePreferences(anyPrefsMap())
+        } else {
+            verify(mockApi).updatePreferences(anyPrefsMap())
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun anyPrefsMap(): Map<String, Any> {
+        return ArgumentMatchers.anyMap<String, Any>() as Map<String, Any>
     }
 }

@@ -450,7 +450,6 @@ class MainActivity : ComponentActivity() {
                         // Epic 10: Privacy Settings Screen
                         if (showPrivacySettings) {
                             PrivacySettingsWrapper(
-                                apiService = NetworkModule.getApi(this@MainActivity),
                                 onNavigateBack = { showPrivacySettings = false }
                             )
                         }

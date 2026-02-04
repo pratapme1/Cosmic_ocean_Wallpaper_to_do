@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.6.1] - 2026-02-03
+
+### Fixed
+- **Real-Time Wallpaper Updates (Local-Only)**: Auto-enabled wallpaper updates when consent wasn’t set in local-only mode and removed network constraints from fallback workers.
+- **Custom Wallpaper + Task Overlay**: Ensured task CRUD updates trigger local wallpaper refreshes even while offline/guest.
+- **Backend Layout Alignment**: Ported backend layout system (safe zones, margins, typography) to local generator for closer visual parity.
+- **Resolution Consistency**: Unified service/worker to use stored portrait resolution for lock screen alignment.
+
+## [2.6.0] - 2026-02-03
+
+### Internal
+- **Testing Stability**: Updated unit test suite to align with local-first architecture and moved Android-dependent E2E tests to instrumentation.
+- **Release Hygiene**: Ensured production build pipeline passes with updated test configuration.
+- **Local-Only Enforcement**: Network module now always uses the on-device API implementation (no backend dependency).
+
 ## [1.3.16] - 2026-01-28
 
 ### Fixed

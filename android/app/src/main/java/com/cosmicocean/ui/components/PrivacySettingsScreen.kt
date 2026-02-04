@@ -16,10 +16,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.util.Log
 import com.cosmicocean.data.PrivacyPreferences
 import com.cosmicocean.data.PrivacyLevel
-import com.cosmicocean.network.ApiService
 import kotlinx.coroutines.launch
 
 /**
@@ -27,10 +25,7 @@ import kotlinx.coroutines.launch
  * Settings screen for privacy preferences
  *
  * Allows users to:
- * - Set default privacy level for new tasks
- * - Enable auto-hide for work tasks outside work hours
- * - Configure work hours
- * - Enable biometric reveal
+ * - Set default privacy level for wallpaper tasks
  * - Toggle hide all tasks mode
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,17 +33,11 @@ import kotlinx.coroutines.launch
 fun PrivacySettingsScreen(
     preferences: PrivacyPreferences,
     onDefaultPrivacyLevelChanged: (PrivacyLevel) -> Unit,
-    onAutoHideWorkTasksChanged: (Boolean) -> Unit,
-    onWorkHoursStartChanged: (String) -> Unit,
-    onWorkHoursEndChanged: (String) -> Unit,
-    onBiometricRevealChanged: (Boolean) -> Unit,
     onHideAllTasksModeChanged: (Boolean) -> Unit,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showPrivacyLevelDialog by remember { mutableStateOf(false) }
-    var showStartTimeDialog by remember { mutableStateOf(false) }
-    var showEndTimeDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -115,7 +104,7 @@ fun PrivacySettingsScreen(
 
             // Privacy Level Selector
             PrivacySettingCard(
-                title = "New Task Privacy",
+                title = "Wallpaper Privacy",
                 subtitle = preferences.defaultPrivacyLevel.displayName,
                 icon = "🔒",
                 onClick = { showPrivacyLevelDialog = true }
@@ -132,103 +121,6 @@ fun PrivacySettingsScreen(
                 color = Color(0xFF3A1E5F)
             )
 
-            Divider(color = Color.White.copy(alpha = 0.1f))
-
-            // ===== WORK HOURS SECTION =====
-            SectionHeader(title = "Work Hours Privacy", icon = "🏢")
-
-            // Auto-hide Work Tasks
-            PrivacySettingCard(
-                title = "Auto-hide Work Tasks",
-                subtitle = "Hide work tasks outside work hours",
-                icon = "⏰"
-            ) {
-                Switch(
-                    checked = preferences.autoHideWorkTasks,
-                    onCheckedChange = onAutoHideWorkTasksChanged,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color(0xFF2196F3),
-                        checkedTrackColor = Color(0xFF2196F3).copy(alpha = 0.5f)
-                    )
-                )
-            }
-
-            if (preferences.autoHideWorkTasks) {
-                PrivacyInfoCard(
-                    text = "Work category tasks will be hidden on your wallpaper outside the defined work hours.",
-                    color = Color(0xFF1A3A5F)
-                )
-
-                // Work Hours Start
-                PrivacySettingCard(
-                    title = "Work Hours Start",
-                    subtitle = formatTime(preferences.workHoursStart),
-                    icon = "🌅",
-                    onClick = { showStartTimeDialog = true }
-                ) {
-                    Text(
-                        text = "Set",
-                        color = Color(0xFF64B5F6),
-                        fontSize = 14.sp
-                    )
-                }
-
-                // Work Hours End
-                PrivacySettingCard(
-                    title = "Work Hours End",
-                    subtitle = formatTime(preferences.workHoursEnd),
-                    icon = "🌆",
-                    onClick = { showEndTimeDialog = true }
-                ) {
-                    Text(
-                        text = "Set",
-                        color = Color(0xFF64B5F6),
-                        fontSize = 14.sp
-                    )
-                }
-            }
-
-            Divider(color = Color.White.copy(alpha = 0.1f))
-
-            // ===== BIOMETRIC SECTION =====
-            SectionHeader(title = "Quick Reveal", icon = "👆")
-
-            // Biometric Reveal
-            PrivacySettingCard(
-                title = "Biometric Reveal",
-                subtitle = "Use fingerprint to temporarily show tasks",
-                icon = "🔓"
-            ) {
-                Switch(
-                    checked = preferences.biometricRevealEnabled,
-                    onCheckedChange = onBiometricRevealChanged,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color(0xFF4CAF50),
-                        checkedTrackColor = Color(0xFF4CAF50).copy(alpha = 0.5f)
-                    )
-                )
-            }
-
-            if (preferences.biometricRevealEnabled) {
-                PrivacyInfoCard(
-                    text = "✨ Tap and authenticate to temporarily reveal hidden tasks on your wallpaper.",
-                    color = Color(0xFF1E5F3A)
-                )
-            } else {
-                PrivacyInfoCard(
-                    text = "ℹ️ Enable to quickly reveal hidden tasks using your fingerprint.",
-                    color = Color(0xFF3E3E3E)
-                )
-            }
-
-            // Footer
-            Spacer(modifier = Modifier.height(24.dp))
-            Text(
-                text = "Privacy settings sync with your account",
-                fontSize = 12.sp,
-                color = Color.White.copy(alpha = 0.5f),
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
         }
     }
 
@@ -244,30 +136,6 @@ fun PrivacySettingsScreen(
         )
     }
 
-    // Time Picker Dialogs
-    if (showStartTimeDialog) {
-        TimePickerDialog(
-            title = "Work Hours Start",
-            currentTime = preferences.workHoursStart,
-            onTimeSelected = { time ->
-                onWorkHoursStartChanged(time)
-                showStartTimeDialog = false
-            },
-            onDismiss = { showStartTimeDialog = false }
-        )
-    }
-
-    if (showEndTimeDialog) {
-        TimePickerDialog(
-            title = "Work Hours End",
-            currentTime = preferences.workHoursEnd,
-            onTimeSelected = { time ->
-                onWorkHoursEndChanged(time)
-                showEndTimeDialog = false
-            },
-            onDismiss = { showEndTimeDialog = false }
-        )
-    }
 }
 
 @Composable
@@ -366,7 +234,11 @@ private fun PrivacyLevelDialog(
         title = { Text("Default Privacy Level", color = Color.White) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                PrivacyLevel.values().forEach { level ->
+                listOf(
+                    PrivacyLevel.PUBLIC,
+                    PrivacyLevel.INITIALS,
+                    PrivacyLevel.HIDDEN
+                ).forEach { level ->
                     PrivacyLevelOption(
                         level = level,
                         isSelected = level == currentLevel,
@@ -444,326 +316,56 @@ private fun PrivacyLevelOption(
     }
 }
 
-@Composable
-private fun TimePickerDialog(
-    title: String,
-    currentTime: String,
-    onTimeSelected: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val timeParts = currentTime.split(":")
-    var selectedHour by remember { mutableStateOf(timeParts.getOrNull(0)?.toIntOrNull() ?: 9) }
-    var selectedMinute by remember { mutableStateOf(timeParts.getOrNull(1)?.toIntOrNull() ?: 0) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title, color = Color.White) },
-        text = {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Hour picker
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Hour", fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
-                                onClick = { selectedHour = (selectedHour - 1 + 24) % 24 }
-                            ) {
-                                Text("-", fontSize = 24.sp, color = Color.White)
-                            }
-                            Text(
-                                text = String.format("%02d", selectedHour),
-                                fontSize = 32.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF9C27B0)
-                            )
-                            IconButton(
-                                onClick = { selectedHour = (selectedHour + 1) % 24 }
-                            ) {
-                                Text("+", fontSize = 24.sp, color = Color.White)
-                            }
-                        }
-                    }
-
-                    Text(":", fontSize = 32.sp, color = Color.White)
-
-                    // Minute picker
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Minute", fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
-                                onClick = { selectedMinute = (selectedMinute - 5 + 60) % 60 }
-                            ) {
-                                Text("-", fontSize = 24.sp, color = Color.White)
-                            }
-                            Text(
-                                text = String.format("%02d", selectedMinute),
-                                fontSize = 32.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF9C27B0)
-                            )
-                            IconButton(
-                                onClick = { selectedMinute = (selectedMinute + 5) % 60 }
-                            ) {
-                                Text("+", fontSize = 24.sp, color = Color.White)
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val timeString = String.format("%02d:%02d", selectedHour, selectedMinute)
-                    onTimeSelected(timeString)
-                }
-            ) {
-                Text("Set", color = Color(0xFF9C27B0))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = Color.White.copy(alpha = 0.7f))
-            }
-        },
-        containerColor = Color(0xFF1A1A2E)
-    )
-}
-
 private fun getPrivacyLevelDescription(level: PrivacyLevel): String {
     return when (level) {
         PrivacyLevel.PUBLIC -> "👁️ Tasks will show their full title on the wallpaper."
-        PrivacyLevel.CATEGORY -> "📁 Tasks will show as 'Work task', 'Personal task', etc."
+        PrivacyLevel.CATEGORY -> "📁 Tasks will show as 'Task'."
         PrivacyLevel.INITIALS -> "🔤 Tasks will show only the first letter (e.g., 'M...')."
         PrivacyLevel.HIDDEN -> "🙈 Private tasks won't appear on the wallpaper at all."
-        PrivacyLevel.CUSTOM -> "✏️ You can set custom display text for each private task."
+        PrivacyLevel.CUSTOM -> "✏️ Tasks will show as 'Private task'."
     }
 }
-
-private fun formatTime(time: String): String {
-    val parts = time.split(":")
-    val hour = parts.getOrNull(0)?.toIntOrNull() ?: 0
-    val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
-    val amPm = if (hour < 12) "AM" else "PM"
-    val displayHour = when {
-        hour == 0 -> 12
-        hour > 12 -> hour - 12
-        else -> hour
-    }
-    return String.format("%d:%02d %s", displayHour, minute, amPm)
-}
-
-private const val TAG = "PrivacySettings"
 
 /**
  * Stateful wrapper for PrivacySettingsScreen that handles state internally
- * Loads preferences from API and saves changes back to API
+ * Local-only: loads and saves preferences via DataStore
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PrivacySettingsWrapper(
-    apiService: ApiService,
     onNavigateBack: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
-    var preferences by remember { mutableStateOf(PrivacyPreferences()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var successMessage by remember { mutableStateOf<String?>(null) }
-    var loadedFromApi by remember { mutableStateOf(false) }
-    val snackbarHostState = remember { SnackbarHostState() }
+    val repo = remember { com.cosmicocean.data.PrivacyPreferencesRepository(context) }
+    val preferences by repo.preferencesFlow.collectAsState(initial = PrivacyPreferences())
 
-    // Load preferences from API on first composition
-    LaunchedEffect(Unit) {
-        Log.d(TAG, "🔄 Loading preferences ${if (com.cosmicocean.BuildConfig.LOCAL_ONLY) "locally" else "from API"}...")
-        try {
-            val response = apiService.getPreferences()
-            Log.d(TAG, "📥 API Response: ${response.code()} - isSuccessful: ${response.isSuccessful}")
-
-            if (response.isSuccessful && response.body() != null) {
-                val apiPrefs = response.body()!!
-                Log.d(TAG, "✅ Loaded from API:")
-                Log.d(TAG, "   default_privacy_level: ${apiPrefs.defaultPrivacyLevel}")
-                Log.d(TAG, "   auto_hide_work_tasks: ${apiPrefs.autoHideWorkTasks}")
-                Log.d(TAG, "   hide_all_tasks_mode: ${apiPrefs.hideAllTasksMode}")
-                Log.d(TAG, "   work_hours: ${apiPrefs.workHoursStart} - ${apiPrefs.workHoursEnd}")
-
-                // Parse work hours - handle "HH:MM:SS" format from backend
-                val startTime = apiPrefs.workHoursStart?.take(5) ?: "09:00"
-                val endTime = apiPrefs.workHoursEnd?.take(5) ?: "17:00"
-
-                preferences = PrivacyPreferences(
-                    defaultPrivacyLevel = PrivacyLevel.fromString(apiPrefs.defaultPrivacyLevel ?: "public"),
-                    autoHideWorkTasks = apiPrefs.autoHideWorkTasks,
-                    workHoursStart = startTime,
-                    workHoursEnd = endTime,
-                    biometricRevealEnabled = apiPrefs.biometricRevealEnabled,
-                    hideAllTasksMode = apiPrefs.hideAllTasksMode
-                )
-                loadedFromApi = !com.cosmicocean.BuildConfig.LOCAL_ONLY
-                successMessage = if (com.cosmicocean.BuildConfig.LOCAL_ONLY) {
-                    "Settings loaded locally"
-                } else {
-                    "Settings loaded from server"
-                }
-            } else {
-                val errorBody = response.errorBody()?.string()
-                Log.e(TAG, "❌ API Error: ${response.code()} - $errorBody")
-                errorMessage = "Failed to load (${response.code()}): $errorBody"
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Exception loading preferences", e)
-            errorMessage = "Network error: ${e.message}"
-        } finally {
-            isLoading = false
-        }
-    }
-
-    // Helper function to save preferences to API
-    fun savePreference(key: String, value: Any) {
-        Log.d(TAG, "💾 Saving ${if (com.cosmicocean.BuildConfig.LOCAL_ONLY) "locally" else "to API"}: $key = $value")
+    fun triggerWallpaperUpdate() {
         scope.launch {
             try {
-                val body = mapOf(key to value)
-                val response = apiService.updatePreferences(body)
-
-                if (response.isSuccessful) {
-                    Log.d(TAG, "✅ Saved successfully: $key")
-                    successMessage = if (com.cosmicocean.BuildConfig.LOCAL_ONLY) {
-                        "Saved locally: $key"
-                    } else {
-                        "Saved: $key"
-                    }
-                } else {
-                    val errorBody = response.errorBody()?.string()
-                    Log.e(TAG, "❌ Save failed: ${response.code()} - $errorBody")
-                    errorMessage = "Save failed: $errorBody"
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Exception saving preference", e)
-                errorMessage = "Save error: ${e.message}"
+                com.cosmicocean.service.RealTimeWallpaperService.updateNow(context)
+            } catch (_: Exception) {
+                // Silent failure: privacy settings should still persist locally
             }
-        }
-    }
-
-    // Show snackbar for messages
-    LaunchedEffect(errorMessage, successMessage) {
-        errorMessage?.let {
-            snackbarHostState.showSnackbar(it, duration = SnackbarDuration.Short)
-            errorMessage = null
-        }
-        successMessage?.let {
-            snackbarHostState.showSnackbar(it, duration = SnackbarDuration.Short)
-            successMessage = null
         }
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color(0xFF0F0F1E)
     ) { scaffoldPadding ->
         Box(modifier = Modifier.padding(scaffoldPadding)) {
-            if (isLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color(0xFF0F0F1E)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = Color(0xFF9C27B0))
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            if (com.cosmicocean.BuildConfig.LOCAL_ONLY) {
-                                "Loading settings locally..."
-                            } else {
-                                "Loading settings from server..."
-                            },
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 14.sp
-                        )
-                    }
-                }
-            } else {
-                Column {
-                    // Debug info banner (remove in production)
-                    if (loadedFromApi) {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(8.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = Color(0xFF1B5E20).copy(alpha = 0.3f)
-                            )
-                        ) {
-                            Text(
-                                "✅ Connected to server - changes sync automatically",
-                                modifier = Modifier.padding(8.dp),
-                                color = Color(0xFF81C784),
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-                    if (com.cosmicocean.BuildConfig.LOCAL_ONLY) {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(8.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = Color(0xFF1B1B2F).copy(alpha = 0.3f)
-                            )
-                        ) {
-                            Text(
-                                "🔒 Local-only mode - settings stay on this device",
-                                modifier = Modifier.padding(8.dp),
-                                color = Color(0xFF90CAF9),
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-
-                    PrivacySettingsScreen(
-                        preferences = preferences,
-                        onDefaultPrivacyLevelChanged = { level ->
-                            Log.d(TAG, "🔄 Privacy level changed: $level")
-                            preferences = preferences.copy(defaultPrivacyLevel = level)
-                            savePreference("default_privacy_level", level.name.lowercase())
-                        },
-                        onAutoHideWorkTasksChanged = { enabled ->
-                            Log.d(TAG, "🔄 Auto-hide work tasks changed: $enabled")
-                            preferences = preferences.copy(autoHideWorkTasks = enabled)
-                            savePreference("auto_hide_work_tasks", enabled)
-                        },
-                        onWorkHoursStartChanged = { time ->
-                            Log.d(TAG, "🔄 Work hours start changed: $time")
-                            preferences = preferences.copy(workHoursStart = time)
-                            savePreference("work_hours_start", time)
-                        },
-                        onWorkHoursEndChanged = { time ->
-                            Log.d(TAG, "🔄 Work hours end changed: $time")
-                            preferences = preferences.copy(workHoursEnd = time)
-                            savePreference("work_hours_end", time)
-                        },
-                        onBiometricRevealChanged = { enabled ->
-                            Log.d(TAG, "🔄 Biometric reveal changed: $enabled")
-                            preferences = preferences.copy(biometricRevealEnabled = enabled)
-                            savePreference("biometric_reveal_enabled", enabled)
-                        },
-                        onHideAllTasksModeChanged = { enabled ->
-                            Log.d(TAG, "🔄 Hide all tasks mode changed: $enabled")
-                            preferences = preferences.copy(hideAllTasksMode = enabled)
-                            savePreference("hide_all_tasks_mode", enabled)
-                        },
-                        onNavigateBack = onNavigateBack
-                    )
-                }
-            }
+            PrivacySettingsScreen(
+                preferences = preferences,
+                onDefaultPrivacyLevelChanged = { level ->
+                    scope.launch { repo.setDefaultPrivacyLevel(level) }
+                    triggerWallpaperUpdate()
+                },
+                onHideAllTasksModeChanged = { enabled ->
+                    scope.launch { repo.setHideAllTasksMode(enabled) }
+                    triggerWallpaperUpdate()
+                },
+                onNavigateBack = onNavigateBack
+            )
         }
     }
 }

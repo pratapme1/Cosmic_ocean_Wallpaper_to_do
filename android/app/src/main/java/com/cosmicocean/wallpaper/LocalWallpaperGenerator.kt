@@ -14,14 +14,20 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import android.util.Log
 import com.cosmicocean.data.StarEntity
+import com.cosmicocean.ui.state.EnvironmentPreferences
+import com.cosmicocean.ui.state.ParticleIntensity
+import com.cosmicocean.ui.state.TimeOfDayMode
 import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sin
 
 /**
@@ -55,6 +61,79 @@ object LocalWallpaperGenerator {
         val twinkleMaxMs: Int = 0,
         val riseSpeed: Float = 0f,
         val wobble: Float = 0f
+    )
+
+    private data class EnvGradientStop(
+        val offset: Float,
+        val color: Int
+    )
+
+    private data class EnvOverlay(
+        val type: String,
+        val opacity: Float,
+        val color: Int? = null,
+        val colors: List<Int>? = null,
+        val count: Int? = null,
+        val rays: Int? = null,
+        val positionX: Float? = null,
+        val positionY: Float? = null,
+        val spread: Float? = null,
+        val density: Int? = null,
+        val coverage: Float? = null,
+        val lightningFrequencyMs: Long? = null,
+        val lightningIntensity: Float? = null
+    )
+
+    private data class EnvParticles(
+        val type: String,
+        val count: Int,
+        val color: Int? = null,
+        val colors: List<Int>? = null,
+        val speed: Float = 0.2f,
+        val sizeMin: Float = 1f,
+        val sizeMax: Float = 3f,
+        val opacityMin: Float = 0.3f,
+        val opacityMax: Float = 0.8f,
+        val twinkle: Boolean = false,
+        val glow: Boolean = false,
+        val blur: Boolean = false,
+        val angle: Float = 0f,
+        val length: Float = 0f
+    )
+
+    private data class EnvAmbient(
+        val brightness: Float,
+        val saturation: Float,
+        val warmth: Float,
+        val glow: Float = 0f,
+        val flash: Boolean = false
+    )
+
+    private data class EnvironmentVisuals(
+        val period: String,
+        val gradientStops: List<EnvGradientStop>,
+        val overlay: EnvOverlay?,
+        val particles: EnvParticles?,
+        val ambient: EnvAmbient
+    )
+
+    private data class WeatherVisuals(
+        val state: String,
+        val overlay: EnvOverlay?,
+        val particles: EnvParticles?,
+        val ambient: EnvAmbient,
+        val message: String?
+    )
+
+    private data class ProductivityMetrics(
+        val totalTasks: Int,
+        val completedTasks: Int,
+        val pendingTasks: Int,
+        val overdueTasks: Int,
+        val criticalOverdue: Int,
+        val completionRate: Float,
+        val maxOverdueHours: Float,
+        val isAllClear: Boolean
     )
 
     // Layout constants (matching backend layout-system.js)
@@ -267,7 +346,9 @@ object LocalWallpaperGenerator {
         width: Int,
         height: Int,
         achievementCount: Int = 0,
-        streakDays: Int = 0
+        streakDays: Int = 0,
+        environmentPreferences: EnvironmentPreferences? = null,
+        weatherTasks: List<StarEntity>? = null
     ): Bitmap {
         Log.d(TAG, "Generating wallpaper: ${width}x${height}, theme=$theme, tasks=${tasks.size}, total=$totalTaskCount")
 
@@ -281,11 +362,19 @@ object LocalWallpaperGenerator {
         val colors = theme.getColors(urgency)
         canvas.drawColor(colors.gradientEnd)
 
-        // Layer 1: Gradient background
-        drawGradientBackground(canvas, colors, width, height)
+        // Layer 1: Environment gradient + overlays (time of day, weather)
+        val intensityMultiplier = drawEnvironmentLayers(
+            canvas = canvas,
+            width = width,
+            height = height,
+            themeColors = colors,
+            environmentPreferences = environmentPreferences,
+            weatherTasks = weatherTasks ?: tasks,
+            isCustomBackground = false
+        )
 
-        // Layer 2: Particle system
-        drawParticles(canvas, colors, width, height, theme, urgency)
+        // Layer 2: Theme particle system (scaled by environment intensity)
+        drawParticles(canvas, colors, width, height, theme, urgency, intensityMultiplier)
 
         // Layer 2.5: Transition gradient (scene → task zone)
         drawTransitionGradient(canvas, colors, width, height)
@@ -327,7 +416,10 @@ object LocalWallpaperGenerator {
         width: Int,
         height: Int,
         achievementCount: Int = 0,
-        streakDays: Int = 0
+        streakDays: Int = 0,
+        theme: WallpaperTheme = WallpaperTheme.DEEP_OCEAN,
+        environmentPreferences: EnvironmentPreferences? = null,
+        weatherTasks: List<StarEntity>? = null
     ): Bitmap {
         Log.d(TAG, "Generating wallpaper with custom background: ${width}x${height}, tasks=${tasks.size}")
 
@@ -366,6 +458,17 @@ object LocalWallpaperGenerator {
         // Use high contrast colors for custom backgrounds
         val colors = getCustomBackgroundColors(urgency)
 
+        // Layer 2.5: Environment overlays on top of custom background
+        drawEnvironmentLayers(
+            canvas = canvas,
+            width = width,
+            height = height,
+            themeColors = colors,
+            environmentPreferences = environmentPreferences,
+            weatherTasks = weatherTasks ?: tasks,
+            isCustomBackground = true
+        )
+
         // Layer 3: Achievement panel (if any)
         val achievementReservedSpace = if (achievementCount > 0 || streakDays > 0) {
             drawAchievementPanel(canvas, achievementCount, streakDays, colors, width, height)
@@ -389,6 +492,841 @@ object LocalWallpaperGenerator {
         }
 
         return bitmap
+    }
+
+    private fun drawEnvironmentLayers(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
+        themeColors: ThemeColors,
+        environmentPreferences: EnvironmentPreferences?,
+        weatherTasks: List<StarEntity>,
+        isCustomBackground: Boolean
+    ): Float {
+        if (environmentPreferences == null) {
+            if (!isCustomBackground) {
+                drawGradientBackground(canvas, themeColors, width, height)
+            }
+            return 1f
+        }
+
+        val now = System.currentTimeMillis()
+        val intensityMultiplier = environmentPreferences.particleIntensity.multiplier
+        val environment = resolveEnvironment(environmentPreferences, themeColors, now)
+        val weather = if (environmentPreferences.weatherOverlayEnabled) {
+            resolveWeather(weatherTasks, themeColors, now)
+        } else {
+            null
+        }
+
+        val ambient = blendAmbient(environment.ambient, weather?.ambient)
+        val gradientAlpha = if (isCustomBackground) 0.35f else 1f
+        val ambientStrength = if (isCustomBackground) 0.6f else 1f
+
+        drawEnvironmentGradient(canvas, environment.gradientStops, width, height, gradientAlpha)
+        applyAmbientAdjustment(canvas, width, height, ambient, ambientStrength)
+
+        environment.overlay?.let { drawOverlay(canvas, it, width, height, now) }
+        weather?.overlay?.let { drawOverlay(canvas, it, width, height, now) }
+
+        environment.particles?.let {
+            drawEnvParticles(canvas, it, width, height, intensityMultiplier, now, themeColors)
+        }
+        weather?.particles?.let {
+            drawEnvParticles(canvas, it, width, height, intensityMultiplier, now, themeColors)
+        }
+
+        return intensityMultiplier
+    }
+
+    private fun resolveEnvironment(
+        preferences: EnvironmentPreferences,
+        themeColors: ThemeColors,
+        now: Long
+    ): EnvironmentVisuals {
+        val period = resolveTimePeriod(preferences, now)
+        val base = environmentForPeriod(period)
+        val tintedStops = base.gradientStops.map { stop ->
+            stop.copy(color = blendColors(stop.color, themeColors.gradientEnd, 0.12f))
+        }
+        val tintedParticles = base.particles?.let { spec ->
+            val blendedColor = spec.color?.let { blendColors(it, themeColors.particleColor, 0.25f) }
+            val blendedColors = spec.colors?.map { blendColors(it, themeColors.particleColor, 0.2f) }
+            spec.copy(
+                color = blendedColor ?: spec.color,
+                colors = blendedColors ?: spec.colors
+            )
+        }
+
+        return base.copy(gradientStops = tintedStops, particles = tintedParticles)
+    }
+
+    private fun resolveTimePeriod(preferences: EnvironmentPreferences, now: Long): String {
+        if (preferences.timeOfDayMode == TimeOfDayMode.MANUAL) {
+            return when (preferences.manualTimePeriod.lowercase(Locale.US)) {
+                "dawn" -> "dawn"
+                "morning" -> "morning"
+                "afternoon" -> "afternoon"
+                "evening" -> "evening"
+                "night" -> "night"
+                else -> "morning"
+            }
+        }
+
+        val hour = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).hour
+        return when {
+            hour in 5..6 -> "dawn"
+            hour in 7..11 -> "morning"
+            hour in 12..16 -> "afternoon"
+            hour in 17..19 -> "evening"
+            else -> "night"
+        }
+    }
+
+    private fun environmentForPeriod(period: String): EnvironmentVisuals {
+        return when (period) {
+            "dawn" -> EnvironmentVisuals(
+                period = "dawn",
+                gradientStops = listOf(
+                    EnvGradientStop(0f, Color.parseColor("#1a1a2e")),
+                    EnvGradientStop(0.3f, Color.parseColor("#4a1942")),
+                    EnvGradientStop(0.5f, Color.parseColor("#c94b4b")),
+                    EnvGradientStop(0.7f, Color.parseColor("#f2994a")),
+                    EnvGradientStop(1f, Color.parseColor("#ffb347"))
+                ),
+                overlay = EnvOverlay(
+                    type = "sunrise_rays",
+                    opacity = 0.3f,
+                    color = Color.parseColor("#ffb347"),
+                    rays = 8
+                ),
+                particles = EnvParticles(
+                    type = "dust_motes",
+                    count = 15,
+                    color = Color.parseColor("#ffe0b2"),
+                    speed = 0.3f,
+                    sizeMin = 1f,
+                    sizeMax = 3f
+                ),
+                ambient = EnvAmbient(brightness = 0.7f, warmth = 0.8f, saturation = 1.1f)
+            )
+            "morning" -> EnvironmentVisuals(
+                period = "morning",
+                gradientStops = listOf(
+                    EnvGradientStop(0f, Color.parseColor("#87ceeb")),
+                    EnvGradientStop(0.4f, Color.parseColor("#98d8e8")),
+                    EnvGradientStop(0.7f, Color.parseColor("#b0e0f0")),
+                    EnvGradientStop(1f, Color.parseColor("#e0f4ff"))
+                ),
+                overlay = EnvOverlay(
+                    type = "clouds",
+                    opacity = 0.4f,
+                    count = 5,
+                    color = Color.parseColor("#ffffff")
+                ),
+                particles = EnvParticles(
+                    type = "floating_specks",
+                    count = 20,
+                    color = Color.parseColor("#ffffff"),
+                    speed = 0.4f,
+                    sizeMin = 1f,
+                    sizeMax = 2f
+                ),
+                ambient = EnvAmbient(brightness = 1.0f, warmth = 0.5f, saturation = 1.0f)
+            )
+            "afternoon" -> EnvironmentVisuals(
+                period = "afternoon",
+                gradientStops = listOf(
+                    EnvGradientStop(0f, Color.parseColor("#1e3c72")),
+                    EnvGradientStop(0.3f, Color.parseColor("#2a5298")),
+                    EnvGradientStop(0.6f, Color.parseColor("#4a90c2")),
+                    EnvGradientStop(1f, Color.parseColor("#87ceeb"))
+                ),
+                overlay = EnvOverlay(
+                    type = "sun_rays",
+                    opacity = 0.2f,
+                    color = Color.parseColor("#ffd700"),
+                    rays = 12,
+                    positionX = 0.7f,
+                    positionY = 0.2f
+                ),
+                particles = EnvParticles(
+                    type = "light_beams",
+                    count = 8,
+                    color = Color.parseColor("#fff8dc"),
+                    speed = 0.1f,
+                    sizeMin = 2f,
+                    sizeMax = 5f
+                ),
+                ambient = EnvAmbient(brightness = 0.95f, warmth = 0.6f, saturation = 1.05f)
+            )
+            "evening" -> EnvironmentVisuals(
+                period = "evening",
+                gradientStops = listOf(
+                    EnvGradientStop(0f, Color.parseColor("#2c3e50")),
+                    EnvGradientStop(0.25f, Color.parseColor("#614385")),
+                    EnvGradientStop(0.5f, Color.parseColor("#c94b4b")),
+                    EnvGradientStop(0.75f, Color.parseColor("#f2994a")),
+                    EnvGradientStop(1f, Color.parseColor("#f8b500"))
+                ),
+                overlay = EnvOverlay(
+                    type = "sunset_glow",
+                    opacity = 0.35f,
+                    color = Color.parseColor("#ff6b6b"),
+                    spread = 0.6f
+                ),
+                particles = EnvParticles(
+                    type = "warm_drift",
+                    count = 12,
+                    color = Color.parseColor("#ffd6a5"),
+                    speed = 0.25f,
+                    sizeMin = 2f,
+                    sizeMax = 4f
+                ),
+                ambient = EnvAmbient(brightness = 0.8f, warmth = 0.9f, saturation = 1.15f)
+            )
+            else -> EnvironmentVisuals(
+                period = "night",
+                gradientStops = listOf(
+                    EnvGradientStop(0f, Color.parseColor("#0d1b2a")),
+                    EnvGradientStop(0.3f, Color.parseColor("#1b263b")),
+                    EnvGradientStop(0.6f, Color.parseColor("#2d3f5f")),
+                    EnvGradientStop(1f, Color.parseColor("#3a506b"))
+                ),
+                overlay = EnvOverlay(
+                    type = "starfield",
+                    opacity = 0.6f,
+                    density = 150
+                ),
+                particles = EnvParticles(
+                    type = "stars",
+                    count = 50,
+                    color = Color.parseColor("#ffffff"),
+                    speed = 0.05f,
+                    sizeMin = 1f,
+                    sizeMax = 3f,
+                    twinkle = true
+                ),
+                ambient = EnvAmbient(brightness = 0.6f, warmth = 0.2f, saturation = 0.9f)
+            )
+        }
+    }
+
+    private fun resolveWeather(
+        tasks: List<StarEntity>,
+        themeColors: ThemeColors,
+        now: Long
+    ): WeatherVisuals {
+        val metrics = calculateProductivityMetrics(tasks, now)
+        val state = determineWeatherState(metrics)
+        val base = when (state) {
+            "rainbow" -> WeatherVisuals(
+                state = "rainbow",
+                overlay = EnvOverlay(
+                    type = "rainbow_arc",
+                    opacity = 0.4f,
+                    positionX = 0.5f,
+                    positionY = 0.3f,
+                    colors = listOf(
+                        Color.parseColor("#ff6b6b"),
+                        Color.parseColor("#feca57"),
+                        Color.parseColor("#48dbfb"),
+                        Color.parseColor("#1dd1a1"),
+                        Color.parseColor("#5f27cd")
+                    ),
+                    spread = 0.8f
+                ),
+                particles = EnvParticles(
+                    type = "sparkles",
+                    count = 40,
+                    colors = listOf(
+                        Color.parseColor("#ffd700"),
+                        Color.parseColor("#ff69b4"),
+                        Color.parseColor("#00ff7f"),
+                        Color.parseColor("#87ceeb")
+                    ),
+                    speed = 0.6f,
+                    sizeMin = 2f,
+                    sizeMax = 5f,
+                    glow = true,
+                    twinkle = true
+                ),
+                ambient = EnvAmbient(brightness = 1.1f, warmth = 0.7f, saturation = 1.2f, glow = 0.3f),
+                message = "All clear!"
+            )
+            "cloudy" -> WeatherVisuals(
+                state = "cloudy",
+                overlay = EnvOverlay(
+                    type = "clouds",
+                    opacity = 0.35f,
+                    count = 4,
+                    color = Color.parseColor("#d3d3d3"),
+                    coverage = 0.3f
+                ),
+                particles = EnvParticles(
+                    type = "mist",
+                    count = 20,
+                    color = Color.parseColor("#e0e0e0"),
+                    speed = 0.1f,
+                    sizeMin = 3f,
+                    sizeMax = 8f,
+                    blur = true
+                ),
+                ambient = EnvAmbient(brightness = 0.9f, warmth = 0.4f, saturation = 0.95f),
+                message = null
+            )
+            "overcast" -> WeatherVisuals(
+                state = "overcast",
+                overlay = EnvOverlay(
+                    type = "heavy_clouds",
+                    opacity = 0.5f,
+                    count = 6,
+                    color = Color.parseColor("#9e9e9e"),
+                    coverage = 0.6f
+                ),
+                particles = EnvParticles(
+                    type = "fog",
+                    count = 30,
+                    color = Color.parseColor("#bdbdbd"),
+                    speed = 0.08f,
+                    sizeMin = 5f,
+                    sizeMax = 15f,
+                    blur = true
+                ),
+                ambient = EnvAmbient(brightness = 0.75f, warmth = 0.35f, saturation = 0.85f),
+                message = "Tasks need attention"
+            )
+            "storm" -> WeatherVisuals(
+                state = "storm",
+                overlay = EnvOverlay(
+                    type = "storm_clouds",
+                    opacity = 0.6f,
+                    color = Color.parseColor("#424242"),
+                    coverage = 0.8f,
+                    lightningFrequencyMs = 5000L,
+                    lightningIntensity = 0.8f
+                ),
+                particles = EnvParticles(
+                    type = "rain",
+                    count = 60,
+                    color = Color.parseColor("#90caf9"),
+                    speed = 1.5f,
+                    sizeMin = 1f,
+                    sizeMax = 2f,
+                    angle = -10f,
+                    length = 15f
+                ),
+                ambient = EnvAmbient(brightness = 0.6f, warmth = 0.2f, saturation = 0.7f, flash = true),
+                message = "Critical tasks overdue!"
+            )
+            else -> WeatherVisuals(
+                state = "clear",
+                overlay = EnvOverlay(
+                    type = "subtle_glow",
+                    opacity = 0.15f,
+                    color = Color.parseColor("#87ceeb"),
+                    positionX = 0.7f,
+                    positionY = 0.2f
+                ),
+                particles = EnvParticles(
+                    type = "light_dust",
+                    count = 15,
+                    color = Color.parseColor("#ffffff"),
+                    speed = 0.2f,
+                    sizeMin = 1f,
+                    sizeMax = 2f
+                ),
+                ambient = EnvAmbient(brightness = 1.0f, warmth = 0.5f, saturation = 1.0f, glow = 0.1f),
+                message = null
+            )
+        }
+
+        val tintedParticles = base.particles?.let { spec ->
+            val blendedColor = spec.color?.let { blendColors(it, themeColors.particleColor, 0.2f) }
+            val blendedColors = spec.colors?.map { blendColors(it, themeColors.particleColor, 0.2f) }
+            spec.copy(
+                color = blendedColor ?: spec.color,
+                colors = blendedColors ?: spec.colors
+            )
+        }
+
+        return base.copy(particles = tintedParticles)
+    }
+
+    private object WeatherThresholds {
+        const val COMPLETION_EXCELLENT = 0.9f
+        const val COMPLETION_GOOD = 0.7f
+        const val COMPLETION_MODERATE = 0.5f
+        const val OVERDUE_CLOUDY = 2
+        const val OVERDUE_OVERCAST = 5
+        const val OVERDUE_STORM = 10
+        const val CRITICAL_CLOUDY = 1
+        const val CRITICAL_OVERCAST = 2
+        const val CRITICAL_STORM = 3
+        const val HOURS_WARNING = 2f
+        const val HOURS_SERIOUS = 12f
+        const val HOURS_CRITICAL = 24f
+    }
+
+    private fun calculateProductivityMetrics(tasks: List<StarEntity>, now: Long): ProductivityMetrics {
+        if (tasks.isEmpty()) {
+            return ProductivityMetrics(
+                totalTasks = 0,
+                completedTasks = 0,
+                pendingTasks = 0,
+                overdueTasks = 0,
+                criticalOverdue = 0,
+                completionRate = 1.0f,
+                maxOverdueHours = 0f,
+                isAllClear = true
+            )
+        }
+
+        var completedTasks = 0
+        var overdueTasks = 0
+        var criticalOverdue = 0
+        var maxOverdueHours = 0f
+
+        tasks.forEach { task ->
+            if (task.isCompleted) {
+                completedTasks++
+                return@forEach
+            }
+
+            val dueDate = task.dueDate ?: return@forEach
+            if (dueDate < now) {
+                overdueTasks++
+                val hoursOverdue = (now - dueDate).toFloat() / (1000f * 60f * 60f)
+                maxOverdueHours = max(maxOverdueHours, hoursOverdue)
+                if (task.urgency >= 3) {
+                    criticalOverdue++
+                }
+            }
+        }
+
+        val totalTasks = tasks.size
+        val pendingTasks = totalTasks - completedTasks
+        val completionRate = if (totalTasks > 0) completedTasks.toFloat() / totalTasks.toFloat() else 1f
+        val isAllClear = pendingTasks == 0 && totalTasks > 0
+
+        return ProductivityMetrics(
+            totalTasks = totalTasks,
+            completedTasks = completedTasks,
+            pendingTasks = pendingTasks,
+            overdueTasks = overdueTasks,
+            criticalOverdue = criticalOverdue,
+            completionRate = completionRate,
+            maxOverdueHours = maxOverdueHours,
+            isAllClear = isAllClear
+        )
+    }
+
+    private fun determineWeatherState(metrics: ProductivityMetrics): String {
+        if (metrics.isAllClear && metrics.totalTasks > 0) {
+            return "rainbow"
+        }
+
+        if (metrics.criticalOverdue >= WeatherThresholds.CRITICAL_STORM ||
+            metrics.overdueTasks >= WeatherThresholds.OVERDUE_STORM ||
+            metrics.maxOverdueHours >= WeatherThresholds.HOURS_CRITICAL
+        ) {
+            return "storm"
+        }
+
+        if (metrics.criticalOverdue >= WeatherThresholds.CRITICAL_OVERCAST ||
+            metrics.overdueTasks >= WeatherThresholds.OVERDUE_OVERCAST ||
+            metrics.maxOverdueHours >= WeatherThresholds.HOURS_SERIOUS ||
+            metrics.completionRate < WeatherThresholds.COMPLETION_MODERATE
+        ) {
+            return "overcast"
+        }
+
+        if (metrics.criticalOverdue >= WeatherThresholds.CRITICAL_CLOUDY ||
+            metrics.overdueTasks >= WeatherThresholds.OVERDUE_CLOUDY ||
+            metrics.maxOverdueHours >= WeatherThresholds.HOURS_WARNING ||
+            metrics.completionRate < WeatherThresholds.COMPLETION_GOOD
+        ) {
+            return "cloudy"
+        }
+
+        return "clear"
+    }
+
+    private fun blendAmbient(environment: EnvAmbient, weather: EnvAmbient?): EnvAmbient {
+        if (weather == null) return environment
+        return EnvAmbient(
+            brightness = environment.brightness * weather.brightness,
+            saturation = environment.saturation * weather.saturation,
+            warmth = (environment.warmth + weather.warmth) / 2f,
+            glow = max(environment.glow, weather.glow),
+            flash = weather.flash
+        )
+    }
+
+    private fun drawEnvironmentGradient(
+        canvas: Canvas,
+        stops: List<EnvGradientStop>,
+        width: Int,
+        height: Int,
+        alpha: Float
+    ) {
+        if (stops.isEmpty()) return
+        val colors = stops.map { applyAlpha(it.color, alpha) }.toIntArray()
+        val positions = stops.map { it.offset }.toFloatArray()
+
+        val gradient = LinearGradient(
+            0f,
+            0f,
+            0f,
+            height.toFloat(),
+            colors,
+            positions,
+            Shader.TileMode.CLAMP
+        )
+
+        val paint = Paint().apply {
+            shader = gradient
+            isAntiAlias = true
+        }
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+    }
+
+    private fun applyAmbientAdjustment(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
+        ambient: EnvAmbient,
+        strength: Float
+    ) {
+        val paint = Paint().apply { isAntiAlias = true }
+
+        if (ambient.brightness < 1f) {
+            val alpha = ((1f - ambient.brightness) * 140f * strength).toInt().coerceIn(0, 180)
+            paint.color = Color.argb(alpha, 0, 0, 0)
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        } else if (ambient.brightness > 1f) {
+            val alpha = ((ambient.brightness - 1f) * 120f * strength).toInt().coerceIn(0, 140)
+            paint.color = Color.argb(alpha, 255, 255, 255)
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        }
+
+        val warmthOffset = ambient.warmth - 0.5f
+        if (warmthOffset > 0.05f) {
+            val alpha = (warmthOffset * 100f * strength).toInt().coerceIn(0, 80)
+            paint.color = Color.argb(alpha, 255, 179, 71)
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        } else if (warmthOffset < -0.05f) {
+            val alpha = (-warmthOffset * 100f * strength).toInt().coerceIn(0, 80)
+            paint.color = Color.argb(alpha, 74, 144, 226)
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        }
+    }
+
+    private fun drawOverlay(
+        canvas: Canvas,
+        overlay: EnvOverlay,
+        width: Int,
+        height: Int,
+        timestamp: Long
+    ) {
+        when (overlay.type) {
+            "sunrise_rays", "sun_rays" -> {
+                val rays = overlay.rays ?: 8
+                val centerX = (overlay.positionX ?: 0.5f) * width
+                val centerY = (overlay.positionY ?: 0.8f) * height
+                val color = overlay.color ?: Color.WHITE
+                drawSunRays(canvas, centerX, centerY, rays, color, overlay.opacity, width, height)
+            }
+            "sunset_glow" -> {
+                val centerX = width / 2f
+                val centerY = height * 0.75f
+                val radius = max(width, height) * (overlay.spread ?: 0.6f)
+                val color = overlay.color ?: Color.WHITE
+                drawRadialGlow(canvas, centerX, centerY, radius, color, overlay.opacity)
+            }
+            "clouds", "heavy_clouds", "storm_clouds" -> {
+                val count = overlay.count ?: 5
+                val coverage = overlay.coverage ?: if (overlay.type == "clouds") 0.3f else 0.6f
+                val color = overlay.color ?: Color.WHITE
+                drawCloudLayer(canvas, count, coverage, color, overlay.opacity, width, height, timestamp)
+                if (overlay.type == "storm_clouds") {
+                    drawLightningFlash(canvas, overlay, width, height, timestamp)
+                }
+            }
+            "starfield" -> {
+                val density = overlay.density ?: 120
+                drawStarfield(canvas, density, overlay.opacity, width, height, timestamp)
+            }
+            "rainbow_arc" -> {
+                val colors = overlay.colors ?: emptyList()
+                val centerX = (overlay.positionX ?: 0.5f) * width
+                val centerY = (overlay.positionY ?: 0.35f) * height
+                val spread = overlay.spread ?: 0.8f
+                drawRainbowArc(canvas, centerX, centerY, spread, colors, overlay.opacity, width, height)
+            }
+            "subtle_glow" -> {
+                val centerX = (overlay.positionX ?: 0.7f) * width
+                val centerY = (overlay.positionY ?: 0.2f) * height
+                val color = overlay.color ?: Color.WHITE
+                val radius = max(width, height) * 0.6f
+                drawRadialGlow(canvas, centerX, centerY, radius, color, overlay.opacity)
+            }
+        }
+    }
+
+    private fun drawEnvParticles(
+        canvas: Canvas,
+        spec: EnvParticles,
+        width: Int,
+        height: Int,
+        intensityMultiplier: Float,
+        timestamp: Long,
+        themeColors: ThemeColors
+    ) {
+        val layout = getLayoutConfig(width, height)
+        val density = layout.safeInsets.density
+        val count = max(1, (spec.count * intensityMultiplier).toInt())
+        val paint = Paint().apply { isAntiAlias = true }
+
+        val yMin = 0f
+        val yMax = when (spec.type) {
+            "rain" -> height.toFloat()
+            "fog", "mist" -> height * 0.8f
+            else -> height * 0.65f
+        }
+
+        for (i in 0 until count) {
+            val seed = i * 37 + spec.type.hashCode()
+            val baseX = randomRange(
+                layout.margins.horizontal,
+                width - layout.margins.horizontal,
+                seededRandom(seed)
+            )
+            val baseY = randomRange(yMin, yMax, seededRandom(seed + 1))
+            val size = randomRange(spec.sizeMin, spec.sizeMax, seededRandom(seed + 2)) * density
+            val baseOpacity = randomRange(spec.opacityMin, spec.opacityMax, seededRandom(seed + 3))
+
+            val twinkleScale = if (spec.twinkle) {
+                val phase = ((timestamp + i * 120L) % 4000L).toFloat() / 4000f
+                (sin(phase * Math.PI * 2) * 0.5 + 0.5).toFloat()
+            } else {
+                1f
+            }
+
+            val alpha = (baseOpacity * twinkleScale * 255).toInt().coerceIn(10, 255)
+            val color = spec.colors?.let { colors ->
+                colors[abs(seed) % colors.size]
+            } ?: spec.color ?: themeColors.particleColor
+
+            paint.color = color
+            paint.alpha = alpha
+
+            when (spec.type) {
+                "rain" -> {
+                    val angleRad = Math.toRadians(spec.angle.toDouble())
+                    val length = if (spec.length > 0f) spec.length * density else size * 6f
+                    val dx = cos(angleRad).toFloat() * length
+                    val dy = sin(angleRad).toFloat() * length
+                    paint.strokeWidth = max(1f, size * 0.4f)
+                    canvas.drawLine(baseX, baseY, baseX + dx, baseY + dy, paint)
+                }
+                "light_beams" -> {
+                    paint.strokeWidth = max(1f, size * 0.6f)
+                    val beamHeight = height * 0.4f
+                    canvas.drawLine(baseX, baseY, baseX, baseY + beamHeight, paint)
+                }
+                "sparkles" -> {
+                    drawStar(canvas, baseX, baseY, size, paint)
+                }
+                "stars" -> {
+                    drawStar(canvas, baseX, baseY, size, paint)
+                }
+                else -> {
+                    canvas.drawCircle(baseX, baseY, size, paint)
+                    if (spec.glow) {
+                        paint.alpha = (alpha * 0.35f).toInt()
+                        canvas.drawCircle(baseX, baseY, size * 1.8f, paint)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun drawSunRays(
+        canvas: Canvas,
+        centerX: Float,
+        centerY: Float,
+        rays: Int,
+        color: Int,
+        opacity: Float,
+        width: Int,
+        height: Int
+    ) {
+        val paint = Paint().apply {
+            isAntiAlias = true
+            style = Paint.Style.STROKE
+            strokeWidth = max(2f, min(width, height) * 0.004f)
+            this.color = color
+            alpha = (opacity * 255).toInt().coerceIn(0, 255)
+        }
+        val radius = min(width, height) * 0.9f
+        val step = (Math.PI * 2) / rays
+        for (i in 0 until rays) {
+            val angle = step * i
+            val endX = centerX + cos(angle).toFloat() * radius
+            val endY = centerY + sin(angle).toFloat() * radius
+            canvas.drawLine(centerX, centerY, endX, endY, paint)
+        }
+    }
+
+    private fun drawRadialGlow(
+        canvas: Canvas,
+        centerX: Float,
+        centerY: Float,
+        radius: Float,
+        color: Int,
+        opacity: Float
+    ) {
+        val gradient = RadialGradient(
+            centerX,
+            centerY,
+            radius,
+            applyAlpha(color, opacity),
+            Color.TRANSPARENT,
+            Shader.TileMode.CLAMP
+        )
+        val paint = Paint().apply {
+            shader = gradient
+            isAntiAlias = true
+        }
+        canvas.drawCircle(centerX, centerY, radius, paint)
+    }
+
+    private fun drawCloudLayer(
+        canvas: Canvas,
+        count: Int,
+        coverage: Float,
+        color: Int,
+        opacity: Float,
+        width: Int,
+        height: Int,
+        timestamp: Long
+    ) {
+        val paint = Paint().apply {
+            isAntiAlias = true
+            this.color = color
+            alpha = (opacity * 255).toInt().coerceIn(0, 255)
+        }
+        val cloudHeight = height * coverage
+        for (i in 0 until count) {
+            val seed = i * 53 + (timestamp / 1000L).toInt()
+            val x = randomRange(0f, width.toFloat(), seededRandom(seed))
+            val y = randomRange(0f, cloudHeight, seededRandom(seed + 1))
+            val size = randomRange(width * 0.12f, width * 0.28f, seededRandom(seed + 2))
+            drawCloud(canvas, x, y, size, paint)
+        }
+    }
+
+    private fun drawCloud(canvas: Canvas, centerX: Float, centerY: Float, size: Float, paint: Paint) {
+        val radius = size * 0.3f
+        canvas.drawCircle(centerX - radius, centerY, radius, paint)
+        canvas.drawCircle(centerX + radius, centerY, radius * 1.1f, paint)
+        canvas.drawCircle(centerX, centerY - radius * 0.6f, radius * 1.2f, paint)
+        canvas.drawRect(centerX - size * 0.6f, centerY, centerX + size * 0.6f, centerY + radius, paint)
+    }
+
+    private fun drawLightningFlash(
+        canvas: Canvas,
+        overlay: EnvOverlay,
+        width: Int,
+        height: Int,
+        timestamp: Long
+    ) {
+        val frequency = overlay.lightningFrequencyMs ?: return
+        val phase = (timestamp % frequency).toInt()
+        if (phase > 220) return
+        val intensity = overlay.lightningIntensity ?: 0.6f
+        val paint = Paint().apply {
+            color = Color.WHITE
+            alpha = (intensity * 180).toInt().coerceIn(0, 200)
+        }
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+    }
+
+    private fun drawStarfield(
+        canvas: Canvas,
+        density: Int,
+        opacity: Float,
+        width: Int,
+        height: Int,
+        timestamp: Long
+    ) {
+        val paint = Paint().apply { isAntiAlias = true }
+        val count = max(20, density)
+        for (i in 0 until count) {
+            val seed = i * 73 + (timestamp / 10000L).toInt()
+            val x = randomRange(0f, width.toFloat(), seededRandom(seed))
+            val y = randomRange(0f, height * 0.5f, seededRandom(seed + 1))
+            val size = randomRange(1f, 3f, seededRandom(seed + 2))
+            val alpha = (opacity * 255).toInt().coerceIn(0, 255)
+            paint.color = Color.WHITE
+            paint.alpha = alpha
+            canvas.drawCircle(x, y, size, paint)
+        }
+    }
+
+    private fun drawRainbowArc(
+        canvas: Canvas,
+        centerX: Float,
+        centerY: Float,
+        spread: Float,
+        colors: List<Int>,
+        opacity: Float,
+        width: Int,
+        height: Int
+    ) {
+        if (colors.isEmpty()) return
+        val radius = min(width, height) * spread
+        val arcRect = RectF(
+            centerX - radius,
+            centerY - radius,
+            centerX + radius,
+            centerY + radius
+        )
+        val stroke = max(6f, radius * 0.04f)
+        colors.forEachIndexed { index, color ->
+            val paint = Paint().apply {
+                style = Paint.Style.STROKE
+                strokeWidth = stroke
+                isAntiAlias = true
+                this.color = color
+                alpha = (opacity * 255).toInt().coerceIn(0, 255)
+            }
+            val inset = index * stroke * 1.1f
+            val rect = RectF(
+                arcRect.left + inset,
+                arcRect.top + inset,
+                arcRect.right - inset,
+                arcRect.bottom - inset
+            )
+            canvas.drawArc(rect, 180f, 180f, false, paint)
+        }
+    }
+
+    private fun blendColors(colorA: Int, colorB: Int, amount: Float): Int {
+        val clamped = amount.coerceIn(0f, 1f)
+        val inv = 1f - clamped
+        val a = (Color.alpha(colorA) * inv + Color.alpha(colorB) * clamped).toInt()
+        val r = (Color.red(colorA) * inv + Color.red(colorB) * clamped).toInt()
+        val g = (Color.green(colorA) * inv + Color.green(colorB) * clamped).toInt()
+        val b = (Color.blue(colorA) * inv + Color.blue(colorB) * clamped).toInt()
+        return Color.argb(a, r, g, b)
+    }
+
+    private fun applyAlpha(color: Int, alphaFactor: Float): Int {
+        val baseAlpha = Color.alpha(color)
+        val newAlpha = (baseAlpha * alphaFactor).toInt().coerceIn(0, 255)
+        return Color.argb(newAlpha, Color.red(color), Color.green(color), Color.blue(color))
     }
 
     /**
@@ -546,7 +1484,8 @@ object LocalWallpaperGenerator {
         width: Int,
         height: Int,
         theme: WallpaperTheme,
-        urgency: UrgencyLevel
+        urgency: UrgencyLevel,
+        intensityMultiplier: Float
     ) {
         val layout = getLayoutConfig(width, height)
         val density = layout.safeInsets.density
@@ -556,6 +1495,9 @@ object LocalWallpaperGenerator {
             WallpaperTheme.DEEP_OCEAN, WallpaperTheme.OCEAN -> getBubbleParams(urgency)
             else -> getStarParams(urgency)
         }
+        val adjustedParams = params.copy(
+            count = max(1, (params.count * intensityMultiplier).toInt())
+        )
 
         val zones = listOf(
             Pair(layout.layoutZones.clock, 0.6f),
@@ -567,9 +1509,9 @@ object LocalWallpaperGenerator {
 
         val paint = Paint().apply { isAntiAlias = true }
 
-        for (i in 0 until params.count) {
+        for (i in 0 until adjustedParams.count) {
             val seed = i * PARTICLE_SEED_PRIME
-            val zoneIndex = ((i.toFloat() / params.count) * zones.size).toInt().coerceIn(0, zones.size - 1)
+            val zoneIndex = ((i.toFloat() / adjustedParams.count) * zones.size).toInt().coerceIn(0, zones.size - 1)
             val (zone, weight) = zones[zoneIndex]
 
             if (seededRandom(seed) > weight) continue
@@ -580,13 +1522,13 @@ object LocalWallpaperGenerator {
                 seededRandom(seed + 1)
             )
             val baseY = randomRange(zone.y, zone.y + zone.height, seededRandom(seed + 2))
-            val size = randomRange(params.sizeMin, params.sizeMax, seededRandom(seed + 3)) * density
-            val baseOpacity = randomRange(params.opacityMin, params.opacityMax, seededRandom(seed + 4))
+            val size = randomRange(adjustedParams.sizeMin, adjustedParams.sizeMax, seededRandom(seed + 3)) * density
+            val baseOpacity = randomRange(adjustedParams.opacityMin, adjustedParams.opacityMax, seededRandom(seed + 4))
 
-            val twinkleScale = if (params.twinkleMinMs > 0 && params.twinkleMaxMs > 0) {
+            val twinkleScale = if (adjustedParams.twinkleMinMs > 0 && adjustedParams.twinkleMaxMs > 0) {
                 val twinkleDuration = randomRange(
-                    params.twinkleMinMs.toFloat(),
-                    params.twinkleMaxMs.toFloat(),
+                    adjustedParams.twinkleMinMs.toFloat(),
+                    adjustedParams.twinkleMaxMs.toFloat(),
                     seededRandom(seed + 5)
                 )
                 val phase = ((timestamp + i * 100L) % twinkleDuration.toLong()) / twinkleDuration
@@ -597,13 +1539,13 @@ object LocalWallpaperGenerator {
 
             val opacity = (baseOpacity * twinkleScale * 255).toInt().coerceIn(20, 255)
 
-            val wobbleOffset = if (params.wobble > 0f) {
-                sin((timestamp / 1000f) + i) * params.wobble * density
+            val wobbleOffset = if (adjustedParams.wobble > 0f) {
+                sin((timestamp / 1000f) + i) * adjustedParams.wobble * density
             } else {
                 0f
             }
-            val riseOffset = if (params.riseSpeed > 0f) {
-                ((timestamp / 1000f) * params.riseSpeed + i * 50f) % height
+            val riseOffset = if (adjustedParams.riseSpeed > 0f) {
+                ((timestamp / 1000f) * adjustedParams.riseSpeed + i * 50f) % height
             } else {
                 0f
             }

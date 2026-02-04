@@ -237,14 +237,6 @@ class LocalOnlyApiService(
         body["default_privacy_level"]?.toString()?.let {
             privacyRepo.setDefaultPrivacyLevel(PrivacyLevel.fromString(it))
         }
-        (body["auto_hide_work_tasks"] as? Boolean)?.let {
-            privacyRepo.setAutoHideWorkTasks(it)
-        }
-        body["work_hours_start"]?.toString()?.let { privacyRepo.setWorkHoursStart(it) }
-        body["work_hours_end"]?.toString()?.let { privacyRepo.setWorkHoursEnd(it) }
-        (body["biometric_reveal_enabled"] as? Boolean)?.let {
-            privacyRepo.setBiometricRevealEnabled(it)
-        }
         (body["hide_all_tasks_mode"] as? Boolean)?.let {
             privacyRepo.setHideAllTasksMode(it)
         }
@@ -353,10 +345,6 @@ class LocalOnlyApiService(
             displayMode = "one_thing",
             timezone = java.util.TimeZone.getDefault().id,
             defaultPrivacyLevel = privacy.defaultPrivacyLevel.name.lowercase(),
-            autoHideWorkTasks = privacy.autoHideWorkTasks,
-            workHoursStart = privacy.workHoursStart,
-            workHoursEnd = privacy.workHoursEnd,
-            biometricRevealEnabled = privacy.biometricRevealEnabled,
             hideAllTasksMode = privacy.hideAllTasksMode,
             timeOfDayMode = env.timeOfDayMode.name.lowercase(),
             manualTimePeriod = env.manualTimePeriod,

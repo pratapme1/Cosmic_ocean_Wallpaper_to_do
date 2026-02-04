@@ -26,17 +26,21 @@ import androidx.room.InvalidationTracker
 import com.cosmicocean.MainActivity
 import com.cosmicocean.R
 import com.cosmicocean.data.CosmicDatabase
+import com.cosmicocean.data.EnvironmentPreferencesRepository
 import com.cosmicocean.network.NetworkModule
 import com.cosmicocean.auth.TokenManager
 import com.cosmicocean.utils.WallpaperPreferencesManager
 import com.cosmicocean.utils.AchievementUtils
+import com.cosmicocean.utils.applyWallpaperPrivacy
 import com.cosmicocean.wallpaper.LocalWallpaperGenerator
 import com.cosmicocean.wallpaper.WallpaperTheme
+import com.cosmicocean.ui.state.EnvironmentPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
 import java.io.File
 
 /**
@@ -324,11 +328,16 @@ class RealTimeWallpaperService : Service() {
             val db = CosmicDatabase.getDatabase(applicationContext)
             // Get top 3 tasks for wallpaper display
             val topTasks = db.starDao().getTop3Tasks()
+            val allTasks = db.starDao().getAllActiveStarsSync()
             val totalTaskCount = db.starDao().getActiveTaskCount()
+            val privacyMasked = applyWallpaperPrivacy(applicationContext, topTasks, totalTaskCount)
             val achievements = AchievementUtils.getSnapshot(applicationContext)
             val (width, height) = getTargetResolution()
+            val environmentPrefs = runCatching {
+                EnvironmentPreferencesRepository(applicationContext).preferencesFlow.first()
+            }.getOrElse { EnvironmentPreferences() }
 
-            Log.d(TAG, "Generating local wallpaper: ${width}x${height}, tasks=${topTasks.size}, total=$totalTaskCount")
+            Log.d(TAG, "Generating local wallpaper: ${width}x${height}, tasks=${privacyMasked.tasks.size}, total=${privacyMasked.totalTaskCount}")
 
             val prefsManager = WallpaperPreferencesManager(applicationContext)
             val wallpaperMode = prefsManager.getWallpaperMode()
@@ -358,13 +367,16 @@ class RealTimeWallpaperService : Service() {
                         Log.d(TAG, "Using custom wallpaper from: $customPath")
 
                         val result = LocalWallpaperGenerator.generateWithCustomBackground(
-                            tasks = topTasks,
-                            totalTaskCount = totalTaskCount,
+                            tasks = privacyMasked.tasks,
+                            totalTaskCount = privacyMasked.totalTaskCount,
                             customBackground = customBitmap,
                             width = width,
                             height = height,
                             achievementCount = achievements.achievementCount,
-                            streakDays = achievements.streakDays
+                            streakDays = achievements.streakDays,
+                            theme = WallpaperTheme.fromString(themeName),
+                            environmentPreferences = environmentPrefs,
+                            weatherTasks = allTasks
                         )
 
                         // Recycle original bitmap to free memory
@@ -385,13 +397,15 @@ class RealTimeWallpaperService : Service() {
             // Generate themed wallpaper
             val theme = WallpaperTheme.fromString(themeName)
             LocalWallpaperGenerator.generate(
-                tasks = topTasks,
-                totalTaskCount = totalTaskCount,
+                tasks = privacyMasked.tasks,
+                totalTaskCount = privacyMasked.totalTaskCount,
                 theme = theme,
                 width = width,
                 height = height,
                 achievementCount = achievements.achievementCount,
-                streakDays = achievements.streakDays
+                streakDays = achievements.streakDays,
+                environmentPreferences = environmentPrefs,
+                weatherTasks = allTasks
             )
         } catch (e: Exception) {
             Log.e(TAG, "Local generation failed: ${e.message}", e)

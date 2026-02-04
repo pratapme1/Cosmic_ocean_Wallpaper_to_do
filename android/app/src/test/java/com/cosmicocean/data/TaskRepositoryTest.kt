@@ -2,177 +2,93 @@ package com.cosmicocean.data
 
 import android.content.Context
 import com.cosmicocean.model.Star
-import com.cosmicocean.model.TaskResponse
 import com.cosmicocean.network.ApiService
+import com.cosmicocean.sync.SyncManager
+import io.mockk.*
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import org.junit.Assert.*
-import org.junit.runner.RunWith
-import org.mockito.Mock
-import org.mockito.Mockito
-import org.mockito.ArgumentMatchers.anyMap
-import org.mockito.ArgumentMatchers.anyString
-import org.mockito.junit.MockitoJUnitRunner
-import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.runBlocking
-import okhttp3.ResponseBody
-import retrofit2.Response
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
-@RunWith(MockitoJUnitRunner::class)
 class TaskRepositoryTest {
 
-    @Mock
-    lateinit var context: Context
-
-    @Mock
-    lateinit var apiService: ApiService
-
-    private lateinit var starDao: FakeStarDao
+    private lateinit var starDao: StarDao
+    private lateinit var apiService: ApiService
+    private lateinit var context: Context
+    private lateinit var syncManager: SyncManager
     private lateinit var repository: TaskRepository
-    
-    // Capture the wallpaper update call
-    private var wallpaperUpdateCalled = false
+    private lateinit var wallpaperUpdateLatch: CountDownLatch
 
     @Before
     fun setup() {
-        wallpaperUpdateCalled = false
-        starDao = FakeStarDao()
-        
-        // Inject lambda that sets flag
+        starDao = mockk(relaxed = true)
+        apiService = mockk(relaxed = true)
+        context = mockk(relaxed = true)
+        syncManager = mockk(relaxed = true)
+        wallpaperUpdateLatch = CountDownLatch(1)
+
         repository = TaskRepository(
-            starDao, 
-            apiService, 
-            context,
-            wallpaperUpdater = { ctx -> 
-                wallpaperUpdateCalled = true 
-            }
+            starDao = starDao,
+            apiService = apiService,
+            context = context,
+            syncManager = syncManager,
+            wallpaperUpdater = { wallpaperUpdateLatch.countDown() }
         )
     }
 
     @Test
-    fun `addStar should trigger wallpaper update ONLY on success`() = runBlocking {
-        Mockito.mockStatic(android.util.Log::class.java).use {
-            // Arrange
-            val star = createStar()
-            val successfulResponse = Response.success(
-                TaskResponse(
-                    id = "new-id",
-                    title = "Test Star",
-                    dueDate = "2026-01-01"
-                )
-            )
-            Mockito.`when`(apiService.createTask(anyMap())).thenReturn(successfulResponse)
+    fun `addStar queues create and triggers wallpaper update`() = runTest {
+        val star = Star(x = 100f, y = 100f, title = "Test Star", urgency = 1, dueDate = null)
 
-            // Act
-            repository.addStar(star)
+        coEvery { starDao.insertStarWithTransaction(any()) } returns Unit
+        coEvery { syncManager.queueCreate(any(), any(), any()) } returns Unit
 
-            // Assert
-            assertTrue("Wallpaper update SHOULD be called on sync success", wallpaperUpdateCalled)
-        }
+        val localId = repository.addStar(star)
+
+        coVerify { starDao.insertStarWithTransaction(match { it.localId == localId && it.syncStatus == "pending" }) }
+        coVerify { syncManager.queueCreate(localId, any(), any()) }
+        assertTrue("Wallpaper update should be triggered", wallpaperUpdateLatch.await(1, TimeUnit.SECONDS))
     }
 
     @Test
-    fun `addStar should NOT trigger wallpaper update on failure`() = runBlocking {
-        Mockito.mockStatic(android.util.Log::class.java).use {
-            // Arrange
-            val star = createStar()
-            val errorResponse = Response.error<TaskResponse>(500, ResponseBody.create(null, "Error"))
-            Mockito.`when`(apiService.createTask(anyMap())).thenReturn(errorResponse)
+    fun `updateStar queues update and triggers wallpaper update`() = runTest {
+        val star = Star(x = 100f, y = 100f, title = "Test Star", urgency = 1, dueDate = null, id = "local-1")
 
-            // Act
-            repository.addStar(star)
+        coEvery { starDao.insertStarWithTransaction(any()) } returns Unit
+        coEvery { syncManager.queueUpdate(any(), any()) } returns Unit
 
-            // Assert
-            assertFalse("Wallpaper update should NOT be called on sync failure", wallpaperUpdateCalled)
-        }
+        repository.updateStar(star)
+
+        coVerify { starDao.insertStarWithTransaction(match { it.localId == "local-1" && it.syncStatus == "pending" }) }
+        coVerify { syncManager.queueUpdate("local-1", any()) }
+        assertTrue("Wallpaper update should be triggered", wallpaperUpdateLatch.await(1, TimeUnit.SECONDS))
     }
 
     @Test
-    fun `updateStar should trigger wallpaper update ONLY on success`() = runBlocking {
-        Mockito.mockStatic(android.util.Log::class.java).use {
-            // Arrange
-            val star = createStar()
-            val successfulResponse = Response.success(
-                TaskResponse(
-                    id = "test-id",
-                    title = "Test Star",
-                    dueDate = "2026-01-01"
-                )
-            )
-            Mockito.`when`(apiService.updateTask(anyString(), anyMap())).thenReturn(successfulResponse)
+    fun `deleteStar queues delete and triggers wallpaper update`() = runTest {
+        val star = Star(x = 100f, y = 100f, title = "Test Star", urgency = 1, dueDate = null, id = "local-1")
 
-            // Act
-            repository.updateStar(star)
+        coEvery { starDao.softDelete(any(), any()) } returns Unit
+        coEvery { syncManager.queueDelete(any()) } returns Unit
 
-            // Assert
-            assertTrue("Wallpaper update SHOULD be called on sync success", wallpaperUpdateCalled)
-        }
+        repository.deleteStar(star)
+
+        coVerify { starDao.softDelete("local-1", any()) }
+        coVerify { syncManager.queueDelete("local-1") }
+        assertTrue("Wallpaper update should be triggered", wallpaperUpdateLatch.await(1, TimeUnit.SECONDS))
     }
 
     @Test
-    fun `updateStar should NOT trigger wallpaper update on failure`() = runBlocking {
-        Mockito.mockStatic(android.util.Log::class.java).use {
-            // Arrange
-            val star = createStar()
-            val errorResponse = Response.error<TaskResponse>(500, ResponseBody.create(null, "Error"))
-            Mockito.`when`(apiService.updateTask(anyString(), anyMap())).thenReturn(errorResponse)
+    fun `clearAllTasks queues clear and triggers wallpaper update`() = runTest {
+        coEvery { starDao.deleteAllStars() } returns Unit
+        coEvery { syncManager.queueClearAll() } returns Unit
 
-            // Act
-            repository.updateStar(star)
+        repository.clearAllTasks()
 
-            // Assert
-            assertFalse("Wallpaper update should NOT be called on sync failure", wallpaperUpdateCalled)
-        }
+        coVerify { starDao.deleteAllStars() }
+        coVerify { syncManager.queueClearAll() }
+        assertTrue("Wallpaper update should be triggered", wallpaperUpdateLatch.await(1, TimeUnit.SECONDS))
     }
-
-    @Test
-    fun `deleteStar should trigger wallpaper update ONLY on success`() = runBlocking {
-        Mockito.mockStatic(android.util.Log::class.java).use {
-            // Arrange
-            val star = createStar()
-            val successfulResponse = Response.success<Void>(null)
-            Mockito.`when`(apiService.deleteTask(anyString())).thenReturn(successfulResponse)
-
-            // Act
-            repository.deleteStar(star)
-
-            // Assert
-            assertTrue("Wallpaper update SHOULD be called on sync success", wallpaperUpdateCalled)
-        }
-    }
-
-    @Test
-    fun `deleteStar should NOT trigger wallpaper update on failure`() = runBlocking {
-        Mockito.mockStatic(android.util.Log::class.java).use {
-            // Arrange
-            val star = createStar()
-            val errorResponse = Response.error<Void>(500, ResponseBody.create(null, "Error"))
-            Mockito.`when`(apiService.deleteTask(anyString())).thenReturn(errorResponse)
-
-            // Act
-            repository.deleteStar(star)
-
-            // Assert
-            assertFalse("Wallpaper update should NOT be called on sync failure", wallpaperUpdateCalled)
-        }
-    }
-
-    private fun createStar() = Star(
-        x = 100f,
-        y = 100f,
-        title = "Test Star",
-        urgency = 1,
-        dueDate = null,
-        id = "test-id"
-    )
-}
-
-// Minimal Fakes needed for test to run without errors
-class FakeStarDao : StarDao {
-    override fun getAllActiveStars() = emptyFlow<List<StarEntity>>()
-    override suspend fun insertStar(star: StarEntity) {}
-    override suspend fun insertStars(stars: List<StarEntity>) {}
-    override suspend fun deleteStar(star: StarEntity) {}
-    override suspend fun deleteStarById(id: String) {}
-    override suspend fun deleteAllStars() {}
 }

@@ -1,5 +1,39 @@
 # Changelog
 
+## [2.6.3] - 2026-02-04 (Local Privacy + Environment Wallpapers)
+
+### Added
+- **Local-Only Privacy Settings**: Privacy controls now stored locally and applied to wallpaper task titles (public/initials/hidden).
+- **Environment → Wallpaper**: Time-of-day, weather overlay, and particle intensity now render on wallpapers.
+- **Custom Wallpaper Effects**: Environment overlays and particles apply to both generated and custom wallpapers.
+
+### Fixed
+- **Wallpaper Consistency**: Real-time and worker updates now read local environment preferences for every wallpaper refresh.
+
+## [2.6.2] - 2026-02-03 (Local-Only Visual Parity)
+
+### Design-Only
+- **Backend Visual Parity**: Radial gradients and transition blending to match backend layer order.
+- **Particle System Alignment**: Zone-weighted particle distribution with urgency-based counts, sizes, and opacity.
+- **Typography Refinement**: Updated header/title typefaces to align with backend visual hierarchy.
+- **Achievement Panel Styling**: Right-side vertical panel refined with badge + streak sections (no behavior change).
+
+### Fixed
+- **Achievement Count**: Wallpaper achievements now reflect total completed tasks (not just milestone trophies).
+- **Priority Mapping**: P1/P2/P3 derived from due date (today/overdue = P1, tomorrow = P2, future/no date = P3).
+- **Local Parsing**: Added EOD/EOW/EOM/EOY + shorthand date handling and safer priority defaults.
+
+## [2.6.1] - 2026-02-03 (Local-Only Wallpaper Reliability + Backend Layout Alignment)
+
+### Fixed
+- **Real-Time Wallpaper Updates**: Auto-enabled wallpaper updates when consent wasn’t set in local-only mode; removed network constraints from wallpaper workers.
+- **Custom Wallpaper + Task Overlay**: Task CRUD now reliably triggers local wallpaper refreshes, including custom wallpaper mode.
+- **Backend Layout Alignment**: Ported backend layout system (safe zones, margins, typography) to local wallpaper generator.
+- **Achievement Panel Placement**: Achievements now render as a right-side vertical panel aligned with the task zone (backend parity).
+- **Due Date Priority Colors**: Task indicators follow due-date priority (red <24h/overdue, orange tomorrow, blue future).
+- **Visual Parity (Design-Only)**: Radial gradients, transition blending, zone-weighted particles, and refined typography to match backend styling.
+- **Resolution Consistency**: Service/worker now use stored portrait resolution for lock screen alignment.
+
 All notable changes to Cosmic Ocean will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

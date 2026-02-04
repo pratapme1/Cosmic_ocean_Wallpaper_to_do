@@ -60,6 +60,7 @@ testing/
 *.mkv
 
 # ===== INTERNAL DOCS (Keep local) =====
+archive/
 AGENT_SYSTEM.md
 ANDROID_PWA_ALIGNMENT_SPEC.md
 ARCHIVE_IMPLEMENTATION_REPORT.md

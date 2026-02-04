@@ -7,12 +7,16 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.cosmicocean.data.CosmicDatabase
+import com.cosmicocean.data.EnvironmentPreferencesRepository
+import com.cosmicocean.ui.state.EnvironmentPreferences
 import com.cosmicocean.utils.AchievementUtils
 import com.cosmicocean.utils.WallpaperPreferencesManager
+import com.cosmicocean.utils.applyWallpaperPrivacy
 import com.cosmicocean.wallpaper.LocalWallpaperGenerator
 import com.cosmicocean.wallpaper.WallpaperTheme
 import java.io.File
 import java.io.IOException
+import kotlinx.coroutines.flow.first
 
 /**
  * LOCAL-FIRST FIX: WallpaperUpdateWorker
@@ -49,10 +53,15 @@ class WallpaperUpdateWorker(
             // 3. Get tasks from LOCAL database (no network needed!)
             val database = CosmicDatabase.getDatabase(applicationContext)
             val topTasks = database.starDao().getTop3Tasks()
+            val allTasks = database.starDao().getAllActiveStarsSync()
             val totalCount = database.starDao().getActiveTaskCount()
+            val privacyMasked = applyWallpaperPrivacy(applicationContext, topTasks, totalCount)
             val achievements = AchievementUtils.getSnapshot(applicationContext)
+            val environmentPrefs = runCatching {
+                EnvironmentPreferencesRepository(applicationContext).preferencesFlow.first()
+            }.getOrElse { EnvironmentPreferences() }
 
-            Log.d(TAG, "LOCAL-FIRST: Got ${topTasks.size} top tasks, total: $totalCount (from local DB)")
+            Log.d(TAG, "LOCAL-FIRST: Got ${privacyMasked.tasks.size} top tasks, total: ${privacyMasked.totalTaskCount} (from local DB)")
 
             // 4. Generate wallpaper locally
             val bitmap = if (wallpaperMode == WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM) {
@@ -63,25 +72,58 @@ class WallpaperUpdateWorker(
                     if (customBackground != null) {
                         Log.d(TAG, "Using custom background: $customPath")
                         LocalWallpaperGenerator.generateWithCustomBackground(
-                            tasks = topTasks,
-                            totalTaskCount = totalCount,
+                            tasks = privacyMasked.tasks,
+                            totalTaskCount = privacyMasked.totalTaskCount,
                             customBackground = customBackground,
                             width = screenWidth,
                             height = screenHeight,
                             achievementCount = achievements.achievementCount,
-                            streakDays = achievements.streakDays
+                            streakDays = achievements.streakDays,
+                            theme = WallpaperTheme.fromString(theme),
+                            environmentPreferences = environmentPrefs,
+                            weatherTasks = allTasks
                         )
                     } else {
                         Log.w(TAG, "Custom background decode failed, falling back to generated")
-                        generateThemedWallpaper(topTasks, totalCount, theme, screenWidth, screenHeight, achievements.achievementCount, achievements.streakDays)
+                        generateThemedWallpaper(
+                            privacyMasked.tasks,
+                            privacyMasked.totalTaskCount,
+                            theme,
+                            screenWidth,
+                            screenHeight,
+                            achievements.achievementCount,
+                            achievements.streakDays,
+                            environmentPrefs,
+                            allTasks
+                        )
                     }
                 } else {
                     Log.w(TAG, "Custom wallpaper path invalid, falling back to generated")
-                    generateThemedWallpaper(topTasks, totalCount, theme, screenWidth, screenHeight, achievements.achievementCount, achievements.streakDays)
+                    generateThemedWallpaper(
+                        privacyMasked.tasks,
+                        privacyMasked.totalTaskCount,
+                        theme,
+                        screenWidth,
+                        screenHeight,
+                        achievements.achievementCount,
+                        achievements.streakDays,
+                        environmentPrefs,
+                        allTasks
+                    )
                 }
             } else {
                 // Generated wallpaper mode
-                generateThemedWallpaper(topTasks, totalCount, theme, screenWidth, screenHeight, achievements.achievementCount, achievements.streakDays)
+                generateThemedWallpaper(
+                    privacyMasked.tasks,
+                    privacyMasked.totalTaskCount,
+                    theme,
+                    screenWidth,
+                    screenHeight,
+                    achievements.achievementCount,
+                    achievements.streakDays,
+                    environmentPrefs,
+                    allTasks
+                )
             }
 
             // 5. Set wallpaper
@@ -119,7 +161,9 @@ class WallpaperUpdateWorker(
         width: Int,
         height: Int,
         achievementCount: Int,
-        streakDays: Int
+        streakDays: Int,
+        environmentPreferences: EnvironmentPreferences,
+        weatherTasks: List<com.cosmicocean.data.StarEntity>
     ): android.graphics.Bitmap {
         val wallpaperTheme = when (theme.lowercase()) {
             "deep_ocean" -> WallpaperTheme.DEEP_OCEAN
@@ -136,7 +180,9 @@ class WallpaperUpdateWorker(
             width = width,
             height = height,
             achievementCount = achievementCount,
-            streakDays = streakDays
+            streakDays = streakDays,
+            environmentPreferences = environmentPreferences,
+            weatherTasks = weatherTasks
         )
     }
 
