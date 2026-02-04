@@ -224,8 +224,42 @@ data class UserPreferencesResponse(
     val manualTimePeriod: String? = "morning",  // dawn, morning, afternoon, evening, night
     @SerializedName("weather_overlay_enabled")
     val weatherOverlayEnabled: Boolean? = true,
+    @SerializedName("environment_enabled")
+    val environmentEnabled: Boolean? = true,
     @SerializedName("particle_intensity")
     val particleIntensity: String? = "medium",  // low, medium, high
+    // Due haptics settings
+    @SerializedName("due_haptics_enabled")
+    val dueHapticsEnabled: Boolean? = true,
+    @SerializedName("due_soon_minutes")
+    val dueSoonMinutes: Int? = 30,
+    @SerializedName("urgent_due_minutes")
+    val urgentDueMinutes: Int? = 10,
+    @SerializedName("overdue_minutes")
+    val overdueMinutes: Int? = 60,
+    @SerializedName("quiet_hours_enabled")
+    val quietHoursEnabled: Boolean? = true,
+    @SerializedName("quiet_hours_start")
+    val quietHoursStart: Int? = 22,
+    @SerializedName("quiet_hours_end")
+    val quietHoursEnd: Int? = 7,
+    @SerializedName("respect_dnd")
+    val respectDnd: Boolean? = true,
+    @SerializedName("haptics_rate_limit_minutes")
+    val hapticsRateLimitMinutes: Int? = 30,
+    // Context mode + tutorial
+    @SerializedName("context_mode")
+    val contextMode: String? = "auto",
+    @SerializedName("manual_context")
+    val manualContext: String? = "home",
+    @SerializedName("focus_mode_enabled")
+    val focusModeEnabled: Boolean? = false,
+    @SerializedName("overdue_heatmap_enabled")
+    val overdueHeatmapEnabled: Boolean? = true,
+    @SerializedName("ambient_reminders_enabled")
+    val ambientRemindersEnabled: Boolean? = true,
+    @SerializedName("tutorial_seen")
+    val tutorialSeen: Boolean? = false,
     // Epic 11: Custom Wallpaper
     @SerializedName("wallpaper_mode")
     val wallpaperMode: String? = "generated", // generated, custom

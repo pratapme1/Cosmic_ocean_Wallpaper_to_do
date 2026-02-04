@@ -78,6 +78,7 @@ class EnvironmentSettingsViewModel(
                                     "manual" -> TimeOfDayMode.MANUAL
                                     else -> TimeOfDayMode.AUTO
                                 },
+                                environmentEnabled = apiPrefs.environmentEnabled ?: true,
                                 manualTimePeriod = apiPrefs.manualTimePeriod ?: "morning",
                                 weatherOverlayEnabled = apiPrefs.weatherOverlayEnabled ?: true,
                                 particleIntensity = when (apiPrefs.particleIntensity?.lowercase()) {
@@ -86,7 +87,25 @@ class EnvironmentSettingsViewModel(
                                     else -> ParticleIntensity.MEDIUM
                                 },
                                 wallpaperMode = apiPrefs.wallpaperMode ?: "generated",
-                                isWallpaperEnabled = wallpaperPreferences.isWallpaperEnabled()
+                                isWallpaperEnabled = wallpaperPreferences.isWallpaperEnabled(),
+                                contextMode = when (apiPrefs.contextMode?.lowercase()) {
+                                    "manual" -> com.cosmicocean.ui.state.ContextMode.MANUAL
+                                    else -> com.cosmicocean.ui.state.ContextMode.AUTO
+                                },
+                                manualContext = apiPrefs.manualContext ?: "home",
+                                focusModeEnabled = apiPrefs.focusModeEnabled ?: false,
+                                dueHapticsEnabled = apiPrefs.dueHapticsEnabled ?: true,
+                                dueSoonMinutes = apiPrefs.dueSoonMinutes ?: 30,
+                                urgentDueMinutes = apiPrefs.urgentDueMinutes ?: 10,
+                                overdueMinutes = apiPrefs.overdueMinutes ?: 60,
+                                quietHoursEnabled = apiPrefs.quietHoursEnabled ?: true,
+                                quietHoursStart = apiPrefs.quietHoursStart ?: 22,
+                                quietHoursEnd = apiPrefs.quietHoursEnd ?: 7,
+                                respectDnd = apiPrefs.respectDnd ?: true,
+                                hapticsRateLimitMinutes = apiPrefs.hapticsRateLimitMinutes ?: 30,
+                                overdueHeatmapEnabled = apiPrefs.overdueHeatmapEnabled ?: true,
+                                ambientRemindersEnabled = apiPrefs.ambientRemindersEnabled ?: true,
+                                tutorialSeen = apiPrefs.tutorialSeen ?: false
                             ),
                             isLoading = false
                         )
@@ -133,6 +152,7 @@ class EnvironmentSettingsViewModel(
             environmentRepository?.let { repo ->
                 try {
                     when (key) {
+                        "environment_enabled" -> repo.setEnvironmentEnabled(value as Boolean)
                         "time_of_day_mode" -> {
                             val mode = if (value.toString().lowercase() == "manual")
                                 TimeOfDayMode.MANUAL else TimeOfDayMode.AUTO
@@ -149,6 +169,27 @@ class EnvironmentSettingsViewModel(
                             repo.setParticleIntensity(intensity)
                         }
                         "wallpaper_mode" -> repo.setWallpaperMode(value.toString())
+                        "context_mode" -> {
+                            val mode = if (value.toString().lowercase() == "manual")
+                                com.cosmicocean.ui.state.ContextMode.MANUAL
+                            else
+                                com.cosmicocean.ui.state.ContextMode.AUTO
+                            repo.setContextMode(mode)
+                        }
+                        "manual_context" -> repo.setManualContext(value.toString())
+                        "focus_mode_enabled" -> repo.setFocusModeEnabled(value as Boolean)
+                        "due_haptics_enabled" -> repo.setDueHapticsEnabled(value as Boolean)
+                        "due_soon_minutes" -> repo.setDueSoonMinutes((value as Number).toInt())
+                        "urgent_due_minutes" -> repo.setUrgentDueMinutes((value as Number).toInt())
+                        "overdue_minutes" -> repo.setOverdueMinutes((value as Number).toInt())
+                        "quiet_hours_enabled" -> repo.setQuietHoursEnabled(value as Boolean)
+                        "quiet_hours_start" -> repo.setQuietHoursStart((value as Number).toInt())
+                        "quiet_hours_end" -> repo.setQuietHoursEnd((value as Number).toInt())
+                        "respect_dnd" -> repo.setRespectDnd(value as Boolean)
+                        "haptics_rate_limit_minutes" -> repo.setHapticsRateLimit((value as Number).toInt())
+                        "overdue_heatmap_enabled" -> repo.setOverdueHeatmapEnabled(value as Boolean)
+                        "ambient_reminders_enabled" -> repo.setAmbientRemindersEnabled(value as Boolean)
+                        "tutorial_seen" -> repo.setTutorialSeen(value as Boolean)
                     }
                     Log.d(TAG, "LOCAL-FIRST: Saved $key = $value locally")
                 } catch (e: Exception) {

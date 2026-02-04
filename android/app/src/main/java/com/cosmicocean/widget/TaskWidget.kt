@@ -31,25 +31,35 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import com.cosmicocean.data.CosmicDatabase
+import com.cosmicocean.network.LocalOnlyUserStore
 import com.cosmicocean.network.NetworkModule
+import java.util.concurrent.TimeUnit
 
 class TaskWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        // Mock data for display - in real app, fetch from local DB or API
-        val tasks = listOf(
-            TaskItem("1", "Submit Quarterly Report", "45m"),
-            TaskItem("2", "Call Client", "10m"),
-            TaskItem("3", "Review Documents", "1h")
-        )
+        val db = CosmicDatabase.getDatabase(context)
+        val tasks = db.starDao().getTop3Tasks().map { star ->
+            TaskItem(
+                id = star.localId,
+                title = star.title,
+                estimate = formatDue(star.dueDate),
+                priority = star.urgency,
+                due_date = star.dueDate?.toString()
+            )
+        }
+
+        val userId = LocalOnlyUserStore(context).getOrCreateUser().id
+        val streak = db.achievementStatsDao().getStatsSync(userId)?.currentStreak ?: 0
 
         provideContent {
-            TaskWidgetContent(tasks)
+            TaskWidgetContent(tasks, streak)
         }
     }
 
     @Composable
-    private fun TaskWidgetContent(tasks: List<TaskItem>) {
+    private fun TaskWidgetContent(tasks: List<TaskItem>, streak: Int) {
         val context = androidx.glance.LocalContext.current
         Column(
             modifier = GlanceModifier
@@ -62,7 +72,7 @@ class TaskWidget : GlanceAppWidget() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "🌌 COSMIC OCEAN",
+                    text = "🌌 DAILY FOCUS",
                     style = TextStyle(
                         color = ColorProvider(Color(0xFF00E5FF)),
                         fontSize = 12.sp,
@@ -70,6 +80,15 @@ class TaskWidget : GlanceAppWidget() {
                     )
                 )
                 Spacer(modifier = GlanceModifier.defaultWeight())
+                Text(
+                    text = "🔥 $streak",
+                    style = TextStyle(
+                        color = ColorProvider(Color(0xFFFFB74D)),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+                Spacer(modifier = GlanceModifier.width(8.dp))
                 Text(
                     text = "⟳",
                     modifier = GlanceModifier.clickable(actionRunCallback<RefreshAction>()),
@@ -87,8 +106,15 @@ class TaskWidget : GlanceAppWidget() {
 
             Spacer(modifier = GlanceModifier.height(8.dp))
 
-            tasks.forEach { task ->
-                TaskRow(task)
+            if (tasks.isEmpty()) {
+                Text(
+                    text = "All clear. Add a task to get started.",
+                    style = TextStyle(color = ColorProvider(Color.White), fontSize = 12.sp)
+                )
+            } else {
+                tasks.forEach { task ->
+                    TaskRow(task)
+                }
             }
         }
     }
@@ -149,6 +175,18 @@ class TaskWidget : GlanceAppWidget() {
         val priority: Int = 1, 
         val due_date: String? = null
     )
+
+    private fun formatDue(dueDateMs: Long?): String? {
+        if (dueDateMs == null) return "No due"
+        val now = System.currentTimeMillis()
+        val diffMinutes = TimeUnit.MILLISECONDS.toMinutes(dueDateMs - now)
+        return when {
+            diffMinutes < 0 -> "Overdue"
+            diffMinutes < 60 -> "${diffMinutes}m"
+            diffMinutes < 24 * 60 -> "${diffMinutes / 60}h"
+            else -> "${diffMinutes / (24 * 60)}d"
+        }
+    }
 }
 
 class ToggleTaskAction : ActionCallback {

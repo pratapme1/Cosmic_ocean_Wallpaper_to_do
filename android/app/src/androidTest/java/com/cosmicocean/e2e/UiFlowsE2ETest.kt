@@ -6,6 +6,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -17,6 +18,7 @@ import com.cosmicocean.auth.TokenManager
 import com.cosmicocean.data.CosmicDatabase
 import com.cosmicocean.data.StarEntity
 import com.cosmicocean.data.PrivacyPreferencesRepository
+import com.cosmicocean.data.EnvironmentPreferencesRepository
 import com.cosmicocean.test.ScreenshotTestRule
 import com.cosmicocean.utils.WallpaperPreferencesManager
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +28,9 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
 import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
@@ -138,11 +143,66 @@ class UiFlowsE2ETest {
     fun environmentSettingsToggleWeatherOverlay() {
         openEnvironmentSettings()
 
+        val isEnabled = composeTestRule
+            .onAllNodesWithText("Weather reflects your productivity", substring = true)
+            .fetchSemanticsNodes()
+            .isNotEmpty()
+
+        if (isEnabled) {
+            toggleBySiblingText("Productivity Weather")
+            composeTestRule.onNodeWithText("Weather overlay is disabled", substring = true).assertExists()
+        }
+
         toggleBySiblingText("Productivity Weather")
         composeTestRule.onNodeWithText("Weather reflects your productivity", substring = true).assertExists()
 
         composeTestRule.onNodeWithContentDescription("Back").performClick()
         composeTestRule.onNodeWithText("Environment Settings").assertDoesNotExist()
+    }
+
+    @Test
+    fun environmentSettingsDisableAllEffects() {
+        openEnvironmentSettings()
+
+        val enabledCopyPresent = composeTestRule
+            .onAllNodesWithText("Dynamic environment effects are enabled", substring = true)
+            .fetchSemanticsNodes()
+            .isNotEmpty()
+
+        if (enabledCopyPresent) {
+            toggleBySiblingText("Enable Environment")
+        }
+
+        composeTestRule.onNodeWithText("Environment effects are disabled", substring = true).assertExists()
+        composeTestRule.onNodeWithText("Enable environment effects to use time-of-day settings", substring = true).assertExists()
+        composeTestRule.onNodeWithText("Enable environment effects to use the weather overlay", substring = true).assertExists()
+        captureScreenshot("environmentSettingsDisabled")
+
+        composeTestRule.onNodeWithContentDescription("Back").performClick()
+        composeTestRule.onNodeWithText("Environment Settings").assertDoesNotExist()
+    }
+
+    @Test
+    fun environmentToggleShowsWallpaperBeforeAfter() {
+        composeTestRule.waitForIdle()
+        captureScreenshot("wallpaper_env_on")
+
+        openEnvironmentSettings()
+        val disabledCopyPresent = composeTestRule
+            .onAllNodesWithText("Environment effects are disabled", substring = true)
+            .fetchSemanticsNodes()
+            .isNotEmpty()
+        if (disabledCopyPresent) {
+            toggleBySiblingText("Enable Environment")
+        }
+
+        toggleBySiblingText("Enable Environment")
+        composeTestRule.onNodeWithText("Environment effects are disabled", substring = true).assertExists()
+        composeTestRule.onNodeWithContentDescription("Back").performClick()
+        composeTestRule.onNodeWithText("Environment Settings").assertDoesNotExist()
+        composeTestRule.waitForIdle()
+        Thread.sleep(600)
+        captureScreenshot("wallpaper_env_off")
     }
 
     @Test
@@ -189,6 +249,7 @@ class UiFlowsE2ETest {
         runBlocking {
             withContext(Dispatchers.IO) {
                 PrivacyPreferencesRepository(context).resetToDefaults()
+                EnvironmentPreferencesRepository(context).resetToDefaults()
                 val db = database()
                 db.starDao().deleteAllStars()
                 db.constellationDao().deleteAllLinks()
@@ -196,6 +257,35 @@ class UiFlowsE2ETest {
             }
         }
         recreateActivity()
+    }
+
+    private fun captureScreenshot(tag: String) {
+        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
+        val dir = File("/data/local/tmp/AndroidTestScreenshots/manual")
+
+        if (!dir.exists()) {
+            uiAutomation.executeShellCommand("mkdir -p ${dir.absolutePath}").close()
+        }
+
+        val fileName = "${tag}_${System.currentTimeMillis()}.png"
+        val externalDir = targetContext.getExternalFilesDir("screenshots")
+            ?: throw AssertionError("External files dir unavailable for screenshots")
+        if (!externalDir.exists() && !externalDir.mkdirs()) {
+            throw AssertionError("Failed to create external screenshot directory: ${externalDir.absolutePath}")
+        }
+        val externalFile = File(externalDir, fileName)
+
+        val bitmap = uiAutomation.takeScreenshot()
+            ?: throw AssertionError("UIAutomation returned null screenshot")
+        FileOutputStream(externalFile).use { out ->
+            if (!bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)) {
+                throw AssertionError("Failed to compress screenshot for $tag")
+            }
+        }
+        bitmap.recycle()
+
+        uiAutomation.executeShellCommand("cp ${externalFile.absolutePath} ${dir.absolutePath}/${fileName}").close()
     }
 
     private fun seedStars(stars: List<StarEntity>) {

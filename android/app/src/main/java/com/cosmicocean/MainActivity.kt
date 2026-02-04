@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -42,6 +43,8 @@ import com.cosmicocean.utils.WallpaperPreferencesManager
 import com.cosmicocean.viewmodel.MainViewModel
 import com.cosmicocean.viewmodel.MainViewModelFactory
 import com.cosmicocean.viewmodel.EnvironmentSettingsViewModel
+import com.cosmicocean.data.EnvironmentPreferencesRepository
+import com.cosmicocean.ui.state.EnvironmentPreferences
 import com.cosmicocean.service.RealTimeWallpaperService
 import com.cosmicocean.sync.SyncManager
 import kotlinx.coroutines.launch
@@ -102,6 +105,7 @@ class MainActivity : ComponentActivity() {
 
         // Schedule periodic wallpaper updates to keep urgency states current
         schedulePeriodicWallpaperUpdates()
+        scheduleDueHaptics()
 
         setContent {
             var isAuthenticated by remember { mutableStateOf(tokenManager.isLoggedIn()) }
@@ -143,15 +147,50 @@ class MainActivity : ComponentActivity() {
                 var showTrophyGallery by remember { mutableStateOf(false) }
                 var showPrivacySettings by remember { mutableStateOf(false) }
                 var showEnvironmentSettings by remember { mutableStateOf(false) }
+                var showSnoozeOverdueConfirm by remember { mutableStateOf(false) }
                 var editingStar by remember { mutableStateOf<Star?>(null) }
                 var lastTapOffset by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
                 var isInteracting by remember { mutableStateOf(false) }
                 var currentTheme by remember { mutableStateOf(wallpaperPreferences.getTheme()) }
                 var showWallpaperConsent by remember { mutableStateOf(!wallpaperPreferences.hasSetWallpaperPreference()) }
                 var isUploadingWallpaper by remember { mutableStateOf(false) }
+                var dismissNextTask by remember { mutableStateOf(false) }
+                var dismissShortSuggestion by remember { mutableStateOf(false) }
+                var showCelebration by remember { mutableStateOf(false) }
+                var activeFocus by remember { mutableStateOf<FocusSession?>(null) }
                 val context = LocalContext.current
                 val contentResolver = context.contentResolver
                 val coroutineScope = rememberCoroutineScope()
+                var showTutorial by rememberSaveable { mutableStateOf(false) }
+                val envRepo = remember { EnvironmentPreferencesRepository(applicationContext) }
+                val envPrefs by envRepo.preferencesFlow.collectAsState(initial = EnvironmentPreferences())
+
+                LaunchedEffect(envPrefs.tutorialSeen) {
+                    showTutorial = !envPrefs.tutorialSeen
+                }
+
+                LaunchedEffect(Unit) {
+                    com.cosmicocean.ui.components.CelebrationBus.events.collect {
+                        showCelebration = true
+                        kotlinx.coroutines.delay(1200)
+                        showCelebration = false
+                    }
+                }
+
+                var focusRemaining by remember { mutableStateOf("") }
+                LaunchedEffect(activeFocus) {
+                    while (activeFocus != null) {
+                        val remaining = formatFocusRemaining(activeFocus!!)
+                        focusRemaining = remaining
+                        if (remaining == "Done") {
+                            envRepo.setFocusModeEnabled(false)
+                            RealTimeWallpaperService.updateNow(this@MainActivity)
+                            activeFocus = null
+                            break
+                        }
+                        kotlinx.coroutines.delay(1000)
+                    }
+                }
 
                 // File picker for wallpaper upload
                 val wallpaperPickerLauncher = rememberLauncherForActivityResult(
@@ -277,6 +316,90 @@ class MainActivity : ComponentActivity() {
 
                         AmbientStatusHUD(stars = stars, isInteracting = isInteracting)
 
+                        val nextTask = remember(stars) {
+                            stars.filter { !it.isCompleted && !it.isArchived }
+                                .sortedWith(compareBy<Star> { it.dueIn >= 0 }
+                                    .thenBy { kotlin.math.abs(it.dueIn) }
+                                    .thenBy { it.urgency })
+                                .firstOrNull()
+                        }
+
+                        val shortSuggestion = remember(stars, envPrefs.contextMode, envPrefs.manualContext) {
+                            findShortSuggestion(stars, envPrefs.contextMode, envPrefs.manualContext)
+                        }
+
+                        val overdueCount = remember(stars) {
+                            stars.count { it.dueIn < 0 && !it.isCompleted && !it.isArchived }
+                        }
+                        val dueSoonCount = remember(stars) {
+                            stars.count { it.dueIn in 0f..120f && !it.isCompleted && !it.isArchived }
+                        }
+                        val ambientMessage = remember(overdueCount, dueSoonCount) {
+                            when {
+                                overdueCount > 0 && dueSoonCount > 0 -> "${overdueCount} overdue • ${dueSoonCount} due soon"
+                                overdueCount > 0 -> "${overdueCount} overdue"
+                                dueSoonCount > 0 -> "${dueSoonCount} due soon"
+                                else -> ""
+                            }
+                        }
+
+                        if (!dismissNextTask && nextTask != null) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomStart)
+                                    .padding(24.dp)
+                                    .padding(bottom = 140.dp)
+                            ) {
+                                NextTaskChip(
+                                    star = nextTask,
+                                    onClick = { editingStar = nextTask },
+                                    onDismiss = { dismissNextTask = true }
+                                )
+                            }
+                        }
+
+                        if (!dismissShortSuggestion && shortSuggestion != null && !isInteracting) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomStart)
+                                    .padding(24.dp)
+                                    .padding(bottom = 200.dp)
+                            ) {
+                                ShortTaskSuggestionChip(
+                                    title = shortSuggestion.title,
+                                    estimateMinutes = shortSuggestion.estimateMinutes,
+                                    onClick = { editingStar = shortSuggestion.star },
+                                    onDismiss = { dismissShortSuggestion = true }
+                                )
+                            }
+                        }
+
+                        if (envPrefs.ambientRemindersEnabled && !isInteracting && ambientMessage.isNotBlank()) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .padding(top = 120.dp)
+                            ) {
+                                AmbientReminder(message = ambientMessage, visible = true)
+                            }
+                        }
+
+                        if (activeFocus != null) {
+                            Box(modifier = Modifier.align(Alignment.TopCenter)) {
+                                FocusSessionOverlay(
+                                    title = activeFocus!!.title,
+                                    remainingLabel = focusRemaining,
+                                    onStop = {
+                                        coroutineScope.launch {
+                                            envRepo.setFocusModeEnabled(false)
+                                            RealTimeWallpaperService.updateNow(this@MainActivity)
+                                        }
+                                        activeFocus = null
+                                    }
+                                )
+                            }
+                        }
+
                         // Performance Monitor (Debug)
                         Box(modifier = Modifier.align(Alignment.TopStart)) {
                             com.cosmicocean.debug.PerformanceMonitor(
@@ -394,6 +517,14 @@ class MainActivity : ComponentActivity() {
                             Icon(Icons.Default.Add, contentDescription = "Add Task")
                         }
 
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 16.dp)
+                        ) {
+                            CompletionCelebration(visible = showCelebration)
+                        }
+
                         if (showQuickAdd) {
                             QuickAddOverlay(
                                 onDismiss = { showQuickAdd = false },
@@ -408,6 +539,17 @@ class MainActivity : ComponentActivity() {
                                 onSave = { title, urgency, dueInMinutes ->
                                     updateStar(editingStar!!, title, urgency, dueInMinutes)
                                     editingStar = null
+                                },
+                                onStartFocus = { minutes ->
+                                    coroutineScope.launch {
+                                        envRepo.setFocusModeEnabled(true)
+                                        RealTimeWallpaperService.updateNow(this@MainActivity)
+                                    }
+                                    activeFocus = FocusSession(
+                                        title = editingStar!!.title,
+                                        startedAt = System.currentTimeMillis(),
+                                        durationMinutes = minutes
+                                    )
                                 }
                             )
                         }
@@ -424,6 +566,7 @@ class MainActivity : ComponentActivity() {
                             SettingsOverlay(
                                 onDismiss = { showSettings = false },
                                 onDoneForToday = { showSettings = false; markDoneForToday() },
+                                onSnoozeOverdue = { showSnoozeOverdueConfirm = true },
                                 onClearAll = { showSettings = false; clearAllTasks() },
                                 onLogout = {
                                     showSettings = false
@@ -461,7 +604,11 @@ class MainActivity : ComponentActivity() {
                                     factory = object : androidx.lifecycle.ViewModelProvider.Factory {
                                         @Suppress("UNCHECKED_CAST")
                                         override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-                                            return EnvironmentSettingsViewModel(NetworkModule.getApi(applicationContext), wallpaperPreferences) as T
+                                            return EnvironmentSettingsViewModel(
+                                                NetworkModule.getApi(applicationContext),
+                                                wallpaperPreferences,
+                                                EnvironmentPreferencesRepository(applicationContext)
+                                            ) as T
                                         }
                                     }
                                 ),
@@ -483,16 +630,129 @@ class MainActivity : ComponentActivity() {
                                 onDismiss = { showTrophyGallery = false }
                             )
                         }
+
+                        if (showSnoozeOverdueConfirm) {
+                            AlertDialog(
+                                onDismissRequest = { showSnoozeOverdueConfirm = false },
+                                title = { Text("Snooze Overdue Tasks") },
+                                text = { Text("Snooze all overdue tasks for 60 minutes?") },
+                                confirmButton = {
+                                    Button(onClick = {
+                                        showSnoozeOverdueConfirm = false
+                                        val overdueTasks = stars.filter { it.dueIn < 0 && !it.isCompleted && !it.isArchived }
+                                        overdueTasks.forEach { snoozeStar(it, 60) }
+                                        Toast.makeText(context, "Snoozed ${overdueTasks.size} tasks", Toast.LENGTH_SHORT).show()
+                                    }) { Text("Snooze") }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showSnoozeOverdueConfirm = false }) { Text("Cancel") }
+                                }
+                            )
+                        }
+
+                        val canShowTutorial = showTutorial &&
+                            !showQuickAdd &&
+                            !showSearch &&
+                            !showSettings &&
+                            !showPrivacySettings &&
+                            !showEnvironmentSettings &&
+                            !showTrophyGallery &&
+                            !showSnoozeOverdueConfirm &&
+                            editingStar == null
+
+                        if (canShowTutorial) {
+                            TutorialOverlay(
+                                onDone = {
+                                    showTutorial = false
+                                    coroutineScope.launch { envRepo.setTutorialSeen(true) }
+                                },
+                                onSkip = {
+                                    showTutorial = false
+                                    coroutineScope.launch { envRepo.setTutorialSeen(true) }
+                                }
+                            )
+                        }
                     }
                 }
             }
         }
     }
 
+    private data class FocusSession(
+        val title: String,
+        val startedAt: Long,
+        val durationMinutes: Int
+    )
+
+    private data class ShortSuggestion(
+        val star: Star,
+        val title: String,
+        val estimateMinutes: Int
+    )
+
+    private fun formatFocusRemaining(session: FocusSession): String {
+        val totalMs = session.durationMinutes * 60 * 1000L
+        val elapsed = System.currentTimeMillis() - session.startedAt
+        val remaining = totalMs - elapsed
+        if (remaining <= 0) return "Done"
+        val minutes = (remaining / 60000).toInt()
+        val seconds = ((remaining % 60000) / 1000).toInt()
+        return "${minutes}m ${seconds}s"
+    }
+
+    private fun findShortSuggestion(
+        stars: List<Star>,
+        contextMode: com.cosmicocean.ui.state.ContextMode,
+        manualContext: String
+    ): ShortSuggestion? {
+        val candidates = stars.filter { !it.isCompleted && !it.isArchived }
+            .mapNotNull { star ->
+                val estimate = extractEstimateMinutesFromTitle(star.title)
+                if (estimate != null && estimate <= 15) {
+                    if (contextMode == com.cosmicocean.ui.state.ContextMode.MANUAL) {
+                        if (!matchesContext(star.title, manualContext)) return@mapNotNull null
+                    }
+                    ShortSuggestion(star, star.title, estimate)
+                } else null
+            }
+
+        return candidates.sortedWith(
+            compareBy<ShortSuggestion> { it.star.dueIn >= 0 }
+                .thenBy { kotlin.math.abs(it.star.dueIn) }
+                .thenBy { it.estimateMinutes }
+        ).firstOrNull()
+    }
+
+    private fun extractEstimateMinutesFromTitle(title: String): Int? {
+        val lower = title.lowercase()
+        val minRegex = Regex("(\\d{1,3})\\s*(m|min|mins|minutes)")
+        val hourRegex = Regex("(\\d{1,3})\\s*(h|hr|hrs|hours)")
+        val minMatch = minRegex.find(lower)
+        if (minMatch != null) {
+            return minMatch.groupValues[1].toIntOrNull()
+        }
+        val hourMatch = hourRegex.find(lower)
+        if (hourMatch != null) {
+            val hours = hourMatch.groupValues[1].toIntOrNull() ?: return null
+            return hours * 60
+        }
+        return null
+    }
+
+    private fun matchesContext(title: String, contextValue: String): Boolean {
+        if (contextValue == "custom") return true
+        val lower = title.lowercase()
+        val token = "@${contextValue.lowercase()}"
+        return lower.contains(token) || lower.contains(contextValue.lowercase())
+    }
+
     private fun handleStarAction(star: Star, type: String) {
         lifecycleScope.launch {
             when (type) {
-                "complete" -> viewModel.completeStar(star)
+                "complete" -> {
+                    viewModel.completeStar(star)
+                    com.cosmicocean.ui.components.CelebrationBus.trigger()
+                }
                 "archive" -> viewModel.archiveStar(star)
                 "delete" -> {
                     // CRITICAL FIX: Use viewModel.deleteStar() to remove from Room DB + backend
@@ -648,6 +908,18 @@ class MainActivity : ComponentActivity() {
         // UPDATE preserves enqueue time and doesn't cancel running workers (better than REPLACE)
         androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "wallpaper_periodic_update",
+            androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
+            periodicWorkRequest
+        )
+    }
+
+    private fun scheduleDueHaptics() {
+        val periodicWorkRequest = androidx.work.PeriodicWorkRequestBuilder<com.cosmicocean.worker.DueHapticsWorker>(
+            15, java.util.concurrent.TimeUnit.MINUTES
+        ).setConstraints(androidx.work.Constraints.Builder().build()).build()
+
+        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "due_haptics_worker",
             androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
             periodicWorkRequest
         )

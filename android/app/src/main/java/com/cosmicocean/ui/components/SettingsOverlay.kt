@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Arrangement
 fun SettingsOverlay(
     onDismiss: () -> Unit,
     onDoneForToday: () -> Unit,
+    onSnoozeOverdue: () -> Unit,
     onClearAll: () -> Unit,
     onLogout: (() -> Unit)? = null,
     userEmail: String? = null,
@@ -163,6 +164,16 @@ fun SettingsOverlay(
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF))
             ) {
                 Text("✨ Done For Today", color = Color.Black)
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedButton(
+                onClick = onSnoozeOverdue,
+                modifier = Modifier.fillMaxWidth(),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFB74D))
+            ) {
+                Text("😴 Snooze Overdue", color = Color(0xFFFFB74D))
             }
 
             Spacer(modifier = Modifier.height(12.dp))

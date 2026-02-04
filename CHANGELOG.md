@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.7.0] - 2026-02-04 (Local Engagement + Guidance)
+
+### Added
+- **Due Haptics**: Configurable thresholds with quiet hours, DND respect, and rate limiting.
+- **Tutorial Overlay**: 4-step onboarding tour with persistent “seen” state.
+- **Context Mode**: Manual context selector for task-aware suggestions.
+- **Overdue Heatmap**: Optional urgency layer on wallpapers.
+- **Focus Sessions**: Timed focus with overlay + wallpaper dimming.
+- **Ambient Reminders**: Subtle, low-intrusion cue system.
+- **Contextual Short Task Suggestions**: Quick picks for <= 15 minute tasks.
+- **Next Task Chip**: Surface the highest-impact task on the main screen.
+- **Completion Celebration**: Lightweight completion animation.
+- **Snooze All Overdue**: One-tap recovery for overdue backlog.
+- **Daily Focus Widget**: Powered by local DB + streaks (no mock data).
+
+### Fixed
+- **Tutorial Persistence**: Overlay now dismisses on Done/Skip and won’t show over active overlays.
+
 ## [2.6.3] - 2026-02-04 (Local Privacy + Environment Wallpapers)
 
 ### Added

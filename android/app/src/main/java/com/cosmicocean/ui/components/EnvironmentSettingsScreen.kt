@@ -23,6 +23,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import com.cosmicocean.ui.state.*
 import com.cosmicocean.viewmodel.EnvironmentSettingsViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.cosmicocean.utils.HapticsUtil
 
 enum class TimePeriod(
     val id: String,
@@ -50,18 +52,41 @@ enum class TimePeriod(
 @Composable
 fun EnvironmentSettingsScreen(
     preferences: EnvironmentPreferences,
+    onEnvironmentEnabledChanged: (Boolean) -> Unit,
     onTimeOfDayModeChanged: (TimeOfDayMode) -> Unit,
     onManualTimePeriodChanged: (String) -> Unit,
     onWeatherOverlayChanged: (Boolean) -> Unit,
     onParticleIntensityChanged: (ParticleIntensity) -> Unit,
     onWallpaperModeChanged: (String) -> Unit,
     onWallpaperEnabledChanged: (Boolean) -> Unit,
+    onContextModeChanged: (ContextMode) -> Unit,
+    onManualContextChanged: (String) -> Unit,
+    onDueHapticsEnabledChanged: (Boolean) -> Unit,
+    onDueSoonMinutesChanged: (Int) -> Unit,
+    onUrgentDueMinutesChanged: (Int) -> Unit,
+    onOverdueMinutesChanged: (Int) -> Unit,
+    onQuietHoursEnabledChanged: (Boolean) -> Unit,
+    onQuietHoursStartChanged: (Int) -> Unit,
+    onQuietHoursEndChanged: (Int) -> Unit,
+    onRespectDndChanged: (Boolean) -> Unit,
+    onHapticsRateLimitChanged: (Int) -> Unit,
+    onOverdueHeatmapEnabledChanged: (Boolean) -> Unit,
+    onAmbientRemindersEnabledChanged: (Boolean) -> Unit,
     onUploadWallpaperClick: () -> Unit,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showTimePeriodDialog by remember { mutableStateOf(false) }
     var showParticleDialog by remember { mutableStateOf(false) }
+    var showManualContextDialog by remember { mutableStateOf(false) }
+    var showDueSoonDialog by remember { mutableStateOf(false) }
+    var showUrgentDialog by remember { mutableStateOf(false) }
+    var showOverdueDialog by remember { mutableStateOf(false) }
+    var showQuietStartDialog by remember { mutableStateOf(false) }
+    var showQuietEndDialog by remember { mutableStateOf(false) }
+    var showRateLimitDialog by remember { mutableStateOf(false) }
+    val environmentEnabled = preferences.environmentEnabled
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
@@ -95,20 +120,17 @@ fun EnvironmentSettingsScreen(
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
-            // ===== TIME OF DAY SECTION =====
-            EnvironmentSectionHeader(title = "Time of Day", icon = "🕐")
+            // ===== MASTER TOGGLE =====
+            EnvironmentSectionHeader(title = "Environment Effects", icon = "🌍")
 
-            // Auto vs Manual Mode
             EnvironmentSettingCard(
-                title = "Environment Mode",
-                subtitle = preferences.timeOfDayMode.displayName,
-                icon = if (preferences.timeOfDayMode == TimeOfDayMode.AUTO) "🔄" else "🎛️"
+                title = "Enable Environment",
+                subtitle = if (environmentEnabled) "On • Dynamic effects active" else "Off • Static wallpaper only",
+                icon = "⚡"
             ) {
                 Switch(
-                    checked = preferences.timeOfDayMode == TimeOfDayMode.AUTO,
-                    onCheckedChange = { isAuto ->
-                        onTimeOfDayModeChanged(if (isAuto) TimeOfDayMode.AUTO else TimeOfDayMode.MANUAL)
-                    },
+                    checked = environmentEnabled,
+                    onCheckedChange = onEnvironmentEnabledChanged,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color(0xFF00E5FF),
                         checkedTrackColor = Color(0xFF00E5FF).copy(alpha = 0.5f)
@@ -117,15 +139,50 @@ fun EnvironmentSettingsScreen(
             }
 
             EnvironmentInfoCard(
-                text = if (preferences.timeOfDayMode == TimeOfDayMode.AUTO)
+                text = if (environmentEnabled)
+                    "Dynamic environment effects are enabled. Time-of-day, weather, and particles will be applied."
+                else
+                    "Environment effects are disabled. Your wallpaper will stay static until you turn this back on.",
+                color = if (environmentEnabled) Color(0xFF1A3A5F) else Color(0xFF3E3E3E)
+            )
+
+            Divider(color = Color.White.copy(alpha = 0.1f))
+
+            // ===== TIME OF DAY SECTION =====
+            EnvironmentSectionHeader(title = "Time of Day", icon = "🕐")
+
+            // Auto vs Manual Mode
+            EnvironmentSettingCard(
+                title = "Environment Mode",
+                subtitle = preferences.timeOfDayMode.displayName,
+                icon = if (preferences.timeOfDayMode == TimeOfDayMode.AUTO) "🔄" else "🎛️",
+                enabled = environmentEnabled
+            ) {
+                Switch(
+                    checked = preferences.timeOfDayMode == TimeOfDayMode.AUTO,
+                    onCheckedChange = { isAuto ->
+                        onTimeOfDayModeChanged(if (isAuto) TimeOfDayMode.AUTO else TimeOfDayMode.MANUAL)
+                    },
+                    enabled = environmentEnabled,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color(0xFF00E5FF),
+                        checkedTrackColor = Color(0xFF00E5FF).copy(alpha = 0.5f)
+                    )
+                )
+            }
+
+            EnvironmentInfoCard(
+                text = if (!environmentEnabled)
+                    "Enable environment effects to use time-of-day settings."
+                else if (preferences.timeOfDayMode == TimeOfDayMode.AUTO)
                     "🔄 Environment automatically changes based on your local time: Dawn, Morning, Afternoon, Evening, Night"
                 else
                     "🎛️ Environment is fixed to your chosen time period",
-                color = Color(0xFF1A3A5F)
+                color = if (environmentEnabled) Color(0xFF1A3A5F) else Color(0xFF3E3E3E)
             )
 
             // Manual Time Period Selection (only when manual mode)
-            if (preferences.timeOfDayMode == TimeOfDayMode.MANUAL) {
+            if (environmentEnabled && preferences.timeOfDayMode == TimeOfDayMode.MANUAL) {
                 val currentPeriod = TimePeriod.values().find { it.id == preferences.manualTimePeriod }
                     ?: TimePeriod.MORNING
 
@@ -133,7 +190,8 @@ fun EnvironmentSettingsScreen(
                     title = "Fixed Environment",
                     subtitle = "${currentPeriod.icon} ${currentPeriod.displayName}",
                     icon = "🎨",
-                    onClick = { showTimePeriodDialog = true }
+                    onClick = { showTimePeriodDialog = true },
+                    enabled = environmentEnabled
                 ) {
                     Text(
                         text = "Change",
@@ -154,11 +212,13 @@ fun EnvironmentSettingsScreen(
             EnvironmentSettingCard(
                 title = "Productivity Weather",
                 subtitle = "Show weather based on task status",
-                icon = "☁️"
+                icon = "☁️",
+                enabled = environmentEnabled
             ) {
                 Switch(
                     checked = preferences.weatherOverlayEnabled,
                     onCheckedChange = onWeatherOverlayChanged,
+                    enabled = environmentEnabled,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color(0xFF4CAF50),
                         checkedTrackColor = Color(0xFF4CAF50).copy(alpha = 0.5f)
@@ -166,7 +226,12 @@ fun EnvironmentSettingsScreen(
                 )
             }
 
-            if (preferences.weatherOverlayEnabled) {
+            if (!environmentEnabled) {
+                EnvironmentInfoCard(
+                    text = "Enable environment effects to use the weather overlay.",
+                    color = Color(0xFF3E3E3E)
+                )
+            } else if (preferences.weatherOverlayEnabled) {
                 EnvironmentInfoCard(
                     text = """
                         |Weather reflects your productivity:
@@ -185,6 +250,196 @@ fun EnvironmentSettingsScreen(
                 )
             }
 
+            EnvironmentSettingCard(
+                title = "Overdue Heatmap",
+                subtitle = if (preferences.overdueHeatmapEnabled) "On • Visual urgency overlay" else "Off",
+                icon = "🔥",
+                enabled = environmentEnabled
+            ) {
+                Switch(
+                    checked = preferences.overdueHeatmapEnabled,
+                    onCheckedChange = onOverdueHeatmapEnabledChanged,
+                    enabled = environmentEnabled,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color(0xFFFF7043),
+                        checkedTrackColor = Color(0xFFFF7043).copy(alpha = 0.5f)
+                    )
+                )
+            }
+
+            Divider(color = Color.White.copy(alpha = 0.1f))
+
+            // ===== CONTEXT MODE SECTION =====
+            EnvironmentSectionHeader(title = "Context Mode", icon = "📍")
+
+            EnvironmentSettingCard(
+                title = "Context Mode",
+                subtitle = preferences.contextMode.displayName,
+                icon = if (preferences.contextMode == ContextMode.AUTO) "🛰️" else "🖐️",
+                enabled = true
+            ) {
+                Switch(
+                    checked = preferences.contextMode == ContextMode.AUTO,
+                    onCheckedChange = { isAuto ->
+                        onContextModeChanged(if (isAuto) ContextMode.AUTO else ContextMode.MANUAL)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color(0xFF00E5FF),
+                        checkedTrackColor = Color(0xFF00E5FF).copy(alpha = 0.5f)
+                    )
+                )
+            }
+
+            if (preferences.contextMode == ContextMode.MANUAL) {
+                EnvironmentSettingCard(
+                    title = "Manual Context",
+                    subtitle = preferences.manualContext.replaceFirstChar { it.uppercase() },
+                    icon = "🏷️",
+                    onClick = { showManualContextDialog = true }
+                ) {
+                    Text(text = "Change", color = Color(0xFF00E5FF), fontSize = 14.sp)
+                }
+            }
+
+            Divider(color = Color.White.copy(alpha = 0.1f))
+
+            // ===== DUE ALERTS SECTION =====
+            EnvironmentSectionHeader(title = "Due Alerts", icon = "🔔")
+
+            EnvironmentSettingCard(
+                title = "Due Haptics",
+                subtitle = if (preferences.dueHapticsEnabled) "On • Vibration alerts active" else "Off • No vibration alerts",
+                icon = "📳"
+            ) {
+                Switch(
+                    checked = preferences.dueHapticsEnabled,
+                    onCheckedChange = onDueHapticsEnabledChanged,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color(0xFFFFB74D),
+                        checkedTrackColor = Color(0xFFFFB74D).copy(alpha = 0.5f)
+                    )
+                )
+            }
+
+            EnvironmentSettingCard(
+                title = "Due Soon Threshold",
+                subtitle = "${preferences.dueSoonMinutes} minutes",
+                icon = "⏳",
+                enabled = preferences.dueHapticsEnabled,
+                onClick = { showDueSoonDialog = true }
+            ) {
+                Text(text = "Change", color = Color(0xFF00E5FF), fontSize = 14.sp)
+            }
+
+            EnvironmentSettingCard(
+                title = "Urgent Threshold",
+                subtitle = "${preferences.urgentDueMinutes} minutes",
+                icon = "⚠️",
+                enabled = preferences.dueHapticsEnabled,
+                onClick = { showUrgentDialog = true }
+            ) {
+                Text(text = "Change", color = Color(0xFF00E5FF), fontSize = 14.sp)
+            }
+
+            EnvironmentSettingCard(
+                title = "Overdue Threshold",
+                subtitle = "${preferences.overdueMinutes} minutes after due",
+                icon = "⏰",
+                enabled = preferences.dueHapticsEnabled,
+                onClick = { showOverdueDialog = true }
+            ) {
+                Text(text = "Change", color = Color(0xFF00E5FF), fontSize = 14.sp)
+            }
+
+            EnvironmentSettingCard(
+                title = "Quiet Hours",
+                subtitle = if (preferences.quietHoursEnabled) "On • ${formatHour(preferences.quietHoursStart)} to ${formatHour(preferences.quietHoursEnd)}" else "Off",
+                icon = "🌙"
+            ) {
+                Switch(
+                    checked = preferences.quietHoursEnabled,
+                    onCheckedChange = onQuietHoursEnabledChanged,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color(0xFF7E57C2),
+                        checkedTrackColor = Color(0xFF7E57C2).copy(alpha = 0.5f)
+                    )
+                )
+            }
+
+            if (preferences.quietHoursEnabled) {
+                EnvironmentSettingCard(
+                    title = "Quiet Hours Start",
+                    subtitle = formatHour(preferences.quietHoursStart),
+                    icon = "🕙",
+                    enabled = preferences.dueHapticsEnabled,
+                    onClick = { showQuietStartDialog = true }
+                ) {
+                    Text(text = "Change", color = Color(0xFF00E5FF), fontSize = 14.sp)
+                }
+                EnvironmentSettingCard(
+                    title = "Quiet Hours End",
+                    subtitle = formatHour(preferences.quietHoursEnd),
+                    icon = "🕖",
+                    enabled = preferences.dueHapticsEnabled,
+                    onClick = { showQuietEndDialog = true }
+                ) {
+                    Text(text = "Change", color = Color(0xFF00E5FF), fontSize = 14.sp)
+                }
+            }
+
+            EnvironmentSettingCard(
+                title = "Respect DND",
+                subtitle = if (preferences.respectDnd) "On • Haptics muted during Do Not Disturb" else "Off",
+                icon = "🚫",
+                enabled = preferences.dueHapticsEnabled
+            ) {
+                Switch(
+                    checked = preferences.respectDnd,
+                    onCheckedChange = onRespectDndChanged,
+                    enabled = preferences.dueHapticsEnabled,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color(0xFFEF5350),
+                        checkedTrackColor = Color(0xFFEF5350).copy(alpha = 0.5f)
+                    )
+                )
+            }
+
+            EnvironmentSettingCard(
+                title = "Haptics Rate Limit",
+                subtitle = "${preferences.hapticsRateLimitMinutes} minutes",
+                icon = "⏱️",
+                enabled = preferences.dueHapticsEnabled,
+                onClick = { showRateLimitDialog = true }
+            ) {
+                Text(text = "Change", color = Color(0xFF00E5FF), fontSize = 14.sp)
+            }
+
+            EnvironmentSettingCard(
+                title = "Ambient Reminders",
+                subtitle = if (preferences.ambientRemindersEnabled) "On • Subtle reminders when idle" else "Off",
+                icon = "🔔",
+                enabled = true
+            ) {
+                Switch(
+                    checked = preferences.ambientRemindersEnabled,
+                    onCheckedChange = onAmbientRemindersEnabledChanged,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color(0xFF81C784),
+                        checkedTrackColor = Color(0xFF81C784).copy(alpha = 0.5f)
+                    )
+                )
+            }
+
+            EnvironmentSettingCard(
+                title = "Test Vibration",
+                subtitle = "Tap to test your haptics",
+                icon = "🧪",
+                enabled = preferences.dueHapticsEnabled,
+                onClick = { HapticsUtil.vibrate(context, durationMs = 70) }
+            ) {
+                Text(text = "Test", color = Color(0xFF00E5FF), fontSize = 14.sp)
+            }
+
             Divider(color = Color.White.copy(alpha = 0.1f))
 
             // ===== PARTICLE EFFECTS SECTION =====
@@ -194,7 +449,8 @@ fun EnvironmentSettingsScreen(
                 title = "Particle Intensity",
                 subtitle = preferences.particleIntensity.displayName,
                 icon = "🎆",
-                onClick = { showParticleDialog = true }
+                onClick = { showParticleDialog = true },
+                enabled = environmentEnabled
             ) {
                 Text(
                     text = "Change",
@@ -204,12 +460,14 @@ fun EnvironmentSettingsScreen(
             }
 
             EnvironmentInfoCard(
-                text = when (preferences.particleIntensity) {
+                text = if (!environmentEnabled)
+                    "Enable environment effects to adjust particle intensity."
+                else when (preferences.particleIntensity) {
                     ParticleIntensity.LOW -> "✨ Subtle particles - minimal visual distraction, great for focus"
                     ParticleIntensity.MEDIUM -> "✨ Balanced particles - pleasant atmosphere without overwhelming"
                     ParticleIntensity.HIGH -> "✨ Rich particles - immersive cosmic experience"
                 },
-                color = Color(0xFF3A1E5F)
+                color = if (environmentEnabled) Color(0xFF3A1E5F) else Color(0xFF3E3E3E)
             )
 
             Divider(color = Color.White.copy(alpha = 0.1f))
@@ -274,6 +532,95 @@ fun EnvironmentSettingsScreen(
             onDismiss = { showParticleDialog = false }
         )
     }
+
+    if (showManualContextDialog) {
+        ContextDialog(
+            selected = preferences.manualContext,
+            onSelect = {
+                onManualContextChanged(it)
+                showManualContextDialog = false
+            },
+            onDismiss = { showManualContextDialog = false }
+        )
+    }
+
+    if (showDueSoonDialog) {
+        ThresholdDialog(
+            title = "Due Soon Threshold",
+            options = listOf(10, 30, 60),
+            selected = preferences.dueSoonMinutes,
+            onSelect = {
+                onDueSoonMinutesChanged(it)
+                showDueSoonDialog = false
+            },
+            onDismiss = { showDueSoonDialog = false }
+        )
+    }
+
+    if (showUrgentDialog) {
+        ThresholdDialog(
+            title = "Urgent Threshold",
+            options = listOf(5, 10, 15),
+            selected = preferences.urgentDueMinutes,
+            onSelect = {
+                onUrgentDueMinutesChanged(it)
+                showUrgentDialog = false
+            },
+            onDismiss = { showUrgentDialog = false }
+        )
+    }
+
+    if (showOverdueDialog) {
+        ThresholdDialog(
+            title = "Overdue Threshold",
+            options = listOf(30, 60, 120),
+            selected = preferences.overdueMinutes,
+            suffix = "minutes after due",
+            onSelect = {
+                onOverdueMinutesChanged(it)
+                showOverdueDialog = false
+            },
+            onDismiss = { showOverdueDialog = false }
+        )
+    }
+
+    if (showQuietStartDialog) {
+        HourDialog(
+            title = "Quiet Hours Start",
+            selected = preferences.quietHoursStart,
+            onSelect = {
+                onQuietHoursStartChanged(it)
+                showQuietStartDialog = false
+            },
+            onDismiss = { showQuietStartDialog = false }
+        )
+    }
+
+    if (showQuietEndDialog) {
+        HourDialog(
+            title = "Quiet Hours End",
+            selected = preferences.quietHoursEnd,
+            onSelect = {
+                onQuietHoursEndChanged(it)
+                showQuietEndDialog = false
+            },
+            onDismiss = { showQuietEndDialog = false }
+        )
+    }
+
+    if (showRateLimitDialog) {
+        ThresholdDialog(
+            title = "Haptics Rate Limit",
+            options = listOf(10, 30, 60),
+            selected = preferences.hapticsRateLimitMinutes,
+            suffix = "minutes",
+            onSelect = {
+                onHapticsRateLimitChanged(it)
+                showRateLimitDialog = false
+            },
+            onDismiss = { showRateLimitDialog = false }
+        )
+    }
 }
 
 @Composable
@@ -299,12 +646,16 @@ private fun EnvironmentSettingCard(
     subtitle: String,
     icon: String,
     onClick: (() -> Unit)? = null,
+    enabled: Boolean = true,
     trailing: @Composable () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .let { if (onClick != null) it.clickable(onClick = onClick) else it },
+            .let {
+                if (onClick != null && enabled) it.clickable(onClick = onClick) else it
+            }
+            .alpha(if (enabled) 1f else 0.45f),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFF1A1A2E)
@@ -343,6 +694,7 @@ private fun EnvironmentSettingCard(
             trailing()
         }
     }
+
 }
 
 @Composable
@@ -581,6 +933,127 @@ private fun ParticleIntensityOption(
     }
 }
 
+@Composable
+private fun ThresholdDialog(
+    title: String,
+    options: List<Int>,
+    selected: Int,
+    suffix: String = "minutes",
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                options.forEach { value ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(value) }
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = value == selected,
+                            onClick = { onSelect(value) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("$value $suffix")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
+}
+
+@Composable
+private fun HourDialog(
+    title: String,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val hours = (0..23).toList()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                hours.forEach { hour ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(hour) }
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = hour == selected,
+                            onClick = { onSelect(hour) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(formatHour(hour))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
+}
+
+private fun formatHour(hour: Int): String {
+    val normalized = ((hour % 24) + 24) % 24
+    val suffix = if (normalized < 12) "AM" else "PM"
+    val display = when (val h = normalized % 12) {
+        0 -> 12
+        else -> h
+    }
+    return "$display $suffix"
+}
+
+@Composable
+private fun ContextDialog(
+    selected: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val options = listOf("home", "work", "grocery", "gym", "commute", "custom")
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Context") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                options.forEach { option ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(option) }
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = option == selected,
+                            onClick = { onSelect(option) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(option.replaceFirstChar { it.uppercase() })
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
+}
+
 
 
 /**
@@ -640,6 +1113,9 @@ fun EnvironmentSettingsWrapper(
             } else {
                 EnvironmentSettingsScreen(
                     preferences = uiState.preferences,
+                    onEnvironmentEnabledChanged = { enabled ->
+                        viewModel.updatePreference("environment_enabled", enabled, context)
+                    },
                     onTimeOfDayModeChanged = { mode ->
                         viewModel.updatePreference("time_of_day_mode", mode.name.lowercase(), context)
                     },
@@ -659,6 +1135,45 @@ fun EnvironmentSettingsWrapper(
                         viewModel.setWallpaperEnabled(enabled, context)
                         onWallpaperEnabledChanged(enabled)
                     },
+                    onContextModeChanged = { mode ->
+                        viewModel.updatePreference("context_mode", mode.name.lowercase(), context)
+                    },
+                    onManualContextChanged = { contextValue ->
+                        viewModel.updatePreference("manual_context", contextValue, context)
+                    },
+                    onDueHapticsEnabledChanged = { enabled ->
+                        viewModel.updatePreference("due_haptics_enabled", enabled, context)
+                    },
+                    onDueSoonMinutesChanged = { minutes ->
+                        viewModel.updatePreference("due_soon_minutes", minutes, context)
+                    },
+                    onUrgentDueMinutesChanged = { minutes ->
+                        viewModel.updatePreference("urgent_due_minutes", minutes, context)
+                    },
+                    onOverdueMinutesChanged = { minutes ->
+                        viewModel.updatePreference("overdue_minutes", minutes, context)
+                    },
+                    onQuietHoursEnabledChanged = { enabled ->
+                        viewModel.updatePreference("quiet_hours_enabled", enabled, context)
+                    },
+                    onQuietHoursStartChanged = { hour ->
+                        viewModel.updatePreference("quiet_hours_start", hour, context)
+                    },
+                    onQuietHoursEndChanged = { hour ->
+                        viewModel.updatePreference("quiet_hours_end", hour, context)
+                    },
+                    onRespectDndChanged = { enabled ->
+                        viewModel.updatePreference("respect_dnd", enabled, context)
+                    },
+                    onHapticsRateLimitChanged = { minutes ->
+                        viewModel.updatePreference("haptics_rate_limit_minutes", minutes, context)
+                    },
+                    onOverdueHeatmapEnabledChanged = { enabled ->
+                        viewModel.updatePreference("overdue_heatmap_enabled", enabled, context)
+                    },
+                    onAmbientRemindersEnabledChanged = { enabled ->
+                        viewModel.updatePreference("ambient_reminders_enabled", enabled, context)
+                    },
                     onUploadWallpaperClick = {},
                     onNavigateBack = onNavigateBack
                 )
@@ -666,4 +1181,3 @@ fun EnvironmentSettingsWrapper(
         }
     }
 }
-

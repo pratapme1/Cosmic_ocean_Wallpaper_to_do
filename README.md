@@ -21,9 +21,20 @@ All core features run **locally on Android**: tasks, wallpaper generation, priva
   - Time-of-day (auto/manual)
   - Productivity-based weather overlays
   - Particle intensity control
+- **Context mode** for task-aware suggestions (manual selector)
 - **Privacy controls** for wallpaper tasks  
   - Public, Initials, Hidden  
   - Hide-all mode
+- **Due haptics** with quiet hours, DND respect, and rate limits
+- **Overdue heatmap** (optional wallpaper urgency layer)
+- **Focus sessions** with overlay + wallpaper dimming
+- **Ambient reminders** (subtle visual cues)
+- **Contextual short-task suggestions** (<= 15 minutes)
+- **“Next task” chip** for highest-impact task
+- **Completion celebration** on task finish
+- **One-tap snooze all overdue**
+- **Daily focus widget** (local DB + streaks)
+- **Lightweight tutorial overlay** (first-run guidance)
 - **Offline-first data** with Room + DataStore
 
 ---
@@ -67,7 +78,7 @@ Output:
 ## **Changelog & Versioning**
 
 - Release notes live in `CHANGELOG.md`
-- Current Android version: **2.6.3**
+- Current Android version: **2.7.0**
 
 ---
 

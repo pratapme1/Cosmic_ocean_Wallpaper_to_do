@@ -363,18 +363,36 @@ object LocalWallpaperGenerator {
         canvas.drawColor(colors.gradientEnd)
 
         // Layer 1: Environment gradient + overlays (time of day, weather)
-        val intensityMultiplier = drawEnvironmentLayers(
-            canvas = canvas,
-            width = width,
-            height = height,
-            themeColors = colors,
-            environmentPreferences = environmentPreferences,
-            weatherTasks = weatherTasks ?: tasks,
-            isCustomBackground = false
-        )
+        val envEnabled = environmentPreferences?.environmentEnabled ?: true
+        val focusEnabled = environmentPreferences?.focusModeEnabled == true
+        val intensityMultiplier = if (envEnabled) {
+            drawEnvironmentLayers(
+                canvas = canvas,
+                width = width,
+                height = height,
+                themeColors = colors,
+                environmentPreferences = environmentPreferences,
+                weatherTasks = weatherTasks ?: tasks,
+                isCustomBackground = false
+            )
+        } else {
+            drawGradientBackground(canvas, colors, width, height)
+            0f
+        }
 
         // Layer 2: Theme particle system (scaled by environment intensity)
-        drawParticles(canvas, colors, width, height, theme, urgency, intensityMultiplier)
+        if (envEnabled) {
+            drawParticles(canvas, colors, width, height, theme, urgency, intensityMultiplier)
+        }
+
+        if (envEnabled && environmentPreferences?.overdueHeatmapEnabled == true) {
+            val metrics = calculateProductivityMetrics(tasks, System.currentTimeMillis())
+            drawOverdueHeatmap(canvas, metrics, width, height)
+        }
+
+        if (focusEnabled) {
+            drawFocusOverlay(canvas, width, height)
+        }
 
         // Layer 2.5: Transition gradient (scene → task zone)
         drawTransitionGradient(canvas, colors, width, height)
@@ -459,15 +477,26 @@ object LocalWallpaperGenerator {
         val colors = getCustomBackgroundColors(urgency)
 
         // Layer 2.5: Environment overlays on top of custom background
-        drawEnvironmentLayers(
-            canvas = canvas,
-            width = width,
-            height = height,
-            themeColors = colors,
-            environmentPreferences = environmentPreferences,
-            weatherTasks = weatherTasks ?: tasks,
-            isCustomBackground = true
-        )
+        if (environmentPreferences?.environmentEnabled != false) {
+            drawEnvironmentLayers(
+                canvas = canvas,
+                width = width,
+                height = height,
+                themeColors = colors,
+                environmentPreferences = environmentPreferences,
+                weatherTasks = weatherTasks ?: tasks,
+                isCustomBackground = true
+            )
+        }
+
+        if (environmentPreferences?.environmentEnabled != false && environmentPreferences?.overdueHeatmapEnabled == true) {
+            val metrics = calculateProductivityMetrics(tasks, System.currentTimeMillis())
+            drawOverdueHeatmap(canvas, metrics, width, height)
+        }
+
+        if (environmentPreferences?.focusModeEnabled == true) {
+            drawFocusOverlay(canvas, width, height)
+        }
 
         // Layer 3: Achievement panel (if any)
         val achievementReservedSpace = if (achievementCount > 0 || streakDays > 0) {
@@ -511,9 +540,14 @@ object LocalWallpaperGenerator {
         }
 
         val now = System.currentTimeMillis()
-        val intensityMultiplier = environmentPreferences.particleIntensity.multiplier
+        val focusEnabled = environmentPreferences.focusModeEnabled
+        val intensityMultiplier = if (focusEnabled) {
+            environmentPreferences.particleIntensity.multiplier * 0.4f
+        } else {
+            environmentPreferences.particleIntensity.multiplier
+        }
         val environment = resolveEnvironment(environmentPreferences, themeColors, now)
-        val weather = if (environmentPreferences.weatherOverlayEnabled) {
+        val weather = if (environmentPreferences.weatherOverlayEnabled && !focusEnabled) {
             resolveWeather(weatherTasks, themeColors, now)
         } else {
             null
@@ -537,6 +571,45 @@ object LocalWallpaperGenerator {
         }
 
         return intensityMultiplier
+    }
+
+    private fun drawOverdueHeatmap(
+        canvas: Canvas,
+        metrics: ProductivityMetrics,
+        width: Int,
+        height: Int
+    ) {
+        if (metrics.overdueTasks <= 0 && metrics.criticalOverdue <= 0) return
+
+        val intensity = (
+            metrics.overdueTasks / 5f +
+                metrics.criticalOverdue / 3f +
+                (metrics.maxOverdueHours / 24f)
+            ).coerceAtMost(1f)
+
+        val alpha = (0.08f + intensity * 0.35f).coerceAtMost(0.5f)
+        val paint = Paint().apply {
+            shader = RadialGradient(
+                width / 2f,
+                height * 0.6f,
+                max(width, height).toFloat(),
+                intArrayOf(
+                    Color.argb((alpha * 255).toInt(), 255, 59, 48),
+                    Color.TRANSPARENT
+                ),
+                floatArrayOf(0.2f, 1f),
+                Shader.TileMode.CLAMP
+            )
+        }
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+    }
+
+    private fun drawFocusOverlay(canvas: Canvas, width: Int, height: Int) {
+        val paint = Paint().apply {
+            color = Color.parseColor("#00121f")
+            alpha = 64
+        }
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
     }
 
     private fun resolveEnvironment(
@@ -1397,18 +1470,27 @@ object LocalWallpaperGenerator {
     private fun calculateUrgency(task: StarEntity?): UrgencyLevel {
         if (task == null) return UrgencyLevel.CLEAR
 
-        val dueDate = task.dueDate ?: return UrgencyLevel.CALM
+        val baseUrgency = when (task.urgency) {
+            1 -> UrgencyLevel.URGENT
+            2 -> UrgencyLevel.ATTENTION
+            3 -> UrgencyLevel.CALM
+            else -> UrgencyLevel.CALM
+        }
+
+        val dueDate = task.dueDate ?: return baseUrgency
 
         val now = System.currentTimeMillis()
         val hoursUntilDue = (dueDate - now) / (1000 * 60 * 60)
 
-        return when {
+        val dueUrgency = when {
             hoursUntilDue < 0 -> UrgencyLevel.CRITICAL    // Overdue
             hoursUntilDue < 4 -> UrgencyLevel.CRITICAL    // Due in 4 hours
             hoursUntilDue < 24 -> UrgencyLevel.URGENT     // Due today
             hoursUntilDue < 48 -> UrgencyLevel.ATTENTION  // Due tomorrow
             else -> UrgencyLevel.CALM
         }
+
+        return if (dueUrgency.ordinal > baseUrgency.ordinal) dueUrgency else baseUrgency
     }
 
     /**

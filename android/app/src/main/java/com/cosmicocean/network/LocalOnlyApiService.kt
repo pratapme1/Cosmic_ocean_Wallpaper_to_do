@@ -244,6 +244,9 @@ class LocalOnlyApiService(
             val mode = if (it.lowercase() == "manual") com.cosmicocean.ui.state.TimeOfDayMode.MANUAL else com.cosmicocean.ui.state.TimeOfDayMode.AUTO
             environmentRepo.setTimeOfDayMode(mode)
         }
+        (body["environment_enabled"] as? Boolean)?.let {
+            environmentRepo.setEnvironmentEnabled(it)
+        }
         body["manual_time_period"]?.toString()?.let {
             environmentRepo.setManualTimePeriod(it)
         }
@@ -261,6 +264,52 @@ class LocalOnlyApiService(
         body["wallpaper_mode"]?.toString()?.let {
             environmentRepo.setWallpaperMode(it)
             wallpaperPrefs.setWallpaperMode(it)
+        }
+        body["context_mode"]?.toString()?.let {
+            val mode = if (it.lowercase() == "manual") com.cosmicocean.ui.state.ContextMode.MANUAL else com.cosmicocean.ui.state.ContextMode.AUTO
+            environmentRepo.setContextMode(mode)
+        }
+        body["manual_context"]?.toString()?.let {
+            environmentRepo.setManualContext(it)
+        }
+        (body["focus_mode_enabled"] as? Boolean)?.let {
+            environmentRepo.setFocusModeEnabled(it)
+        }
+        (body["due_haptics_enabled"] as? Boolean)?.let {
+            environmentRepo.setDueHapticsEnabled(it)
+        }
+        (body["due_soon_minutes"] as? Number)?.toInt()?.let {
+            environmentRepo.setDueSoonMinutes(it)
+        }
+        (body["urgent_due_minutes"] as? Number)?.toInt()?.let {
+            environmentRepo.setUrgentDueMinutes(it)
+        }
+        (body["overdue_minutes"] as? Number)?.toInt()?.let {
+            environmentRepo.setOverdueMinutes(it)
+        }
+        (body["quiet_hours_enabled"] as? Boolean)?.let {
+            environmentRepo.setQuietHoursEnabled(it)
+        }
+        (body["quiet_hours_start"] as? Number)?.toInt()?.let {
+            environmentRepo.setQuietHoursStart(it)
+        }
+        (body["quiet_hours_end"] as? Number)?.toInt()?.let {
+            environmentRepo.setQuietHoursEnd(it)
+        }
+        (body["respect_dnd"] as? Boolean)?.let {
+            environmentRepo.setRespectDnd(it)
+        }
+        (body["haptics_rate_limit_minutes"] as? Number)?.toInt()?.let {
+            environmentRepo.setHapticsRateLimit(it)
+        }
+        (body["overdue_heatmap_enabled"] as? Boolean)?.let {
+            environmentRepo.setOverdueHeatmapEnabled(it)
+        }
+        (body["ambient_reminders_enabled"] as? Boolean)?.let {
+            environmentRepo.setAmbientRemindersEnabled(it)
+        }
+        (body["tutorial_seen"] as? Boolean)?.let {
+            environmentRepo.setTutorialSeen(it)
         }
         return Response.success(buildPreferencesResponse())
     }
@@ -349,7 +398,23 @@ class LocalOnlyApiService(
             timeOfDayMode = env.timeOfDayMode.name.lowercase(),
             manualTimePeriod = env.manualTimePeriod,
             weatherOverlayEnabled = env.weatherOverlayEnabled,
+            environmentEnabled = env.environmentEnabled,
             particleIntensity = env.particleIntensity.name.lowercase(),
+            dueHapticsEnabled = env.dueHapticsEnabled,
+            dueSoonMinutes = env.dueSoonMinutes,
+            urgentDueMinutes = env.urgentDueMinutes,
+            overdueMinutes = env.overdueMinutes,
+            quietHoursEnabled = env.quietHoursEnabled,
+            quietHoursStart = env.quietHoursStart,
+            quietHoursEnd = env.quietHoursEnd,
+            respectDnd = env.respectDnd,
+            hapticsRateLimitMinutes = env.hapticsRateLimitMinutes,
+            contextMode = env.contextMode.name.lowercase(),
+            manualContext = env.manualContext,
+            focusModeEnabled = env.focusModeEnabled,
+            overdueHeatmapEnabled = env.overdueHeatmapEnabled,
+            ambientRemindersEnabled = env.ambientRemindersEnabled,
+            tutorialSeen = env.tutorialSeen,
             wallpaperMode = env.wallpaperMode,
             customWallpaperPath = wallpaperPrefs.getCustomWallpaperPath()
         )

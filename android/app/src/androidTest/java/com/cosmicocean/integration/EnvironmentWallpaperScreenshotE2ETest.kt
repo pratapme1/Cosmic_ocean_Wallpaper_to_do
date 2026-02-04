@@ -96,6 +96,80 @@ class EnvironmentWallpaperScreenshotE2ETest {
         assertTrue("Custom wallpaper screenshot should be non-empty", output.length() > 0L)
     }
 
+    @Test
+    fun generateEnvironmentWallpaperDisabledScreenshot() {
+        val prefs = EnvironmentPreferences(
+            environmentEnabled = false,
+            timeOfDayMode = TimeOfDayMode.MANUAL,
+            manualTimePeriod = "night",
+            weatherOverlayEnabled = true,
+            particleIntensity = ParticleIntensity.HIGH,
+            wallpaperMode = "generated",
+            isWallpaperEnabled = true
+        )
+
+        val tasks = buildStormTasks()
+        val activeCount = tasks.count { !it.isCompleted }
+
+        val bitmap = LocalWallpaperGenerator.generate(
+            tasks = tasks.filter { !it.isCompleted }.take(3),
+            totalTaskCount = activeCount,
+            theme = WallpaperTheme.COSMIC,
+            width = 1080,
+            height = 2400,
+            achievementCount = 0,
+            streakDays = 0,
+            environmentPreferences = prefs,
+            weatherTasks = tasks
+        )
+
+        val output = writeScreenshot(bitmap, "environment_wallpaper_night_storm_env_off.png")
+        bitmap.recycle()
+
+        assertTrue("Wallpaper screenshot should exist", output.exists())
+        assertTrue("Wallpaper screenshot should be non-empty", output.length() > 0L)
+    }
+
+    @Test
+    fun generateEnvironmentCustomWallpaperDisabledScreenshot() {
+        val prefs = EnvironmentPreferences(
+            environmentEnabled = false,
+            timeOfDayMode = TimeOfDayMode.MANUAL,
+            manualTimePeriod = "evening",
+            weatherOverlayEnabled = true,
+            particleIntensity = ParticleIntensity.MEDIUM,
+            wallpaperMode = "custom",
+            isWallpaperEnabled = true
+        )
+
+        val tasks = buildStormTasks()
+        val activeCount = tasks.count { !it.isCompleted }
+
+        val customBackground = Bitmap.createBitmap(1080, 2400, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(Color.parseColor("#0B1F3A"))
+        }
+
+        val bitmap = LocalWallpaperGenerator.generateWithCustomBackground(
+            tasks = tasks.filter { !it.isCompleted }.take(3),
+            totalTaskCount = activeCount,
+            customBackground = customBackground,
+            width = 1080,
+            height = 2400,
+            achievementCount = 0,
+            streakDays = 0,
+            theme = WallpaperTheme.DEEP_OCEAN,
+            environmentPreferences = prefs,
+            weatherTasks = tasks
+        )
+
+        val output = writeScreenshot(bitmap, "environment_custom_wallpaper_evening_env_off.png")
+        bitmap.recycle()
+        customBackground.recycle()
+
+        assertTrue("Custom wallpaper screenshot should exist", output.exists())
+        assertTrue("Custom wallpaper screenshot should be non-empty", output.length() > 0L)
+    }
+
     private fun buildStormTasks(): List<StarEntity> {
         val now = System.currentTimeMillis()
         return listOf(

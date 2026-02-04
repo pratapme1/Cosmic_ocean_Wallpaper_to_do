@@ -14,7 +14,8 @@ import com.cosmicocean.model.Star
 fun EditStarOverlay(
     star: Star,
     onDismiss: () -> Unit,
-    onSave: (String, Int, Float) -> Unit
+    onSave: (String, Int, Float) -> Unit,
+    onStartFocus: (Int) -> Unit
 ) {
     var title by remember { mutableStateOf(star.title) }
     var urgency by remember { mutableIntStateOf(star.urgency) }
@@ -32,6 +33,7 @@ fun EditStarOverlay(
     var dueValue by remember { mutableStateOf(initialDue.first.toString()) }
     var dueUnit by remember { mutableStateOf(initialDue.second) }
     var showUnitDropdown by remember { mutableStateOf(false) }
+    var showFocusDialog by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -133,6 +135,16 @@ fun EditStarOverlay(
 
             Spacer(modifier = Modifier.height(32.dp))
 
+            OutlinedButton(
+                onClick = { showFocusDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF00E5FF))
+            ) {
+                Text("Start Focus Session")
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             Button(
                 onClick = {
                     // Convert due value to minutes
@@ -150,6 +162,31 @@ fun EditStarOverlay(
                 Text("Update Star", color = Color.Black)
             }
         }
+    }
+
+    if (showFocusDialog) {
+        AlertDialog(
+            onDismissRequest = { showFocusDialog = false },
+            title = { Text("Focus Duration") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(25, 45, 60).forEach { minutes ->
+                        Button(
+                            onClick = {
+                                onStartFocus(minutes)
+                                showFocusDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("${minutes} minutes")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showFocusDialog = false }) { Text("Close") }
+            }
+        )
     }
 }
 
