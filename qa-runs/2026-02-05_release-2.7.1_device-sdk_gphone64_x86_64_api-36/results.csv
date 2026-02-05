@@ -1,0 +1,7 @@
+feature,step,result,notes,screenshot
+App Launch,Open app,Fail,System UI ANR dialog present,login_01_fail.png
+Tutorial Step 1,Dynamic Environments,Pass,,tutorial_01_pass.png
+Tutorial Step 2,Due Alerts,Pass,,tutorial_02_pass.png
+Tutorial Step 3,Move Stars to Complete,Pass,,tutorial_03_pass.png
+Tutorial Step 4,Privacy First,Pass,,tutorial_04_pass.png
+Tutorial Step 5,Customize,Pass,,tutorial_05_pass.png

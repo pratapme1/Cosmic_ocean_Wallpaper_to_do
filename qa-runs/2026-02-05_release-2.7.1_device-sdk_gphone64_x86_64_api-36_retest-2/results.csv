@@ -1,0 +1,2 @@
+feature,step,result,notes,screenshot
+Instrumentation Retest,connectedDebugAndroidTest,Pass,All 46 tests passed; screenshots pulled from device,AndroidTestScreenshots/

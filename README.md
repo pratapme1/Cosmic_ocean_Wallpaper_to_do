@@ -80,7 +80,7 @@ Output:
 ## **Changelog & Versioning**
 
 - Release notes live in `CHANGELOG.md`
-- Current Android version: **2.7.0**
+- Current Android version: **2.7.1**
 
 ---
 

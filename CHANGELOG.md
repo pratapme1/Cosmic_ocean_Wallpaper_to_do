@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Custom Wallpaper EXIF Support**: Uploaded wallpaper images now respect EXIF orientation before rendering.
+
+### Changed
+- **Wallpaper Typography System**: Unified header, badge, task title, and meta sizing with consistent spacing across device sizes.
+- **Custom Wallpaper Readability Overlay**: Replaced flat dark overlay with gradient + vignette tuned by background luminance.
+- **Generated Wallpaper Texture**: Added a subtle noise layer to reduce banding and improve depth.
+
+### Fixed
+- **Badge Truncation**: Long system badges now ellipsize cleanly without clipping or overlap.
+
 ## [2.7.1] - 2026-02-04 (Parsing Intelligence + UX)
 
 ### Added
@@ -15,6 +28,9 @@
 
 ### Fixed
 - **Priority Heuristics**: “Overdue” now elevates to P1 priority.
+
+### Release
+- **Play Store Prep**: Unit + UI tests run on emulator; AAB built for upload.
 
 ## [2.7.0] - 2026-02-04 (Local Engagement + Guidance)
 

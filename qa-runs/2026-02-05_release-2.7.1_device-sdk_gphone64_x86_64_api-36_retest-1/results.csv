@@ -1,0 +1,2 @@
+feature,step,result,notes,screenshot
+Instrumentation Retest,connectedDebugAndroidTest,Fail,UiFlowsE2ETest.privacySettingsToggleHideAllTasks failed; instrumentation crashed,run_01_fail.png

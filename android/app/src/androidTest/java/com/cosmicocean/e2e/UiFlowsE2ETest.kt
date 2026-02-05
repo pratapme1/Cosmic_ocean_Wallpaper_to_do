@@ -6,6 +6,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -250,6 +251,7 @@ class UiFlowsE2ETest {
             withContext(Dispatchers.IO) {
                 PrivacyPreferencesRepository(context).resetToDefaults()
                 EnvironmentPreferencesRepository(context).resetToDefaults()
+                EnvironmentPreferencesRepository(context).setTutorialSeen(true)
                 val db = database()
                 db.starDao().deleteAllStars()
                 db.constellationDao().deleteAllLinks()
@@ -257,6 +259,20 @@ class UiFlowsE2ETest {
             }
         }
         recreateActivity()
+        ensureOnMainScreen()
+    }
+
+    private fun ensureOnMainScreen() {
+        composeTestRule.waitForIdle()
+        val guestNodes = composeTestRule
+            .onAllNodesWithText("Continue as Guest", substring = true)
+            .fetchSemanticsNodes()
+        if (guestNodes.isNotEmpty()) {
+            composeTestRule.onNodeWithText("Continue as Guest", substring = true).performClick()
+        }
+        composeTestRule.waitUntil(5_000) {
+            composeTestRule.onAllNodesWithContentDescription("Settings").fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     private fun captureScreenshot(tag: String) {

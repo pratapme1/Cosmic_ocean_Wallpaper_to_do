@@ -140,6 +140,7 @@
   - User toggle for overlays on custom wallpapers
   - Clear preview of combined result
   - Persisted per wallpaper
+- **Status**: In progress (2026-02-05 added luminance-aware gradient + vignette overlay; toggle + preview still pending)
 
 ## P2 — Core Flow Enhancements
 

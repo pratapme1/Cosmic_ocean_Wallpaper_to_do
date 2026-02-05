@@ -1,7 +1,7 @@
 # Play Store Onboarding Plan (Local-Only Release)
 
-**Version:** 2.6.3  
-**Date:** 2026-02-04  
+**Version:** 2.7.1  
+**Date:** 2026-02-05  
 **Target:** Android (local-only, no backend sync)
 
 ---
@@ -15,12 +15,16 @@
 - Code changes for local-only mode implemented.
 - Cleartext traffic disabled.
 - Backups disabled.
-- Tests passing (`connectedDebugAndroidTest`, `testDebugUnitTest`).
+- Tests pending re-run for 2.7.1 (`connectedDebugAndroidTest`, `testDebugUnitTest`).
 
 ## Required Items (Before Play Store Upload)
 1. **Privacy Policy URL**
    - Host a privacy policy stating local-only data storage.
    - No data shared with third parties.
+   - URL: 
+     ```
+     https://cosmic-ocean-production.up.railway.app/
+     ```
 2. **Data Safety Form**
    - Declare no data collected or shared if accurate.
    - Confirm no account or cloud sync.
@@ -39,7 +43,7 @@
 ## Release Artifacts
 - APK (local verification):  
   `android/app/build/outputs/apk/release/app-release.apk`  
-  `android/app/build/outputs/apk/release/cosmic-ocean-v2.6.3.apk`
+  `android/app/build/outputs/apk/release/cosmic-ocean-v2.7.1.apk`
 - AAB (Play Store):  
   `./android/gradlew -p android :app:bundleRelease`
 
