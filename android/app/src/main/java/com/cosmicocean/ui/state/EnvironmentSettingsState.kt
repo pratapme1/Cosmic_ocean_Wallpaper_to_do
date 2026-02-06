@@ -3,11 +3,11 @@ package com.cosmicocean.ui.state
 import androidx.compose.ui.graphics.Color
 
 data class EnvironmentPreferences(
-    val environmentEnabled: Boolean = true,
+    val environmentEnabled: Boolean = false,
     val timeOfDayMode: TimeOfDayMode = TimeOfDayMode.AUTO,
     val manualTimePeriod: String = "morning",
-    val weatherOverlayEnabled: Boolean = true,
-    val particleIntensity: ParticleIntensity = ParticleIntensity.MEDIUM,
+    val weatherOverlayEnabled: Boolean = false,
+    val particleIntensity: ParticleIntensity = ParticleIntensity.LOW,
     val wallpaperMode: String = "generated",
     val isWallpaperEnabled: Boolean = false,
     val contextMode: ContextMode = ContextMode.AUTO,
@@ -22,8 +22,8 @@ data class EnvironmentPreferences(
     val quietHoursEnd: Int = 7,
     val respectDnd: Boolean = true,
     val hapticsRateLimitMinutes: Int = 30,
-    val overdueHeatmapEnabled: Boolean = true,
-    val ambientRemindersEnabled: Boolean = true,
+    val overdueHeatmapEnabled: Boolean = false,
+    val ambientRemindersEnabled: Boolean = false,
     val tutorialSeen: Boolean = false
 )
 

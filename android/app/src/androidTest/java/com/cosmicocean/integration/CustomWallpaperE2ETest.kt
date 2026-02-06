@@ -11,6 +11,9 @@ import com.cosmicocean.wallpaper.WallpaperTheme
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
 
 /**
  * End-to-End tests for custom wallpaper functionality.
@@ -293,6 +296,32 @@ class CustomWallpaperE2ETest {
         result.recycle()
     }
 
+    @Test
+    fun generateHighContrastCustomWallpaperScreenshot() {
+        val width = 1080
+        val height = 2400
+
+        val customBackground = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(Color.WHITE)
+        }
+
+        val result = LocalWallpaperGenerator.generateWithCustomBackground(
+            tasks = testTasks.take(3),
+            totalTaskCount = testTasks.size,
+            customBackground = customBackground,
+            width = width,
+            height = height,
+            theme = WallpaperTheme.COSMIC
+        )
+
+        val output = writeScreenshot(result, "custom_wallpaper_high_contrast.png")
+        result.recycle()
+        customBackground.recycle()
+
+        assertTrue("High-contrast custom wallpaper screenshot should exist", output.exists())
+        assertTrue("High-contrast custom wallpaper screenshot should be non-empty", output.length() > 0L)
+    }
+
     // ==================== FLOW VERIFICATION TESTS ====================
 
     @Test
@@ -359,5 +388,39 @@ class CustomWallpaperE2ETest {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         bitmap.eraseColor(color)
         return bitmap
+    }
+
+    private fun writeScreenshot(bitmap: Bitmap, fileName: String): File {
+        val dir = context.getExternalFilesDir("screenshots")
+            ?: throw IllegalStateException("External files dir unavailable")
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw IllegalStateException("Failed to create screenshot dir: ${dir.absolutePath}")
+        }
+        val output = File(dir, fileName)
+        FileOutputStream(output).use { out ->
+            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) {
+                throw IllegalStateException("Failed to compress wallpaper screenshot")
+            }
+        }
+
+        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val destDir = "/data/local/tmp/AndroidTestScreenshots/wallpaper"
+        val destPath = "$destDir/$fileName"
+        uiAutomation.executeShellCommand("mkdir -p $destDir").close()
+        uiAutomation.executeShellCommand("cp ${output.absolutePath} $destPath").close()
+
+        val lsOutput = readShellOutput(uiAutomation.executeShellCommand("ls -l $destPath"))
+        if (lsOutput.isBlank() || lsOutput.contains("No such file")) {
+            throw IllegalStateException("Failed to copy wallpaper screenshot to $destPath")
+        }
+
+        return output
+    }
+
+    private fun readShellOutput(pfd: android.os.ParcelFileDescriptor): String {
+        pfd.use { descriptor ->
+            val input: InputStream = android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor)
+            return input.bufferedReader().use { it.readText() }
+        }
     }
 }

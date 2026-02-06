@@ -3,15 +3,49 @@
 ## [Unreleased]
 
 ### Added
+- (placeholder)
+
+### Changed
+- (placeholder)
+
+### Fixed
+- (placeholder)
+
+### Testing
+- (placeholder)
+
+## [2.7.2] - 2026-02-06 (Wallpaper QA + Settings UX)
+
+### Added
 - **Custom Wallpaper EXIF Support**: Uploaded wallpaper images now respect EXIF orientation before rendering.
+- **Wallpaper Scenario Screenshots**: Added instrumentation coverage for multi-size, empty-state, and long/RTL text scenarios.
+- **Homepage Zone Labels**: “Archive” and “Complete” labels now render on the canvas for always-on guidance.
+- **Settings Close Buttons**: Privacy and Environment settings now include a close button for quick return.
 
 ### Changed
 - **Wallpaper Typography System**: Unified header, badge, task title, and meta sizing with consistent spacing across device sizes.
 - **Custom Wallpaper Readability Overlay**: Replaced flat dark overlay with gradient + vignette tuned by background luminance.
 - **Generated Wallpaper Texture**: Added a subtle noise layer to reduce banding and improve depth.
+- **RTL/Long Text Rendering**: Wallpaper task layout now uses bidi wrapping and higher-quality line breaks.
+- **Homepage HUD Visibility**: Controls auto-hide after idle and return on touch to reduce clutter.
+- **Custom Wallpaper Scaling**: Added safe-copy handling to avoid recycled bitmap crashes during custom wallpaper generation.
+- **Environment Defaults**: Environment effects now default to off (weather/particles/heatmap/ambient reminders disabled until enabled).
+- **Settings Cleanup**: Removed unused AI/LLM settings screen that had no user entrypoint.
 
 ### Fixed
 - **Badge Truncation**: Long system badges now ellipsize cleanly without clipping or overlap.
+- **Homepage HUD Overlap**: Customize/FAB/toolbar layout no longer shifts or overlaps when auto-hidden.
+- **Star Placement vs HUD**: Stars avoid HUD zones and remain draggable at screen edges.
+- **Homepage Clock**: Removed always-on clock from ambient HUD.
+- **UI Test Stability**: Dismiss System UI ANR dialog before capturing instrumentation screenshots.
+- **Sync Prompt Visibility**: Tutorial no longer blocks the wallpaper sync consent dialog.
+- **Edit Overlay Testability**: Added stable test tags and debug hooks to reliably exercise edit flows in instrumentation.
+
+### Testing
+- **Full E2E Suite**: Ran full instrumentation suite with screenshots captured for HUD and settings flows.
+- **Deep E2E Expansion**: Added broader UI and wallpaper scenario coverage; ran the suite twice with evidence.
+- **Full E2E Suite (No Skips)**: Ran the full instrumentation suite twice with screenshots captured for HUD/settings/focus/close flows.
+- **Lockscreen CRUD Verification**: Captured lock screen wallpaper screenshots and verified bitmap changes after add/edit/complete.
 
 ## [2.7.1] - 2026-02-04 (Parsing Intelligence + UX)
 

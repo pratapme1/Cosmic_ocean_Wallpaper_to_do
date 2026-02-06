@@ -3,7 +3,9 @@ package com.cosmicocean.worker
 import android.app.WallpaperManager
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.util.Log
+import androidx.exifinterface.media.ExifInterface
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.cosmicocean.data.CosmicDatabase
@@ -69,7 +71,11 @@ class WallpaperUpdateWorker(
                 // Custom wallpaper mode - load custom background
                 val customPath = prefsManager.getCustomWallpaperPath()
                 if (customPath != null && File(customPath).exists()) {
-                    val customBackground = BitmapFactory.decodeFile(customPath)
+                    val decoded = BitmapFactory.decodeFile(customPath)
+                    val customBackground = decoded?.let { applyExifOrientation(it, customPath) }
+                    if (customBackground != null && customBackground != decoded && !decoded.isRecycled) {
+                        decoded.recycle()
+                    }
                     if (customBackground != null) {
                         Log.d(TAG, "Using custom background: $customPath")
                         LocalWallpaperGenerator.generateWithCustomBackground(
@@ -155,7 +161,7 @@ class WallpaperUpdateWorker(
 
         } catch (e: Exception) {
             Log.e(TAG, "Error updating wallpaper: ${e.message}", e)
-            return Result.retry()
+            Result.retry()
         }
     }
 
@@ -191,6 +197,39 @@ class WallpaperUpdateWorker(
             weatherTasks = weatherTasks,
             recentCompletionAt = recentCompletionAt
         )
+    }
+
+    private fun applyExifOrientation(bitmap: android.graphics.Bitmap, path: String): android.graphics.Bitmap {
+        return try {
+            val exif = ExifInterface(path)
+            val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+            val matrix = Matrix()
+            when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+                ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+                ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+                ExifInterface.ORIENTATION_TRANSPOSE -> {
+                    matrix.postRotate(90f)
+                    matrix.postScale(-1f, 1f)
+                }
+                ExifInterface.ORIENTATION_TRANSVERSE -> {
+                    matrix.postRotate(270f)
+                    matrix.postScale(-1f, 1f)
+                }
+                else -> Unit
+            }
+
+            if (matrix.isIdentity) {
+                bitmap
+            } else {
+                android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "EXIF orientation read failed: ${e.message}")
+            bitmap
+        }
     }
 
     companion object {

@@ -377,6 +377,64 @@ class StarPlacementTest {
         )
     }
 
+    @Test
+    fun `safe area clamp - avoids reserved HUD zones`() {
+        val zoneManager = ZoneManager(SCREEN_WIDTH, SCREEN_HEIGHT)
+        val reserved = listOf(
+            ZoneManager.ZoneRect(
+                left = SCREEN_WIDTH - 200f,
+                top = 0f,
+                right = SCREEN_WIDTH.toFloat(),
+                bottom = 200f
+            )
+        )
+        zoneManager.updateReservedZones(reserved)
+
+        val (x, y) = zoneManager.clampToSafeArea(
+            x = SCREEN_WIDTH - 100f,
+            y = 100f,
+            radius = 20f
+        )
+
+        val strictlyInside = x > reserved[0].left &&
+            x < reserved[0].right &&
+            y > reserved[0].top &&
+            y < reserved[0].bottom
+        assertFalse(
+            "Clamped position should not remain strictly inside reserved zone",
+            strictlyInside
+        )
+    }
+
+    @Test
+    fun `reserved zones - dragging stars are not pushed out`() {
+        val zoneManager = ZoneManager(SCREEN_WIDTH, SCREEN_HEIGHT)
+        val reserved = listOf(
+            ZoneManager.ZoneRect(
+                left = 0f,
+                top = SCREEN_HEIGHT / 2f - 200f,
+                right = 200f,
+                bottom = SCREEN_HEIGHT / 2f + 200f
+            )
+        )
+        zoneManager.updateReservedZones(reserved)
+
+        val star = createTestStar(
+            x = 100f,
+            y = SCREEN_HEIGHT / 2f,
+            urgency = 2,
+            dueMinutes = 60f
+        )
+        star.isDragging = true
+        val beforeX = star.particle.x
+        val beforeY = star.particle.y
+
+        zoneManager.update(listOf(star), DELTA)
+
+        assertEquals("Dragging star should keep X position", beforeX, star.particle.x, 0.01f)
+        assertEquals("Dragging star should keep Y position", beforeY, star.particle.y, 0.01f)
+    }
+
     // ============================================
     // Helper Functions
     // ============================================

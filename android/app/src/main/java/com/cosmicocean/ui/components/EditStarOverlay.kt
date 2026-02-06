@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.cosmicocean.model.Star
 
@@ -59,7 +60,9 @@ fun EditStarOverlay(
                 value = title,
                 onValueChange = { title = it },
                 label = { Text("Title", color = Color.Gray) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("edit_title"),
                 textStyle = LocalTextStyle.current.copy(color = Color.White),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Color(0xFF3AA0FF),
@@ -76,6 +79,7 @@ fun EditStarOverlay(
                         selected = urgency == level,
                         onClick = { urgency = level },
                         label = { Text("P$level", color = if (urgency == level) Color.Black else Color.White) },
+                        modifier = Modifier.testTag("urgency_$level"),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = Color(0xFF3AA0FF)
                         )
@@ -167,7 +171,9 @@ fun EditStarOverlay(
                     }
                     onSave(title, urgency, dueInMinutes)
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("update_star"),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3AA0FF))
             ) {
                 Text("Update Star", color = Color.Black)

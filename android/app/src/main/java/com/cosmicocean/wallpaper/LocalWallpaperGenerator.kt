@@ -7,13 +7,17 @@ import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RadialGradient
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import android.text.TextUtils
+import android.text.TextDirectionHeuristics
 import android.util.Log
+import androidx.core.text.BidiFormatter
 import com.cosmicocean.data.StarEntity
 import com.cosmicocean.ui.state.ContextMode
 import com.cosmicocean.ui.state.EnvironmentPreferences
@@ -51,6 +55,10 @@ import kotlin.math.sin
  */
 object LocalWallpaperGenerator {
     private const val TAG = "LocalWallpaperGen"
+    private const val NOISE_TILE_SIZE = 96
+    @Volatile private var noiseTile: Bitmap? = null
+    @Volatile private var noiseAlpha: Int = -1
+    private val noiseLock = Any()
 
     // Particle system constants (aligned with backend particle-system.js)
     private const val PARTICLE_SEED_PRIME = 7919
@@ -185,17 +193,20 @@ object LocalWallpaperGenerator {
     )
 
     private data class TypographyScale(
-        val displayLarge: Float,
-        val displayMedium: Float,
-        val headlineLarge: Float,
-        val headlineMedium: Float,
-        val titleLarge: Float,
-        val titleMedium: Float,
-        val bodyLarge: Float,
-        val bodyMedium: Float,
-        val labelLarge: Float,
-        val labelMedium: Float,
-        val labelSmall: Float
+        val header: Float,
+        val taskTitle: Float,
+        val taskMeta: Float,
+        val badge: Float,
+        val labelSmall: Float,
+        val emptyTitle: Float,
+        val emptySubtitle: Float
+    )
+
+    private data class TextReadability(
+        val shadowColor: Int,
+        val shadowRadius: Float,
+        val shadowDx: Float,
+        val shadowDy: Float
     )
 
     private data class LayoutConfig(
@@ -332,18 +343,145 @@ object LocalWallpaperGenerator {
         }
 
         return TypographyScale(
-            displayLarge = size(32f),
-            displayMedium = size(28f),
-            headlineLarge = size(24f),
-            headlineMedium = size(20f),
-            titleLarge = size(18f),
-            titleMedium = size(16f),
-            bodyLarge = size(16f),
-            bodyMedium = size(14f),
-            labelLarge = size(14f),
-            labelMedium = size(12f),
-            labelSmall = size(10f)
+            header = size(12f),
+            taskTitle = size(22f),
+            taskMeta = size(13f),
+            badge = size(11f),
+            labelSmall = size(10f),
+            emptyTitle = size(24f),
+            emptySubtitle = size(14f)
         )
+    }
+
+    private fun resolveTextReadability(isCustom: Boolean, backgroundLuminance: Float? = null): TextReadability {
+        val luminance = backgroundLuminance ?: 0.5f
+        val shadowAlpha = if (isCustom) {
+            when {
+                luminance >= 0.7f -> 180
+                luminance >= 0.55f -> 150
+                luminance <= 0.25f -> 80
+                else -> 120
+            }
+        } else {
+            110
+        }
+        val radius = if (isCustom && luminance >= 0.6f) 6f else 4f
+        return TextReadability(
+            shadowColor = Color.argb(shadowAlpha, 0, 0, 0),
+            shadowRadius = radius,
+            shadowDx = 2f,
+            shadowDy = 2f
+        )
+    }
+
+    private fun sampleAverageLuminance(bitmap: Bitmap): Float {
+        val width = bitmap.width.coerceAtLeast(1)
+        val height = bitmap.height.coerceAtLeast(1)
+        val stepX = max(1, width / 24)
+        val stepY = max(1, height / 24)
+        var sum = 0f
+        var count = 0
+        var y = 0
+        while (y < height) {
+            var x = 0
+            while (x < width) {
+                val color = bitmap.getPixel(x, y)
+                val r = Color.red(color) / 255f
+                val g = Color.green(color) / 255f
+                val b = Color.blue(color) / 255f
+                val luminance = (0.2126f * r) + (0.7152f * g) + (0.0722f * b)
+                sum += luminance
+                count++
+                x += stepX
+            }
+            y += stepY
+        }
+        return if (count > 0) sum / count else 0.5f
+    }
+
+    private fun drawCustomReadabilityOverlay(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
+        luminance: Float
+    ) {
+        val layout = getLayoutConfig(width, height)
+        val taskZone = layout.layoutZones.task
+        val overlayAlpha = when {
+            luminance >= 0.7f -> 0.5f
+            luminance >= 0.55f -> 0.42f
+            luminance <= 0.25f -> 0.28f
+            else -> 0.36f
+        }
+
+        val topY = max(0f, taskZone.y - layout.margins.vertical * 1.5f)
+        val bottomY = min(height.toFloat(), taskZone.y + taskZone.height + layout.margins.vertical * 1.5f)
+
+        val gradient = LinearGradient(
+            0f,
+            topY,
+            0f,
+            bottomY,
+            intArrayOf(
+                Color.argb((overlayAlpha * 255).toInt(), 0, 0, 0),
+                Color.argb((overlayAlpha * 220).toInt(), 0, 0, 0),
+                Color.argb((overlayAlpha * 140).toInt(), 0, 0, 0)
+            ),
+            floatArrayOf(0f, 0.5f, 1f),
+            Shader.TileMode.CLAMP
+        )
+
+        val overlayPaint = Paint().apply {
+            shader = gradient
+            isAntiAlias = true
+        }
+        canvas.drawRect(0f, topY, width.toFloat(), bottomY, overlayPaint)
+
+        val centerX = width / 2f
+        val centerY = taskZone.centerY
+        val vignettePaint = Paint().apply {
+            shader = RadialGradient(
+                centerX,
+                centerY,
+                width * 0.65f,
+                intArrayOf(
+                    Color.argb(0, 0, 0, 0),
+                    Color.argb((overlayAlpha * 200).toInt(), 0, 0, 0)
+                ),
+                floatArrayOf(0.4f, 1f),
+                Shader.TileMode.CLAMP
+            )
+        }
+        canvas.drawRect(0f, topY, width.toFloat(), bottomY, vignettePaint)
+    }
+
+    private fun drawNoiseOverlay(canvas: Canvas, width: Int, height: Int, alpha: Int = 10) {
+        val noiseBitmap = getNoiseTile(alpha)
+        val paint = Paint().apply { isFilterBitmap = true }
+        canvas.drawBitmap(noiseBitmap, null, Rect(0, 0, width, height), paint)
+    }
+
+    private fun getNoiseTile(alpha: Int): Bitmap {
+        val cached = noiseTile
+        if (cached != null && !cached.isRecycled && noiseAlpha == alpha) {
+            return cached
+        }
+        synchronized(noiseLock) {
+            val current = noiseTile
+            if (current != null && !current.isRecycled && noiseAlpha == alpha) return current
+            val bitmap = Bitmap.createBitmap(NOISE_TILE_SIZE, NOISE_TILE_SIZE, Bitmap.Config.ARGB_8888)
+            val random = java.util.Random(7919L)
+            for (y in 0 until NOISE_TILE_SIZE) {
+                for (x in 0 until NOISE_TILE_SIZE) {
+                    val value = random.nextInt(256)
+                    val color = Color.argb(alpha, value, value, value)
+                    bitmap.setPixel(x, y, color)
+                }
+            }
+            noiseTile = bitmap
+            noiseAlpha = alpha
+            return bitmap
+        }
     }
 
     /**
@@ -375,6 +513,7 @@ object LocalWallpaperGenerator {
             shouldShowAmbientPulse(allTasks, now)
         val showCelebration = recentCompletionAt != null &&
             now - recentCompletionAt < COMPLETION_CELEBRATION_WINDOW_MS
+        val readability = resolveTextReadability(isCustom = false)
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -400,6 +539,8 @@ object LocalWallpaperGenerator {
             drawGradientBackground(canvas, colors, width, height)
             0f
         }
+
+        drawNoiseOverlay(canvas, width, height, alpha = 10)
 
         // Layer 2: Theme particle system (scaled by environment intensity)
         if (envEnabled) {
@@ -428,7 +569,7 @@ object LocalWallpaperGenerator {
 
         // Layer 3: Achievement panel (if any)
         val achievementReservedSpace = if (achievementCount > 0 || streakDays > 0) {
-            drawAchievementPanel(canvas, achievementCount, streakDays, colors, width, height)
+            drawAchievementPanel(canvas, achievementCount, streakDays, colors, width, height, readability)
         } else {
             0f
         }
@@ -443,6 +584,7 @@ object LocalWallpaperGenerator {
                 width,
                 height,
                 achievementReservedSpace,
+                readability = readability,
                 highlightIndex = highlightIndex,
                 badges = buildBadgeRow(
                     focusEnabled = focusEnabled,
@@ -451,7 +593,7 @@ object LocalWallpaperGenerator {
                 )
             )
         } else {
-            drawClearState(canvas, colors, width, height)
+            drawClearState(canvas, colors, width, height, readability)
         }
 
         return bitmap
@@ -488,6 +630,7 @@ object LocalWallpaperGenerator {
             shouldShowAmbientPulse(allTasks, now)
         val showCelebration = recentCompletionAt != null &&
             now - recentCompletionAt < COMPLETION_CELEBRATION_WINDOW_MS
+        var backgroundLuminance = 0.5f
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -497,30 +640,37 @@ object LocalWallpaperGenerator {
 
         // Layer 1: Custom background image (scaled to cover)
         try {
-            val scaledBackground = scaleToCover(customBackground, width, height)
-            Log.d(TAG, "Scaled background: ${scaledBackground.width}x${scaledBackground.height}")
-            canvas.drawBitmap(scaledBackground, 0f, 0f, null)
-
-            if (scaledBackground != customBackground && !scaledBackground.isRecycled) {
-                scaledBackground.recycle()
+            val safeBackground = if (customBackground.isRecycled) {
+                Log.w(TAG, "Custom background is recycled before scaling; falling back to solid color.")
+                null
+            } else {
+                customBackground.copy(Bitmap.Config.ARGB_8888, false)
+            }
+            val scaledBackground = safeBackground?.let { scaleToCover(it, width, height) }
+            if (scaledBackground != null) {
+                Log.d(TAG, "Scaled background: ${scaledBackground.width}x${scaledBackground.height}")
+                backgroundLuminance = sampleAverageLuminance(scaledBackground)
+                canvas.drawBitmap(scaledBackground, 0f, 0f, null)
+                if (!scaledBackground.isRecycled) {
+                    scaledBackground.recycle()
+                }
+            } else {
+                Log.w(TAG, "Scaled background unavailable; using fallback color.")
+            }
+            if (safeBackground != null && safeBackground != customBackground && !safeBackground.isRecycled) {
+                safeBackground.recycle()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error drawing custom background: ${e.message}", e)
             canvas.drawColor(Color.parseColor("#1A1A2E"))
         }
 
-        // Layer 2: Dark overlay for text readability (40% opacity like backend)
-        val overlayPaint = Paint().apply {
-            color = Color.BLACK
-            alpha = 102  // 40% of 255
-        }
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), overlayPaint)
-
         // Calculate urgency for styling
         val urgency = if (sortedTasks.isNotEmpty()) calculateUrgency(sortedTasks[0]) else UrgencyLevel.CLEAR
 
         // Use high contrast colors for custom backgrounds
         val colors = getCustomBackgroundColors(urgency)
+        val readability = resolveTextReadability(isCustom = true, backgroundLuminance)
 
         // Layer 2.5: Environment overlays on top of custom background
         if (environmentPreferences?.environmentEnabled != false) {
@@ -552,9 +702,14 @@ object LocalWallpaperGenerator {
             drawCompletionBurst(canvas, width, height, colors, now)
         }
 
+        drawCustomReadabilityOverlay(canvas, width, height, backgroundLuminance)
+
+        // Layer 2.75: Transition gradient (scene → task zone)
+        drawTransitionGradient(canvas, colors, width, height)
+
         // Layer 3: Achievement panel (if any)
         val achievementReservedSpace = if (achievementCount > 0 || streakDays > 0) {
-            drawAchievementPanel(canvas, achievementCount, streakDays, colors, width, height)
+            drawAchievementPanel(canvas, achievementCount, streakDays, colors, width, height, readability)
         } else {
             0f
         }
@@ -569,6 +724,7 @@ object LocalWallpaperGenerator {
                 width,
                 height,
                 achievementReservedSpace,
+                readability = readability,
                 highlightIndex = highlightIndex,
                 badges = buildBadgeRow(
                     focusEnabled = focusEnabled,
@@ -577,7 +733,7 @@ object LocalWallpaperGenerator {
                 )
             )
         } else {
-            drawClearState(canvas, colors, width, height)
+            drawClearState(canvas, colors, width, height, readability)
         }
 
         return bitmap
@@ -1965,10 +2121,12 @@ object LocalWallpaperGenerator {
         streakDays: Int,
         colors: ThemeColors,
         width: Int,
-        height: Int
+        height: Int,
+        readability: TextReadability
     ): Float {
         val layout = getLayoutConfig(width, height)
         val density = layout.safeInsets.density
+        val typography = layout.typography
         val taskZone = layout.layoutZones.task
 
         val rightPadding = maxOf(24f * density, width * 0.04f)
@@ -1976,12 +2134,12 @@ object LocalWallpaperGenerator {
         val panelX = width - rightPadding - panelWidth
         val panelY = taskZone.y + (16f * density)
 
-        val titleSize = 18f * density
-        val labelSize = 8f * density
-        val badgeSize = 28f * density
-        val badgeLabelSize = 7.5f * density
-        val streakValueSize = 14f * density
-        val streakLabelSize = 8f * density
+        val titleSize = max(typography.taskTitle * 0.7f, 14f * density)
+        val labelSize = max(typography.badge * 0.85f, 7f * density)
+        val badgeSize = max(typography.taskTitle * 1.1f, 24f * density)
+        val badgeLabelSize = max(typography.badge * 0.7f, 6.5f * density)
+        val streakValueSize = max(typography.taskMeta * 1.1f, 10f * density)
+        val streakLabelSize = max(typography.badge * 0.7f, 7f * density)
         val innerPadding = 10f * density
         val dividerHeight = maxOf(1f, density * 0.6f)
 
@@ -2023,6 +2181,7 @@ object LocalWallpaperGenerator {
             textSize = titleSize
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setShadowLayer(readability.shadowRadius, readability.shadowDx, readability.shadowDy, readability.shadowColor)
         }
         canvas.drawText(achievementCount.toString(), panelX + panelWidth / 2f, currentY, countPaint)
 
@@ -2034,6 +2193,7 @@ object LocalWallpaperGenerator {
             textSize = labelSize
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            setShadowLayer(readability.shadowRadius, readability.shadowDx, readability.shadowDy, readability.shadowColor)
         }
         canvas.drawText("ACHIEVEMENTS", panelX + panelWidth / 2f, currentY, labelPaint)
 
@@ -2065,6 +2225,7 @@ object LocalWallpaperGenerator {
                 textSize = badgeSize * 0.5f
                 textAlign = Paint.Align.CENTER
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                setShadowLayer(readability.shadowRadius, readability.shadowDx, readability.shadowDy, readability.shadowColor)
             }
             canvas.drawText("🏆", panelX + panelWidth / 2f, badgeCenterY + badgeIconPaint.textSize * 0.35f, badgeIconPaint)
 
@@ -2074,6 +2235,7 @@ object LocalWallpaperGenerator {
                 textSize = badgeLabelSize
                 textAlign = Paint.Align.CENTER
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                setShadowLayer(readability.shadowRadius, readability.shadowDx, readability.shadowDy, readability.shadowColor)
             }
             val badgeLabelY = badgeCenterY + badgeSize / 2f + badgeLabelSize + (4f * density)
             canvas.drawText("RECENT", panelX + panelWidth / 2f, badgeLabelY, badgeLabelPaint)
@@ -2104,6 +2266,7 @@ object LocalWallpaperGenerator {
                 textSize = streakValueSize
                 textAlign = Paint.Align.CENTER
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                setShadowLayer(readability.shadowRadius, readability.shadowDx, readability.shadowDy, readability.shadowColor)
             }
             canvas.drawText("🔥 $streakDays", panelX + panelWidth / 2f, currentY, streakPaint)
 
@@ -2114,6 +2277,7 @@ object LocalWallpaperGenerator {
                 textSize = streakLabelSize
                 textAlign = Paint.Align.CENTER
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                setShadowLayer(readability.shadowRadius, readability.shadowDx, readability.shadowDy, readability.shadowColor)
             }
             canvas.drawText("DAY STREAK", panelX + panelWidth / 2f, currentY, streakLabelPaint)
         }
@@ -2133,6 +2297,7 @@ object LocalWallpaperGenerator {
         width: Int,
         height: Int,
         reservedRightSpace: Float = 0f,
+        readability: TextReadability,
         highlightIndex: Int? = null,
         badges: List<String> = emptyList()
     ) {
@@ -2140,35 +2305,46 @@ object LocalWallpaperGenerator {
         val marginH = layout.margins.horizontal
         val taskZone = layout.layoutZones.task
         val typography = layout.typography
+        val density = layout.safeInsets.density
+        val bidi = BidiFormatter.getInstance()
+        val isRtl = TextUtils.getLayoutDirectionFromLocale(Locale.getDefault()) == android.view.View.LAYOUT_DIRECTION_RTL
+        val rightEdge = width - marginH - reservedRightSpace
+        val baseSpacing = max(layout.margins.vertical * 0.6f, typography.taskMeta * 0.8f)
 
-        var currentY = taskZone.y + layout.margins.vertical + typography.labelMedium + 20f
+        var currentY = taskZone.y + layout.margins.vertical
 
         // "RIGHT NOW" header (matching backend style)
         val headerPaint = Paint().apply {
             isAntiAlias = true
             color = colors.subtitleColor
-            textSize = typography.labelLarge
-            typeface = Typeface.create("sans-serif-condensed", Typeface.NORMAL)
+            textSize = typography.header
+            typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+            textAlign = if (isRtl) Paint.Align.RIGHT else Paint.Align.LEFT
         }
-        headerPaint.letterSpacing = (2f / headerPaint.textSize).coerceAtLeast(0.02f)
+        headerPaint.letterSpacing = 0.04f
 
         // Add text shadow for readability
-        headerPaint.setShadowLayer(4f, 2f, 2f, Color.argb(100, 0, 0, 0))
-        canvas.drawText("RIGHT NOW", marginH, currentY, headerPaint)
+        headerPaint.setShadowLayer(readability.shadowRadius, readability.shadowDx, readability.shadowDy, readability.shadowColor)
+        val headerX = if (isRtl) rightEdge else marginH
+        canvas.drawText("RIGHT NOW", headerX, currentY + typography.header, headerPaint)
 
-        currentY += layout.margins.vertical + 10f
+        currentY += typography.header + baseSpacing
 
         if (badges.isNotEmpty()) {
             val badgeHeight = drawBadgeRow(
                 canvas = canvas,
                 badges = badges,
                 colors = colors,
-                startX = marginH,
+                startX = headerX,
                 startY = currentY,
-                maxWidth = width - marginH - reservedRightSpace
+                maxWidth = rightEdge - marginH,
+                typography = typography,
+                readability = readability,
+                density = density,
+                isRtl = isRtl
             )
             if (badgeHeight > 0f) {
-                currentY += badgeHeight + layout.margins.vertical * 0.5f
+                currentY += badgeHeight + baseSpacing * 0.6f
             }
         }
 
@@ -2176,24 +2352,44 @@ object LocalWallpaperGenerator {
         val titlePaint = TextPaint().apply {
             isAntiAlias = true
             color = colors.titleColor
-            textSize = typography.headlineLarge
+            textSize = typography.taskTitle
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setShadowLayer(4f, 2f, 2f, Color.argb(100, 0, 0, 0))
+            setShadowLayer(readability.shadowRadius, readability.shadowDx, readability.shadowDy, readability.shadowColor)
+            textAlign = if (isRtl) Paint.Align.RIGHT else Paint.Align.LEFT
         }
 
-        val metaPaint = Paint().apply {
+        val metaPaint = TextPaint().apply {
             isAntiAlias = true
             color = colors.subtitleColor
-            textSize = typography.bodyMedium
+            textSize = typography.taskMeta
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
-            setShadowLayer(3f, 1f, 1f, Color.argb(80, 0, 0, 0))
+            setShadowLayer(readability.shadowRadius * 0.7f, readability.shadowDx, readability.shadowDy, readability.shadowColor)
+            textAlign = if (isRtl) Paint.Align.RIGHT else Paint.Align.LEFT
         }
 
-        val circleRadius = typography.labelSmall / 2f
-        val textStartX = marginH + circleRadius * 2f + 10f
-        val maxWidth = (width - marginH - textStartX - reservedRightSpace)
+        val circleRadius = max(typography.taskMeta * 0.45f, 4f * density)
+        val bulletGap = 8f * density
+        val bulletX = if (isRtl) rightEdge else marginH
+        val textStartX = if (isRtl) marginH else bulletX + circleRadius * 2f + bulletGap
+        val textEndX = if (isRtl) bulletX - circleRadius * 2f - bulletGap else rightEdge
+        val maxWidth = (textEndX - textStartX)
             .toInt()
             .coerceAtLeast(100)
+
+        val showNextLabel = highlightIndex != null && highlightIndex == 0
+        if (showNextLabel) {
+            val nextPaint = Paint().apply {
+                isAntiAlias = true
+                color = colors.subtitleColor
+                textSize = typography.labelSmall
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                setShadowLayer(readability.shadowRadius, readability.shadowDx, readability.shadowDy, readability.shadowColor)
+                textAlign = if (isRtl) Paint.Align.RIGHT else Paint.Align.LEFT
+            }
+            val nextX = if (isRtl) textStartX + maxWidth else textStartX
+            canvas.drawText("NEXT", nextX, currentY + nextPaint.textSize, nextPaint)
+            currentY += nextPaint.textSize + baseSpacing * 0.6f
+        }
         data class TaskRenderInfo(
             val task: StarEntity,
             val circleY: Float,
@@ -2206,23 +2402,32 @@ object LocalWallpaperGenerator {
         val renderItems = mutableListOf<TaskRenderInfo>()
         val startY = currentY
 
+        val titleToMetaSpacing = max(6f * density, typography.taskMeta * 0.5f)
+        val itemSpacing = max(layout.margins.vertical, typography.taskMeta * 1.2f)
+
         tasks.take(3).forEach { task ->
-            val circleY = currentY - typography.titleLarge / 3f
+            val titleText = bidi.unicodeWrap(task.title)
             val titleLayout = StaticLayout.Builder
-                .obtain(task.title, 0, task.title.length, titlePaint, maxWidth)
-                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                .obtain(titleText, 0, titleText.length, titlePaint, maxWidth)
+                .setAlignment(if (isRtl) Layout.Alignment.ALIGN_OPPOSITE else Layout.Alignment.ALIGN_NORMAL)
+                .setTextDirection(if (isRtl) TextDirectionHeuristics.FIRSTSTRONG_RTL else TextDirectionHeuristics.FIRSTSTRONG_LTR)
+                .setBreakStrategy(Layout.BREAK_STRATEGY_HIGH_QUALITY)
+                .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NORMAL)
                 .setMaxLines(2)
-                .setEllipsize(android.text.TextUtils.TruncateAt.END)
+                .setEllipsize(TextUtils.TruncateAt.END)
                 .build()
-            val titleTop = currentY - titleLayout.getLineBaseline(0)
-            var nextY = currentY + titleLayout.height + 5f
+            val titleTop = currentY
+            val firstLineBaseline = titleLayout.getLineBaseline(0)
+            val circleY = titleTop + firstLineBaseline - (circleRadius * 0.1f)
+            var nextY = currentY + titleLayout.height
 
             val metaText = formatDueDate(task.dueDate)
             val metaY = if (metaText != null) {
-                val y = nextY
-                nextY += metaPaint.textSize + 10f
+                val y = nextY + titleToMetaSpacing + metaPaint.textSize
+                nextY = y + itemSpacing
                 y
             } else {
+                nextY += itemSpacing
                 null
             }
 
@@ -2237,12 +2442,12 @@ object LocalWallpaperGenerator {
                 )
             )
 
-            currentY = nextY + layout.margins.vertical
+            currentY = nextY
         }
 
         drawIntentForecastPath(
             canvas = canvas,
-            points = renderItems.map { android.graphics.PointF(marginH, it.circleY) },
+            points = renderItems.map { android.graphics.PointF(bulletX, it.circleY) },
             colors = colors
         )
 
@@ -2265,17 +2470,9 @@ object LocalWallpaperGenerator {
                     style = Paint.Style.FILL
                 }
                 canvas.drawCircle(marginH, info.circleY, circleRadius * 2.8f, glowPaint)
-
-                val nextPaint = Paint().apply {
-                    isAntiAlias = true
-                    color = colors.subtitleColor
-                    textSize = typography.labelSmall
-                    typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-                }
-                canvas.drawText("NEXT", textStartX, info.circleY - circleRadius * 1.8f, nextPaint)
             }
 
-            canvas.drawCircle(marginH, info.circleY, circleRadius, circlePaint)
+            canvas.drawCircle(bulletX, info.circleY, circleRadius, circlePaint)
 
             canvas.save()
             canvas.translate(textStartX, info.titleTop)
@@ -2284,7 +2481,9 @@ object LocalWallpaperGenerator {
 
             info.metaText?.let { meta ->
                 info.metaY?.let { y ->
-                    canvas.drawText(meta, textStartX, y, metaPaint)
+                    val metaDisplay = TextUtils.ellipsize(bidi.unicodeWrap(meta), metaPaint, maxWidth.toFloat(), TextUtils.TruncateAt.END).toString()
+                    val metaX = if (isRtl) textStartX + maxWidth else textStartX
+                    canvas.drawText(metaDisplay, metaX, y, metaPaint)
                 }
             }
         }
@@ -2304,20 +2503,27 @@ object LocalWallpaperGenerator {
         colors: ThemeColors,
         startX: Float,
         startY: Float,
-        maxWidth: Float
+        maxWidth: Float,
+        typography: TypographyScale,
+        readability: TextReadability,
+        density: Float,
+        isRtl: Boolean
     ): Float {
         if (badges.isEmpty()) return 0f
 
+        val bidi = BidiFormatter.getInstance()
         val textPaint = TextPaint().apply {
             isAntiAlias = true
             color = colors.titleColor
-            textSize = max(10f, maxWidth * 0.02f)
+            textSize = typography.badge
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setShadowLayer(readability.shadowRadius * 0.7f, readability.shadowDx, readability.shadowDy, readability.shadowColor)
+            textAlign = if (isRtl) Paint.Align.RIGHT else Paint.Align.LEFT
         }
 
-        val paddingH = 12f
-        val paddingV = 6f
-        val gap = 8f
+        val paddingH = max(8f * density, typography.badge * 0.6f)
+        val paddingV = max(4f * density, typography.badge * 0.35f)
+        val gap = max(6f * density, typography.badge * 0.5f)
         val badgeHeight = textPaint.textSize + paddingV * 2f
         var x = startX
         var y = startY
@@ -2330,20 +2536,34 @@ object LocalWallpaperGenerator {
         }
 
         badges.forEach { label ->
-            val textWidth = textPaint.measureText(label)
+            val upperLabel = label.uppercase(Locale.US)
+            val wrappedLabel = bidi.unicodeWrap(upperLabel)
+            val maxTextWidth = maxWidth - paddingH * 2f
+            val displayLabel = TextUtils.ellipsize(wrappedLabel, textPaint, maxTextWidth, TextUtils.TruncateAt.END).toString()
+            val textWidth = textPaint.measureText(displayLabel)
             val badgeWidth = textWidth + paddingH * 2f
 
-            if (x + badgeWidth > startX + maxWidth) {
-                x = startX
-                y += badgeHeight + gap
+            if (isRtl) {
+                if (x - badgeWidth < startX - maxWidth) {
+                    x = startX
+                    y += badgeHeight + gap
+                }
+                val rect = RectF(x - badgeWidth, y, x, y + badgeHeight)
+                canvas.drawRoundRect(rect, badgeHeight / 2f, badgeHeight / 2f, bgPaint)
+                val textY = y + badgeHeight - paddingV - 2f
+                canvas.drawText(displayLabel, x - paddingH, textY, textPaint)
+                x -= badgeWidth + gap
+            } else {
+                if (x + badgeWidth > startX + maxWidth) {
+                    x = startX
+                    y += badgeHeight + gap
+                }
+                val rect = RectF(x, y, x + badgeWidth, y + badgeHeight)
+                canvas.drawRoundRect(rect, badgeHeight / 2f, badgeHeight / 2f, bgPaint)
+                val textY = y + badgeHeight - paddingV - 2f
+                canvas.drawText(displayLabel, x + paddingH, textY, textPaint)
+                x += badgeWidth + gap
             }
-
-            val rect = RectF(x, y, x + badgeWidth, y + badgeHeight)
-            canvas.drawRoundRect(rect, badgeHeight / 2f, badgeHeight / 2f, bgPaint)
-            val textY = y + badgeHeight - paddingV - 2f
-            canvas.drawText(label, x + paddingH, textY, textPaint)
-
-            x += badgeWidth + gap
             maxY = max(maxY, y + badgeHeight)
         }
 
@@ -2384,11 +2604,13 @@ object LocalWallpaperGenerator {
         canvas: Canvas,
         colors: ThemeColors,
         width: Int,
-        height: Int
+        height: Int,
+        readability: TextReadability
     ) {
         val centerX = width / 2f
         val layout = getLayoutConfig(width, height)
         val centerY = layout.layoutZones.task.centerY
+        val typography = layout.typography
 
         // Draw checkmark circle
         val circleRadius = width * 0.12f
@@ -2426,30 +2648,31 @@ object LocalWallpaperGenerator {
         val messagePaint = Paint().apply {
             isAntiAlias = true
             color = colors.titleColor
-            textSize = layout.typography.headlineLarge
+            textSize = typography.emptyTitle
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setShadowLayer(8f, 0f, 0f, colors.taskCircleGlow)
+            setShadowLayer(readability.shadowRadius, readability.shadowDx, readability.shadowDy, readability.shadowColor)
         }
 
         canvas.drawText(
             "All clear ✨",
             centerX,
-            centerY + circleRadius + (width * 0.1f),
+            centerY + circleRadius + layout.margins.vertical + typography.emptyTitle,
             messagePaint
         )
 
         val subtitlePaint = Paint().apply {
             isAntiAlias = true
             color = colors.subtitleColor
-            textSize = width * 0.035f
+            textSize = typography.emptySubtitle
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            setShadowLayer(readability.shadowRadius * 0.8f, readability.shadowDx, readability.shadowDy, readability.shadowColor)
         }
         canvas.drawText(
             "Rest. You earned it.",
             centerX,
-            centerY + circleRadius + (width * 0.16f),
+            centerY + circleRadius + layout.margins.vertical + typography.emptyTitle + typography.emptySubtitle + (layout.margins.vertical * 0.5f),
             subtitlePaint
         )
     }

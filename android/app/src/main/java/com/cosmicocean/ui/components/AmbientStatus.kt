@@ -58,8 +58,6 @@ fun AmbientStatusHUD(stars: List<Star>, isInteracting: Boolean) {
         contentAlignment = Alignment.TopCenter
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            ClockOverlay(modifier = Modifier.padding(bottom = 8.dp))
-            
             Text(
                 text = currentMessage,
                 color = Color.White,

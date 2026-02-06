@@ -70,7 +70,7 @@ class EnvironmentPreferencesRepository(private val context: Context) {
      */
     val preferencesFlow: Flow<EnvironmentPreferences> = context.environmentDataStore.data.map { preferences ->
         EnvironmentPreferences(
-            environmentEnabled = preferences[ENVIRONMENT_ENABLED] ?: true,
+            environmentEnabled = preferences[ENVIRONMENT_ENABLED] ?: false,
             timeOfDayMode = try {
                 TimeOfDayMode.valueOf(
                     preferences[TIME_OF_DAY_MODE] ?: TimeOfDayMode.AUTO.name
@@ -79,10 +79,10 @@ class EnvironmentPreferencesRepository(private val context: Context) {
                 TimeOfDayMode.AUTO
             },
             manualTimePeriod = preferences[MANUAL_TIME_PERIOD] ?: "morning",
-            weatherOverlayEnabled = preferences[WEATHER_OVERLAY_ENABLED] ?: true,
+            weatherOverlayEnabled = preferences[WEATHER_OVERLAY_ENABLED] ?: false,
             particleIntensity = try {
                 ParticleIntensity.valueOf(
-                    preferences[PARTICLE_INTENSITY] ?: ParticleIntensity.MEDIUM.name
+                    preferences[PARTICLE_INTENSITY] ?: ParticleIntensity.LOW.name
                 )
             } catch (e: IllegalArgumentException) {
                 ParticleIntensity.MEDIUM
@@ -107,8 +107,8 @@ class EnvironmentPreferencesRepository(private val context: Context) {
             quietHoursEnd = preferences[QUIET_HOURS_END] ?: 7,
             respectDnd = preferences[RESPECT_DND] ?: true,
             hapticsRateLimitMinutes = preferences[HAPTICS_RATE_LIMIT] ?: 30,
-            overdueHeatmapEnabled = preferences[OVERDUE_HEATMAP_ENABLED] ?: true,
-            ambientRemindersEnabled = preferences[AMBIENT_REMINDERS_ENABLED] ?: true,
+            overdueHeatmapEnabled = preferences[OVERDUE_HEATMAP_ENABLED] ?: false,
+            ambientRemindersEnabled = preferences[AMBIENT_REMINDERS_ENABLED] ?: false,
             tutorialSeen = preferences[TUTORIAL_SEEN] ?: false
         )
     }

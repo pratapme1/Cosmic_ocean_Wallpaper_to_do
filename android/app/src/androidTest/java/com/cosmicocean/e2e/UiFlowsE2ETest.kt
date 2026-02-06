@@ -1,6 +1,7 @@
 package com.cosmicocean.e2e
 
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnySibling
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -9,11 +10,18 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
+import androidx.compose.ui.geometry.Offset
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.UiSelector
 import com.cosmicocean.MainActivity
 import com.cosmicocean.auth.TokenManager
 import com.cosmicocean.data.CosmicDatabase
@@ -31,7 +39,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.io.FileOutputStream
-import java.io.InputStream
 import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
@@ -55,6 +62,7 @@ class UiFlowsE2ETest {
     fun quickAddCreatesTaskInDatabase() {
         val title = "UI Quick Add ${UUID.randomUUID()}"
 
+        ensureHudVisible()
         composeTestRule.onNodeWithContentDescription("Add Task").performClick()
         composeTestRule.onNodeWithText("New Cosmic Task").assertExists()
         composeTestRule.onNode(hasSetTextAction()).performTextInput(title)
@@ -74,6 +82,7 @@ class UiFlowsE2ETest {
         seedStars(listOf(buildStarEntity(seededTitle)))
         recreateActivity()
 
+        ensureHudVisible()
         composeTestRule.onNodeWithContentDescription("Search").performClick()
         composeTestRule.onNodeWithText("Search Tasks").assertExists()
         composeTestRule.onNode(hasText("Search by title, status, priority...")).performTextInput("Find Me")
@@ -88,6 +97,7 @@ class UiFlowsE2ETest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val prefs = WallpaperPreferencesManager(context)
 
+        ensureHudVisible()
         composeTestRule.onNodeWithContentDescription("Settings").performClick()
         composeTestRule.onNodeWithText("Settings & Guide").assertExists()
 
@@ -143,6 +153,7 @@ class UiFlowsE2ETest {
     @Test
     fun environmentSettingsToggleWeatherOverlay() {
         openEnvironmentSettings()
+        ensureEnvironmentEnabled()
 
         val isEnabled = composeTestRule
             .onAllNodesWithText("Weather reflects your productivity", substring = true)
@@ -151,11 +162,11 @@ class UiFlowsE2ETest {
 
         if (isEnabled) {
             toggleBySiblingText("Productivity Weather")
-            composeTestRule.onNodeWithText("Weather overlay is disabled", substring = true).assertExists()
+            waitForText("Weather overlay is disabled")
         }
 
         toggleBySiblingText("Productivity Weather")
-        composeTestRule.onNodeWithText("Weather reflects your productivity", substring = true).assertExists()
+        waitForText("Weather reflects your productivity")
 
         composeTestRule.onNodeWithContentDescription("Back").performClick()
         composeTestRule.onNodeWithText("Environment Settings").assertDoesNotExist()
@@ -207,6 +218,25 @@ class UiFlowsE2ETest {
     }
 
     @Test
+    fun homeHudAutoHideAndShowOnTap() {
+        composeTestRule.waitForIdle()
+        // Wait for HUD auto-hide delay
+        composeTestRule.waitUntil(5_000) {
+            composeTestRule.onAllNodesWithContentDescription("Settings").fetchSemanticsNodes().isEmpty()
+        }
+        captureScreenshot("home_hud_hidden")
+
+        composeTestRule.onRoot().performTouchInput {
+            click(Offset(100f, 100f))
+        }
+
+        composeTestRule.waitUntil(3_000) {
+            composeTestRule.onAllNodesWithContentDescription("Settings").fetchSemanticsNodes().isNotEmpty()
+        }
+        captureScreenshot("home_hud_visible")
+    }
+
+    @Test
     fun environmentSettingsScreenshot() {
         openEnvironmentSettings()
 
@@ -215,7 +245,200 @@ class UiFlowsE2ETest {
         composeTestRule.onNodeWithText("Weather Overlay", substring = true).assertExists()
     }
 
+    @Test
+    fun privacySettingsCloseButtonScreenshot() {
+        openPrivacySettings()
+
+        composeTestRule.onNodeWithContentDescription("Close").assertExists()
+        captureScreenshot("privacy_settings_close")
+
+        composeTestRule.onNodeWithContentDescription("Close").performClick()
+        composeTestRule.onNodeWithText("Privacy Settings").assertDoesNotExist()
+    }
+
+    @Test
+    fun environmentSettingsCloseButtonScreenshot() {
+        openEnvironmentSettings()
+
+        composeTestRule.onNodeWithContentDescription("Close").assertExists()
+        captureScreenshot("environment_settings_close")
+
+        composeTestRule.onNodeWithContentDescription("Close").performClick()
+        composeTestRule.onNodeWithText("Environment Settings").assertDoesNotExist()
+    }
+
+    @Test
+    fun editTaskUpdatesTitleAndUrgency() {
+        val originalTitle = "Edit Me ${UUID.randomUUID()}"
+        val updatedTitle = "Updated ${UUID.randomUUID()}"
+
+        val metrics = canvasMetrics()
+        seedStars(listOf(buildStarEntity(originalTitle, x = metrics.width * 0.5f, y = metrics.height * 0.4f)))
+        recreateActivity()
+
+        val starId = getStarIdByTitle(originalTitle)
+        composeTestRule.activity.updateStarForTest(starId, updatedTitle, 3, 60f)
+
+        composeTestRule.waitUntil(12_000) {
+            val snapshot = composeTestRule.activity.getStarSnapshot(starId)
+            snapshot?.first == updatedTitle && snapshot.second == 3
+        }
+    }
+
+    @Test
+    fun editOverlayShowsTitle() {
+        val originalTitle = "Edit Overlay ${UUID.randomUUID()}"
+        val metrics = canvasMetrics()
+        seedStars(listOf(buildStarEntity(originalTitle, x = metrics.width * 0.5f, y = metrics.height * 0.4f)))
+        recreateActivity()
+
+        openEditOverlayForStarId(getStarIdByTitle(originalTitle))
+        composeTestRule.onNodeWithTag("edit_title", useUnmergedTree = true)
+            .assertTextContains(originalTitle, substring = true)
+        composeTestRule.onNodeWithContentDescription("Close").performClick()
+        composeTestRule.onNodeWithText("Edit Task").assertDoesNotExist()
+    }
+
+    @Test
+    fun startFocusSessionAndStop() {
+        val title = "Focus Task ${UUID.randomUUID()}"
+        val metrics = canvasMetrics()
+        seedStars(listOf(buildStarEntity(title, x = metrics.width * 0.5f, y = metrics.height * 0.45f)))
+        recreateActivity()
+
+        openEditOverlayForStarId(getStarIdByTitle(title))
+        composeTestRule.onNodeWithText("Start Focus Session").performClick()
+        composeTestRule.onNodeWithText("25 minutes").performClick()
+
+        composeTestRule.onNodeWithText("Edit Task").assertExists()
+        composeTestRule.onNodeWithContentDescription("Close").performClick()
+
+        composeTestRule.waitUntil(3_000) {
+            composeTestRule.onAllNodesWithText("Focus:", substring = true)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        captureScreenshot("focus_session_active")
+        composeTestRule.onNodeWithText("Stop").performClick()
+        composeTestRule.waitUntil(3_000) {
+            composeTestRule.onAllNodesWithText("Focus:", substring = true)
+                .fetchSemanticsNodes()
+                .isEmpty()
+        }
+    }
+
+    @Test
+    fun snoozeOverdueShowsDialog() {
+        val overdueTitle = "Overdue ${UUID.randomUUID()}"
+        seedStars(listOf(buildStarEntity(overdueTitle, dueOffsetMs = -3_600_000)))
+        recreateActivity()
+
+        ensureHudVisible()
+        composeTestRule.onNodeWithContentDescription("Settings").performClick()
+        composeTestRule.onNodeWithText("Settings & Guide").assertExists()
+        composeTestRule.onNodeWithText("Snooze Overdue", substring = true).performClick()
+
+        composeTestRule.onNodeWithText("Snooze Overdue Tasks").assertExists()
+        captureScreenshot("snooze_overdue_dialog")
+        composeTestRule.onNodeWithText("Snooze").performClick()
+        composeTestRule.onNodeWithText("Snooze Overdue Tasks").assertDoesNotExist()
+    }
+
+    @Test
+    fun clearAllDataClearsTasks() {
+        seedStars(
+            listOf(
+                buildStarEntity("Clear 1 ${UUID.randomUUID()}"),
+                buildStarEntity("Clear 2 ${UUID.randomUUID()}")
+            )
+        )
+        recreateActivity()
+
+        ensureHudVisible()
+        composeTestRule.onNodeWithContentDescription("Settings").performClick()
+        composeTestRule.onNodeWithText("Settings & Guide").assertExists()
+        composeTestRule.onNodeWithText("Clear All Data", substring = true).performClick()
+
+        composeTestRule.waitUntil(5_000) {
+            runBlocking {
+                database().starDao().getAllActiveStarsSync().isEmpty()
+            }
+        }
+    }
+
+    @Test
+    fun exportDataKeepsSettingsOpen() {
+        ensureHudVisible()
+        composeTestRule.onNodeWithContentDescription("Settings").performClick()
+        composeTestRule.onNodeWithText("Settings & Guide").assertExists()
+        composeTestRule.onNodeWithText("Export Data", substring = true).performClick()
+        composeTestRule.onNodeWithText("Settings & Guide").assertExists()
+    }
+
+    @Test
+    fun doneForTodayClosesSettings() {
+        ensureHudVisible()
+        composeTestRule.onNodeWithContentDescription("Settings").performClick()
+        composeTestRule.onNodeWithText("Settings & Guide").assertExists()
+        composeTestRule.onNodeWithText("Done For Today", substring = true).performClick()
+        composeTestRule.onNodeWithText("Settings & Guide").assertDoesNotExist()
+    }
+
+    @Test
+    fun themeChangePersistsAfterRecreate() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = WallpaperPreferencesManager(context)
+
+        ensureHudVisible()
+        composeTestRule.onNodeWithContentDescription("Settings").performClick()
+        composeTestRule.onNodeWithText("Settings & Guide").assertExists()
+        composeTestRule.onNodeWithText("Fantasy", substring = true).performClick()
+        composeTestRule.onNodeWithContentDescription("Close").performClick()
+
+        recreateActivity()
+        composeTestRule.waitUntil(3_000) { prefs.getTheme() == "fantasy" }
+    }
+
+    @Test
+    fun dragStarToArchiveAndCompleteZones() {
+        val metrics = canvasMetrics()
+        val startX = metrics.width * 0.5f
+        val startY = metrics.height * 0.55f
+
+        val archiveId = UUID.randomUUID().toString()
+        val completeId = UUID.randomUUID().toString()
+        seedStars(
+            listOf(
+                buildStarEntity("Archive ${UUID.randomUUID()}", localId = archiveId, x = startX, y = startY),
+                buildStarEntity("Complete ${UUID.randomUUID()}", localId = completeId, x = startX, y = startY + 140f)
+            )
+        )
+        recreateActivity()
+        composeTestRule.waitForIdle()
+
+        val (archiveZoneX, completeZoneX) = composeTestRule.activity.getZoneTargets()
+        val archiveTarget = Offset(archiveZoneX - 20f, metrics.topInset + metrics.height * 0.5f)
+        val completeTarget = Offset(completeZoneX + 20f, metrics.topInset + metrics.height * 0.55f)
+
+        val archiveStart = waitForStarPosition(archiveId)
+        swipeOnDevice(archiveStart, archiveTarget)
+        composeTestRule.waitUntil(8_000) {
+            runBlocking {
+                database().starDao().getByLocalId(archiveId)?.isArchived == true
+            }
+        }
+
+        val completeStart = waitForStarPosition(completeId)
+        swipeOnDevice(completeStart, completeTarget)
+        composeTestRule.waitUntil(8_000) {
+            runBlocking {
+                database().starDao().getByLocalId(completeId)?.isCompleted == true
+            }
+        }
+    }
+
     private fun openPrivacySettings() {
+        ensureHudVisible()
         composeTestRule.onNodeWithContentDescription("Settings").performClick()
         composeTestRule.onNodeWithText("Settings & Guide").assertExists()
         composeTestRule.onNodeWithText("Privacy Settings", substring = true).performClick()
@@ -223,6 +446,7 @@ class UiFlowsE2ETest {
     }
 
     private fun openEnvironmentSettings() {
+        ensureHudVisible()
         composeTestRule.onNodeWithContentDescription("Settings").performClick()
         composeTestRule.onNodeWithText("Settings & Guide").assertExists()
         composeTestRule.onNodeWithText("Environment Settings", substring = true).performClick()
@@ -232,6 +456,36 @@ class UiFlowsE2ETest {
     private fun toggleBySiblingText(label: String) {
         composeTestRule.onNode(isToggleable().and(hasAnySibling(hasText(label, substring = true))))
             .performClick()
+    }
+
+    private fun waitForText(text: String, timeoutMs: Long = 5_000) {
+        composeTestRule.waitUntil(timeoutMs) {
+            composeTestRule.onAllNodesWithText(text, substring = true)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+    }
+
+    private fun ensureHudVisible() {
+        composeTestRule.onRoot().performTouchInput {
+            click(Offset(100f, 100f))
+        }
+        composeTestRule.waitUntil(3_000) {
+            composeTestRule.onAllNodesWithContentDescription("Settings")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+    }
+
+    private fun ensureEnvironmentEnabled() {
+        val disabledCopyPresent = composeTestRule
+            .onAllNodesWithText("Environment effects are disabled", substring = true)
+            .fetchSemanticsNodes()
+            .isNotEmpty()
+        if (disabledCopyPresent) {
+            toggleBySiblingText("Enable Environment")
+            waitForText("Dynamic environment effects are enabled")
+        }
     }
 
     private fun privacyToggleNode(label: String) =
@@ -280,6 +534,8 @@ class UiFlowsE2ETest {
         val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
         val dir = File("/data/local/tmp/AndroidTestScreenshots/manual")
 
+        dismissSystemUiAnrIfPresent()
+
         if (!dir.exists()) {
             uiAutomation.executeShellCommand("mkdir -p ${dir.absolutePath}").close()
         }
@@ -304,6 +560,23 @@ class UiFlowsE2ETest {
         uiAutomation.executeShellCommand("cp ${externalFile.absolutePath} ${dir.absolutePath}/${fileName}").close()
     }
 
+    private fun dismissSystemUiAnrIfPresent() {
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val dialog = device.findObject(UiSelector().textContains("System UI isn't responding"))
+        if (dialog.exists()) {
+            val waitButton = device.findObject(UiSelector().textContains("Wait"))
+            if (waitButton.exists()) {
+                waitButton.click()
+            } else {
+                val closeButton = device.findObject(UiSelector().textContains("Close app"))
+                if (closeButton.exists()) {
+                    closeButton.click()
+                }
+            }
+            device.waitForIdle()
+        }
+    }
+
     private fun seedStars(stars: List<StarEntity>) {
         if (stars.isEmpty()) return
         runBlocking {
@@ -323,16 +596,22 @@ class UiFlowsE2ETest {
         return CosmicDatabase.getDatabase(context)
     }
 
-    private fun buildStarEntity(title: String): StarEntity {
+    private fun buildStarEntity(
+        title: String,
+        localId: String = UUID.randomUUID().toString(),
+        x: Float = 120f,
+        y: Float = 240f,
+        dueOffsetMs: Long = 3_600_000
+    ): StarEntity {
         val now = System.currentTimeMillis()
         return StarEntity(
-            localId = UUID.randomUUID().toString(),
+            localId = localId,
             serverId = null,
             title = title,
             urgency = 2,
-            dueDate = now + 3_600_000,
-            x = 100f,
-            y = 200f,
+            dueDate = now + dueOffsetMs,
+            x = x,
+            y = y,
             createdAt = now,
             isSubtask = false,
             isRecurring = false,
@@ -342,5 +621,75 @@ class UiFlowsE2ETest {
             isArchived = false,
             archivedAt = null
         )
+    }
+
+    private data class CanvasMetrics(
+        val width: Float,
+        val height: Float,
+        val topInset: Float,
+        val bottomInset: Float
+    )
+
+    private fun canvasMetrics(): CanvasMetrics {
+        val metrics = composeTestRule.activity.resources.displayMetrics
+        val insets = composeTestRule.activity.window.decorView.rootWindowInsets
+        val bars = insets?.getInsets(android.view.WindowInsets.Type.systemBars())
+        val top = bars?.top ?: 0
+        val bottom = bars?.bottom ?: 0
+        val height = (metrics.heightPixels - top - bottom).toFloat()
+        return CanvasMetrics(
+            width = metrics.widthPixels.toFloat(),
+            height = height,
+            topInset = top.toFloat(),
+            bottomInset = bottom.toFloat()
+        )
+    }
+
+    private fun openEditOverlayForStarId(starId: String) {
+        composeTestRule.waitUntil(5_000) {
+            composeTestRule.activity.hasStarInViewModel(starId)
+        }
+        composeTestRule.activity.openEditForStarId(starId)
+        composeTestRule.waitUntil(3_000) {
+            composeTestRule.onAllNodesWithText("Edit Task")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+    }
+
+    private fun getStarIdByTitle(title: String): String {
+        return runBlocking {
+            database().starDao().getAllActiveStarsSync().first { it.title == title }.localId
+        }
+    }
+
+    private fun waitForStarPosition(starId: String): Offset {
+        var pos: Pair<Float, Float>? = null
+        composeTestRule.waitUntil(3_000) {
+            pos = composeTestRule.activity.getStarPosition(starId)
+            pos != null
+        }
+        val metrics = canvasMetrics()
+        val (x, y) = pos ?: Pair(metrics.width * 0.5f, metrics.height * 0.5f)
+        return Offset(x, y + metrics.topInset)
+    }
+
+    private fun dragOnCanvas(from: Offset, to: Offset) {
+        composeTestRule.onRoot().performTouchInput {
+            down(from)
+            val steps = 6
+            for (i in 1..steps) {
+                val t = i / steps.toFloat()
+                val x = from.x + (to.x - from.x) * t
+                val y = from.y + (to.y - from.y) * t
+                moveTo(Offset(x, y))
+            }
+            up()
+        }
+    }
+
+    private fun swipeOnDevice(from: Offset, to: Offset) {
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        device.swipe(from.x.toInt(), from.y.toInt(), to.x.toInt(), to.y.toInt(), 30)
     }
 }

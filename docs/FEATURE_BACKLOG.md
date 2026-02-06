@@ -142,6 +142,54 @@
   - Persisted per wallpaper
 - **Status**: In progress (2026-02-05 added luminance-aware gradient + vignette overlay; toggle + preview still pending)
 
+### 11b) Homepage HUD Clarity & Auto-Hide
+- **Problem**: HUD icons clutter the canvas and hide stars/labels.
+- **Outcome**: Auto-hidden HUD with persistent zone guidance and safe star placement.
+- **Est.**: 2–3 days
+- **Status**: Done (2026-02-05)
+- **Acceptance Criteria**:
+  - HUD auto-hides after idle and reappears on tap
+  - Stars never spawn or settle under HUD controls
+  - Completion/archive zones labeled on canvas
+  - Focus overlay is never obscured by HUD
+
+### 11c) Custom Wallpaper Scaling Safety
+- **Problem**: Recycled bitmap crash during custom wallpaper generation could trigger System UI ANR.
+- **Outcome**: Defensive copy and safe scaling to avoid recycled sources.
+- **Est.**: 1 day
+- **Status**: Done (2026-02-06)
+- **Acceptance Criteria**:
+  - Custom wallpaper generation never uses recycled source bitmaps
+  - Wallpaper generation falls back gracefully on invalid sources
+
+### 11d) Settings Navigation + Defaults
+- **Problem**: Users could not easily exit detail screens; environment effects enabled by default.
+- **Outcome**: Close buttons on detail screens and environment defaults OFF.
+- **Est.**: 1 day
+- **Status**: Done (2026-02-06)
+- **Acceptance Criteria**:
+  - Privacy/Environment settings show Close button
+  - Environment effects default disabled until user enables
+  - Wallpaper sync consent not hidden behind tutorial
+
+### 11e) Remove Legacy LLM Settings Screen
+- **Problem**: Unused AI/LLM settings screen exists without a user entrypoint.
+- **Outcome**: Remove the dormant screen to reduce maintenance surface.
+- **Est.**: 0.5 day
+- **Status**: Done (2026-02-06)
+- **Acceptance Criteria**:
+  - LLM settings screen removed from codebase
+  - UI tests still pass
+
+### 11f) Lockscreen Wallpaper CRUD Verification
+- **Problem**: Need evidence that lockscreen wallpapers update after task CRUD.
+- **Outcome**: Instrumentation test captures lockscreen wallpaper and verifies changes.
+- **Est.**: 1 day
+- **Status**: Done (2026-02-06)
+- **Acceptance Criteria**:
+  - Lock screen wallpaper changes after add/edit/complete
+  - Screenshots saved for review
+
 ## P2 — Core Flow Enhancements
 
 ### 12) Focus Sessions
@@ -200,6 +248,15 @@
   - Subtle visual or sound cues
 
 ## P4 — Quality & Delight
+
+### 22) Wallpaper QA Scenario Coverage
+- **Outcome**: Multi-size + long/RTL task rendering evidence for wallpaper layouts
+- **Est.**: 1–2 days
+- **Status**: Done (2026-02-06)
+- **Acceptance Criteria**:
+  - Screenshots captured for 720×1280, 1080×2400, 1440×3120
+  - Empty, 3-task, 5-task scenarios captured
+  - Long and RTL titles verified for layout stability
 
 ### 20) Adaptive Motion Budget
 - **Outcome**: Scale effects by battery/perf
@@ -324,3 +381,8 @@
 - UI tests for tutorial and toggles
 - Regression tests for wallpaper rendering
 - Geofence simulation tests with fake location
+
+## QA Notes
+- 2026-02-06: Full e2e instrumentation run completed with screenshots (see `docs/STATUS_TRACKING.md`).
+- 2026-02-06: Deep e2e expansion run completed twice with screenshots; no skips after stabilizing edit/focus flows (see `docs/STATUS_TRACKING.md`).
+- 2026-02-06: Verified no-skip e2e runs with screenshot review (see `docs/STATUS_TRACKING.md`).

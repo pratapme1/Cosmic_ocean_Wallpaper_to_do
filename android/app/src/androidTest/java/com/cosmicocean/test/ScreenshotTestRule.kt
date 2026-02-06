@@ -3,6 +3,8 @@ package com.cosmicocean.test
 import android.graphics.Bitmap
 import android.util.Log
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.UiSelector
 import org.junit.rules.TestWatcher
 import org.junit.runner.Description
 import java.io.File
@@ -21,6 +23,8 @@ class ScreenshotTestRule(
         val dir = File(baseDirPath, sanitize(description.className))
         val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
         val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
+
+        dismissSystemUiAnrIfPresent()
 
         if (!dir.exists()) {
             uiAutomation.executeShellCommand("mkdir -p ${dir.absolutePath}").close()
@@ -58,6 +62,23 @@ class ScreenshotTestRule(
         }
 
         Log.d("ScreenshotTestRule", "Captured screenshot: ${file.absolutePath}")
+    }
+
+    private fun dismissSystemUiAnrIfPresent() {
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val dialog = device.findObject(UiSelector().textContains("System UI isn't responding"))
+        if (dialog.exists()) {
+            val waitButton = device.findObject(UiSelector().textContains("Wait"))
+            if (waitButton.exists()) {
+                waitButton.click()
+            } else {
+                val closeButton = device.findObject(UiSelector().textContains("Close app"))
+                if (closeButton.exists()) {
+                    closeButton.click()
+                }
+            }
+            device.waitForIdle()
+        }
     }
 
     private fun buildFileName(description: Description): String {

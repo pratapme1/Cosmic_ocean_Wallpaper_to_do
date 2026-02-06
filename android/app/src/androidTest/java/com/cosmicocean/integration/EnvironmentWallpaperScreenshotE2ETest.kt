@@ -170,6 +170,51 @@ class EnvironmentWallpaperScreenshotE2ETest {
         assertTrue("Custom wallpaper screenshot should be non-empty", output.length() > 0L)
     }
 
+    @Test
+    fun generateParticleIntensityScreenshots() {
+        val intensities = listOf(
+            ParticleIntensity.LOW,
+            ParticleIntensity.MEDIUM,
+            ParticleIntensity.HIGH
+        )
+
+        val tasks = buildStormTasks()
+        val activeCount = tasks.count { !it.isCompleted }
+
+        intensities.forEach { intensity ->
+            val prefs = EnvironmentPreferences(
+                environmentEnabled = true,
+                timeOfDayMode = TimeOfDayMode.MANUAL,
+                manualTimePeriod = "evening",
+                weatherOverlayEnabled = false,
+                particleIntensity = intensity,
+                wallpaperMode = "generated",
+                isWallpaperEnabled = true
+            )
+
+            val bitmap = LocalWallpaperGenerator.generate(
+                tasks = tasks.filter { !it.isCompleted }.take(3),
+                totalTaskCount = activeCount,
+                theme = WallpaperTheme.COSMIC,
+                width = 1080,
+                height = 2400,
+                achievementCount = 0,
+                streakDays = 0,
+                environmentPreferences = prefs,
+                weatherTasks = tasks
+            )
+
+            val output = writeScreenshot(
+                bitmap,
+                "environment_particles_${intensity.name.lowercase()}.png"
+            )
+            bitmap.recycle()
+
+            assertTrue("Particle intensity screenshot should exist", output.exists())
+            assertTrue("Particle intensity screenshot should be non-empty", output.length() > 0L)
+        }
+    }
+
     private fun buildStormTasks(): List<StarEntity> {
         val now = System.currentTimeMillis()
         return listOf(

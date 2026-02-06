@@ -14,11 +14,16 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -48,6 +53,10 @@ import com.cosmicocean.ui.state.EnvironmentPreferences
 import com.cosmicocean.service.RealTimeWallpaperService
 import com.cosmicocean.sync.SyncManager
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import androidx.annotation.VisibleForTesting
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -59,6 +68,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var tokenManager: TokenManager
     private lateinit var wallpaperPreferences: WallpaperPreferencesManager
     private lateinit var database: CosmicDatabase
+    private lateinit var zoneManager: ZoneManager
+    private val editingStarState = mutableStateOf<Star?>(null)
 
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -93,7 +104,7 @@ class MainActivity : ComponentActivity() {
         val constellationSystem = ConstellationSystem(engine)
         val orbitalSystem = OrbitalSystem(engine)
         val commandHistory = CommandHistory()
-        val zoneManager = ZoneManager(1080f, 1920f)
+        zoneManager = ZoneManager(1080f, 1920f)
         val audioEngine = com.cosmicocean.audio.AudioEngine(this)
 
         val factory = MainViewModelFactory(repository, engine, constellationSystem, orbitalSystem, commandHistory, syncManager)
@@ -148,7 +159,7 @@ class MainActivity : ComponentActivity() {
                 var showPrivacySettings by remember { mutableStateOf(false) }
                 var showEnvironmentSettings by remember { mutableStateOf(false) }
                 var showSnoozeOverdueConfirm by remember { mutableStateOf(false) }
-                var editingStar by remember { mutableStateOf<Star?>(null) }
+                var editingStar by editingStarState
                 var lastTapOffset by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
                 var isInteracting by remember { mutableStateOf(false) }
                 var currentTheme by remember { mutableStateOf(wallpaperPreferences.getTheme()) }
@@ -164,6 +175,49 @@ class MainActivity : ComponentActivity() {
                 var showTutorial by rememberSaveable { mutableStateOf(false) }
                 val envRepo = remember { EnvironmentPreferencesRepository(applicationContext) }
                 val envPrefs by envRepo.preferencesFlow.collectAsState(initial = EnvironmentPreferences())
+                var hudVisible by remember { mutableStateOf(true) }
+                var lastInteractionAt by remember { mutableLongStateOf(System.currentTimeMillis()) }
+                val hudAutoHideMs = 2500L
+                val hudZones = remember { mutableStateMapOf<String, ZoneManager.ZoneRect>() }
+                val updateHudZone: (String, androidx.compose.ui.layout.LayoutCoordinates) -> Unit = { key, coords ->
+                    val bounds = coords.boundsInRoot()
+                    hudZones[key] = ZoneManager.ZoneRect(bounds.left, bounds.top, bounds.right, bounds.bottom)
+                }
+
+                val overlayBlockingHud = showQuickAdd ||
+                    showSearch ||
+                    showSettings ||
+                    showPrivacySettings ||
+                    showEnvironmentSettings ||
+                    showTrophyGallery ||
+                    showSnoozeOverdueConfirm ||
+                    editingStar != null
+
+                val shouldShowHud = hudVisible && !overlayBlockingHud && activeFocus == null
+                val reservedZones = if (shouldShowHud) hudZones.values.toList() else emptyList()
+
+                LaunchedEffect(reservedZones) {
+                    zoneManager.updateReservedZones(reservedZones)
+                }
+
+                val registerInteraction = {
+                    lastInteractionAt = System.currentTimeMillis()
+                    hudVisible = true
+                }
+
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        if (overlayBlockingHud || activeFocus != null) {
+                            hudVisible = false
+                        } else {
+                            val idleMs = System.currentTimeMillis() - lastInteractionAt
+                            if (idleMs >= hudAutoHideMs) {
+                                hudVisible = false
+                            }
+                        }
+                        delay(200)
+                    }
+                }
 
                 LaunchedEffect(envPrefs.tutorialSeen) {
                     showTutorial = !envPrefs.tutorialSeen
@@ -304,10 +358,14 @@ class MainActivity : ComponentActivity() {
                             stars = stars,
                             onStarTap = { star -> editingStar = star },
                             onEmptyDoubleTap = { offset ->
+                                registerInteraction()
                                 lastTapOffset = offset
                                 showQuickAdd = true
                             },
-                            onInteraction = { isInteracting = true },
+                            onInteraction = {
+                                isInteracting = true
+                                registerInteraction()
+                            },
                             onStarFinalized = { star, action -> handleStarAction(star, action) },
                             onStarSnooze = { star, duration -> snoozeStar(star, duration) },
                             onStarDragEnd = { star -> saveStarPosition(star) },  // EPIC 9: Save position after drag
@@ -344,33 +402,53 @@ class MainActivity : ComponentActivity() {
                         }
 
                         if (!dismissNextTask && nextTask != null) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomStart)
-                                    .padding(24.dp)
-                                    .padding(bottom = 140.dp)
-                            ) {
-                                NextTaskChip(
-                                    star = nextTask,
-                                    onClick = { editingStar = nextTask },
-                                    onDismiss = { dismissNextTask = true }
-                                )
+                            Box(modifier = Modifier.align(Alignment.BottomStart)) {
+                                AnimatedVisibility(visible = shouldShowHud, enter = fadeIn(), exit = fadeOut()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(24.dp)
+                                            .padding(bottom = 140.dp)
+                                            .onGloballyPositioned { coords -> updateHudZone("nextTaskChip", coords) }
+                                    ) {
+                                        NextTaskChip(
+                                            star = nextTask,
+                                            onClick = {
+                                                registerInteraction()
+                                                editingStar = nextTask
+                                            },
+                                            onDismiss = {
+                                                registerInteraction()
+                                                dismissNextTask = true
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
 
                         if (!dismissShortSuggestion && shortSuggestion != null && !isInteracting) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomStart)
-                                    .padding(24.dp)
-                                    .padding(bottom = 200.dp)
-                            ) {
-                                ShortTaskSuggestionChip(
-                                    title = shortSuggestion.title,
-                                    estimateMinutes = shortSuggestion.estimateMinutes,
-                                    onClick = { editingStar = shortSuggestion.star },
-                                    onDismiss = { dismissShortSuggestion = true }
-                                )
+                            Box(modifier = Modifier.align(Alignment.BottomStart)) {
+                                AnimatedVisibility(visible = shouldShowHud, enter = fadeIn(), exit = fadeOut()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(24.dp)
+                                            .padding(bottom = 200.dp)
+                                            .onGloballyPositioned { coords -> updateHudZone("shortSuggestionChip", coords) }
+                                    ) {
+                                        ShortTaskSuggestionChip(
+                                            title = shortSuggestion.title,
+                                            estimateMinutes = shortSuggestion.estimateMinutes,
+                                            onClick = {
+                                                registerInteraction()
+                                                editingStar = shortSuggestion.star
+                                            },
+                                            onDismiss = {
+                                                registerInteraction()
+                                                dismissShortSuggestion = true
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
 
@@ -409,112 +487,146 @@ class MainActivity : ComponentActivity() {
 
                         // Achievement Wall
                         Box(modifier = Modifier.align(Alignment.BottomCenter)) {
-                            AchievementWall(
-                                completedStars = completedStars,
-                                onClick = { showTrophyGallery = true }
-                            )
+                            AnimatedVisibility(visible = shouldShowHud, enter = fadeIn(), exit = fadeOut()) {
+                                Box(
+                                    modifier = Modifier
+                                        .onGloballyPositioned { coords -> updateHudZone("achievementWall", coords) }
+                                ) {
+                                    AchievementWall(
+                                        completedStars = completedStars,
+                                        onClick = {
+                                            registerInteraction()
+                                            showTrophyGallery = true
+                                        }
+                                    )
+                                }
+                            }
                         }
 
                         // HUD Controls
-                        Row(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(16.dp)
-                        ) {
-                            // Refresh Wallpaper Button
-                            IconButton(
-                                onClick = {
-                                    android.widget.Toast.makeText(this@MainActivity, "Refreshing wallpaper...", android.widget.Toast.LENGTH_SHORT).show()
-                                    triggerImmediateUpdate()
-                                },
-                                modifier = Modifier.background(Color.Black.copy(0.4f), shape = MaterialTheme.shapes.small)
-                            ) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Refresh Wallpaper", tint = Color.White)
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            IconButton(
-                                onClick = { showSearch = true },
-                                modifier = Modifier.background(Color.Black.copy(0.4f), shape = MaterialTheme.shapes.small)
-                            ) {
-                                Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.White)
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            IconButton(
-                                onClick = { showSettings = true },
-                                modifier = Modifier.background(Color.Black.copy(0.4f), shape = MaterialTheme.shapes.small)
-                            ) {
-                                Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White)
-                            }
-                        }
-
-                        // NEW: Glassmorphic Wallpaper Upload Button (Bottom Start)
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .padding(24.dp)
-                                .padding(bottom = 80.dp) // Align with FAB height
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(24.dp))
-                                    .background(
-                                        brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                                            colors = listOf(
-                                                Color(0xFF2A2A3E).copy(alpha = 0.8f),
-                                                Color(0xFF1A1A2E).copy(alpha = 0.9f)
-                                            )
-                                        )
-                                    )
-                                    .border(
-                                        width = 1.dp,
-                                        color = if (isUploadingWallpaper) Color(0xFFE040FB) else Color.White.copy(alpha = 0.3f),
-                                        shape = RoundedCornerShape(24.dp)
-                                    )
-                                    .clickable(enabled = !isUploadingWallpaper) {
-                                        wallpaperPickerLauncher.launch("image/*")
-                                    }
-                                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                            ) {
+                        Box(modifier = Modifier.align(Alignment.TopEnd)) {
+                            AnimatedVisibility(visible = shouldShowHud, enter = fadeIn(), exit = fadeOut()) {
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    modifier = Modifier
+                                        .padding(16.dp)
+                                        .onGloballyPositioned { coords -> updateHudZone("hudControls", coords) }
                                 ) {
-                                    if (isUploadingWallpaper) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(20.dp),
-                                            color = Color(0xFFE040FB),
-                                            strokeWidth = 2.dp
-                                        )
-                                        Text(
-                                            "Uploading...",
-                                            color = Color.White.copy(alpha = 0.9f),
-                                            style = MaterialTheme.typography.labelLarge
-                                        )
-                                    } else {
-                                        Icon(
-                                            painter = painterResource(id = R.drawable.ic_upload),
-                                            contentDescription = "Custom Wallpaper",
-                                            tint = Color(0xFFE040FB), // Cosmic Purple Accent
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Text(
-                                            "Customize",
-                                            color = Color.White.copy(alpha = 0.9f),
-                                            style = MaterialTheme.typography.labelLarge
-                                        )
+                                    // Refresh Wallpaper Button
+                                    IconButton(
+                                        onClick = {
+                                            registerInteraction()
+                                            android.widget.Toast.makeText(this@MainActivity, "Refreshing wallpaper...", android.widget.Toast.LENGTH_SHORT).show()
+                                            triggerImmediateUpdate()
+                                        },
+                                        modifier = Modifier.background(Color.Black.copy(0.4f), shape = MaterialTheme.shapes.small)
+                                    ) {
+                                        Icon(Icons.Default.Refresh, contentDescription = "Refresh Wallpaper", tint = Color.White)
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    IconButton(
+                                        onClick = {
+                                            registerInteraction()
+                                            showSearch = true
+                                        },
+                                        modifier = Modifier.background(Color.Black.copy(0.4f), shape = MaterialTheme.shapes.small)
+                                    ) {
+                                        Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.White)
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    IconButton(
+                                        onClick = {
+                                            registerInteraction()
+                                            showSettings = true
+                                        },
+                                        modifier = Modifier.background(Color.Black.copy(0.4f), shape = MaterialTheme.shapes.small)
+                                    ) {
+                                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White)
                                     }
                                 }
                             }
                         }
 
-                        FloatingActionButton(
-                            onClick = { showQuickAdd = true },
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(24.dp).padding(bottom = 80.dp),
-                            containerColor = Color(0xFF00E5FF)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = "Add Task")
+                        // NEW: Glassmorphic Wallpaper Upload Button (Bottom Start)
+                        Box(modifier = Modifier.align(Alignment.BottomStart)) {
+                            AnimatedVisibility(visible = shouldShowHud, enter = fadeIn(), exit = fadeOut()) {
+                                Box(
+                                    modifier = Modifier
+                                        .padding(24.dp)
+                                        .padding(bottom = 80.dp) // Align with FAB height
+                                        .onGloballyPositioned { coords -> updateHudZone("customizeButton", coords) }
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(24.dp))
+                                            .background(
+                                                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                                    colors = listOf(
+                                                        Color(0xFF2A2A3E).copy(alpha = 0.8f),
+                                                        Color(0xFF1A1A2E).copy(alpha = 0.9f)
+                                                    )
+                                                )
+                                            )
+                                            .border(
+                                                width = 1.dp,
+                                                color = if (isUploadingWallpaper) Color(0xFFE040FB) else Color.White.copy(alpha = 0.3f),
+                                                shape = RoundedCornerShape(24.dp)
+                                            )
+                                            .clickable(enabled = !isUploadingWallpaper) {
+                                                registerInteraction()
+                                                wallpaperPickerLauncher.launch("image/*")
+                                            }
+                                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            if (isUploadingWallpaper) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(20.dp),
+                                                    color = Color(0xFFE040FB),
+                                                    strokeWidth = 2.dp
+                                                )
+                                                Text(
+                                                    "Uploading...",
+                                                    color = Color.White.copy(alpha = 0.9f),
+                                                    style = MaterialTheme.typography.labelLarge
+                                                )
+                                            } else {
+                                                Icon(
+                                                    painter = painterResource(id = R.drawable.ic_upload),
+                                                    contentDescription = "Custom Wallpaper",
+                                                    tint = Color(0xFFE040FB), // Cosmic Purple Accent
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Text(
+                                                    "Customize",
+                                                    color = Color.White.copy(alpha = 0.9f),
+                                                    style = MaterialTheme.typography.labelLarge
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Box(modifier = Modifier.align(Alignment.BottomEnd)) {
+                            AnimatedVisibility(visible = shouldShowHud, enter = fadeIn(), exit = fadeOut()) {
+                                FloatingActionButton(
+                                    onClick = {
+                                        registerInteraction()
+                                        showQuickAdd = true
+                                    },
+                                    modifier = Modifier
+                                        .padding(24.dp)
+                                        .padding(bottom = 80.dp)
+                                        .onGloballyPositioned { coords -> updateHudZone("fab", coords) },
+                                    containerColor = Color(0xFF00E5FF)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = "Add Task")
+                                }
+                            }
                         }
 
                         Box(
@@ -651,6 +763,7 @@ class MainActivity : ComponentActivity() {
                         }
 
                         val canShowTutorial = showTutorial &&
+                            !showWallpaperConsent &&
                             !showQuickAdd &&
                             !showSearch &&
                             !showSettings &&
@@ -791,6 +904,15 @@ class MainActivity : ComponentActivity() {
 
     private fun saveStarPosition(star: Star) {
         // EPIC 9 FIX: Save star position after dragging
+        val adjusted = zoneManager.clampToSafeArea(
+            x = star.particle.x,
+            y = star.particle.y,
+            radius = star.particle.radius
+        )
+        star.particle.x = adjusted.first
+        star.particle.y = adjusted.second
+        star.particle.oldX = adjusted.first
+        star.particle.oldY = adjusted.second
         lifecycleScope.launch {
             viewModel.updateStar(star)
         }
@@ -838,6 +960,7 @@ class MainActivity : ComponentActivity() {
         val displayMetrics = resources.displayMetrics
         val screenWidth = displayMetrics.widthPixels.toFloat()
         val screenHeight = displayMetrics.heightPixels.toFloat()
+        zoneManager.updateScreenSize(screenWidth, screenHeight)
 
         // EPIC 9: Random placement across full screen (15% padding to avoid edges)
         // Stars stay where created - no zone forces, color shows urgency instead
@@ -860,11 +983,105 @@ class MainActivity : ComponentActivity() {
 
             // TaskRepository.addStar() handles both local DB insert AND backend sync
             val star = Star(x, y, cleanedTitle, urgency, dueDateMs, contextTag = contextTag)
+            val adjusted = zoneManager.clampToSafeArea(
+                x = star.particle.x,
+                y = star.particle.y,
+                radius = star.particle.radius
+            )
+            star.particle.x = adjusted.first
+            star.particle.y = adjusted.second
+            star.particle.oldX = adjusted.first
+            star.particle.oldY = adjusted.second
             viewModel.addStar(star)
             // No need for local delay here anymore, as RealTimeWallpaperService.ACTION_FORCE_UPDATE 
             // now includes a 500ms delay internally for consistency.
             triggerImmediateUpdate()
         }
+    }
+
+    @VisibleForTesting
+    fun openEditForStarId(starId: String) {
+        if (!BuildConfig.DEBUG) return
+        val star = viewModel.stars.firstOrNull { it.id == starId }
+        if (star != null) {
+            runOnUiThread {
+                editingStarState.value = star
+            }
+            return
+        }
+
+        val entity = runBlocking(Dispatchers.IO) {
+            database.starDao().getByLocalId(starId)
+        } ?: return
+
+        val fallbackStar = entity.toStar()
+        runOnUiThread {
+            editingStarState.value = fallbackStar
+        }
+    }
+
+    @VisibleForTesting
+    fun getStarPosition(starId: String): Pair<Float, Float>? {
+        if (!BuildConfig.DEBUG) return null
+        val star = viewModel.stars.firstOrNull { it.id == starId }
+        if (star != null) {
+            return Pair(star.particle.x, star.particle.y)
+        }
+        return runBlocking(Dispatchers.IO) {
+            database.starDao().getByLocalId(starId)?.let { Pair(it.x, it.y) }
+        }
+    }
+
+    @VisibleForTesting
+    fun getZoneTargets(): Pair<Float, Float> {
+        return Pair(zoneManager.archivedZoneX, zoneManager.completedZoneX)
+    }
+
+    @VisibleForTesting
+    fun hasStarInViewModel(starId: String): Boolean {
+        if (!BuildConfig.DEBUG) return false
+        return viewModel.stars.any { it.id == starId }
+    }
+
+    @VisibleForTesting
+    fun updateStarForTest(starId: String, title: String, urgency: Int, dueInMinutes: Float) {
+        if (!BuildConfig.DEBUG) return
+        val star = viewModel.stars.firstOrNull { it.id == starId }
+            ?: runBlocking(Dispatchers.IO) { database.starDao().getByLocalId(starId)?.toStar() }
+            ?: return
+        runOnUiThread {
+            updateStar(star, title, urgency, dueInMinutes)
+        }
+    }
+
+    @VisibleForTesting
+    fun getStarSnapshot(starId: String): Pair<String, Int>? {
+        if (!BuildConfig.DEBUG) return null
+        val star = viewModel.stars.firstOrNull { it.id == starId } ?: return null
+        return Pair(star.title, star.urgency)
+    }
+
+    private fun com.cosmicocean.data.StarEntity.toStar(): Star {
+        val star = Star(
+            x = x,
+            y = y,
+            title = title,
+            urgency = urgency,
+            dueDate = dueDate,
+            contextTag = contextTag,
+            isSubtask = isSubtask,
+            isRecurring = isRecurring,
+            echoInterval = echoInterval?.let { com.cosmicocean.model.EchoInterval.valueOf(it) },
+            createdAt = createdAt,
+            id = localId
+        )
+        star.isCompleted = isCompleted
+        star.completedAt = completedAt
+        star.isArchived = isArchived
+        star.archivedAt = archivedAt
+        star.isSnoozed = isSnoozed
+        star.snoozeUntil = snoozeUntil
+        return star
     }
 
     private fun reportAppOpen() {

@@ -78,13 +78,13 @@ class EnvironmentSettingsViewModel(
                                     "manual" -> TimeOfDayMode.MANUAL
                                     else -> TimeOfDayMode.AUTO
                                 },
-                                environmentEnabled = apiPrefs.environmentEnabled ?: true,
+                                environmentEnabled = apiPrefs.environmentEnabled ?: false,
                                 manualTimePeriod = apiPrefs.manualTimePeriod ?: "morning",
-                                weatherOverlayEnabled = apiPrefs.weatherOverlayEnabled ?: true,
+                                weatherOverlayEnabled = apiPrefs.weatherOverlayEnabled ?: false,
                                 particleIntensity = when (apiPrefs.particleIntensity?.lowercase()) {
                                     "low" -> ParticleIntensity.LOW
                                     "high" -> ParticleIntensity.HIGH
-                                    else -> ParticleIntensity.MEDIUM
+                                    else -> ParticleIntensity.LOW
                                 },
                                 wallpaperMode = apiPrefs.wallpaperMode ?: "generated",
                                 isWallpaperEnabled = wallpaperPreferences.isWallpaperEnabled(),
@@ -103,8 +103,8 @@ class EnvironmentSettingsViewModel(
                                 quietHoursEnd = apiPrefs.quietHoursEnd ?: 7,
                                 respectDnd = apiPrefs.respectDnd ?: true,
                                 hapticsRateLimitMinutes = apiPrefs.hapticsRateLimitMinutes ?: 30,
-                                overdueHeatmapEnabled = apiPrefs.overdueHeatmapEnabled ?: true,
-                                ambientRemindersEnabled = apiPrefs.ambientRemindersEnabled ?: true,
+                                overdueHeatmapEnabled = apiPrefs.overdueHeatmapEnabled ?: false,
+                                ambientRemindersEnabled = apiPrefs.ambientRemindersEnabled ?: false,
                                 tutorialSeen = apiPrefs.tutorialSeen ?: false
                             ),
                             isLoading = false

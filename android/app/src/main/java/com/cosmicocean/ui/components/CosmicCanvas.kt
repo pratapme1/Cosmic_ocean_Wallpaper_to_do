@@ -22,6 +22,7 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.sp
 import com.cosmicocean.effects.Atmosphere
@@ -446,6 +447,39 @@ fun CosmicCanvas(
                     center = Offset(archiveX, archiveY)
                 )
             }
+
+            // Zone labels (always visible for guidance)
+            val labelAlpha = if (activeZoneType != null) 0.95f else 0.45f
+            val labelFontSize = (12f * screenScale).coerceIn(11f, 17f)
+            val labelStyle = TextStyle(
+                color = Color.White.copy(alpha = labelAlpha),
+                fontSize = labelFontSize.sp,
+                letterSpacing = (0.7f * screenScale).coerceIn(0.2f, 1.0f).sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            val labelYBase = (size.height / 2f) - (glowRadius * 0.45f)
+
+            val archiveLabel = "ARCHIVE"
+            val archiveLabelX = (archiveX + glowRadius * 0.35f).coerceAtLeast(12f)
+            val archiveLabelY = labelYBase.coerceIn(24f, size.height - 24f)
+            drawText(
+                textMeasurer = textMeasurer,
+                text = archiveLabel,
+                style = labelStyle,
+                topLeft = Offset(archiveLabelX, archiveLabelY)
+            )
+
+            val completeLabel = "COMPLETE"
+            val completeLayout = textMeasurer.measure(text = completeLabel, style = labelStyle)
+            val completeLabelX = (completionX - glowRadius * 0.35f - completeLayout.size.width)
+                .coerceAtLeast(12f)
+            val completeLabelY = labelYBase.coerceIn(24f, size.height - 24f - completeLayout.size.height)
+            drawText(
+                textMeasurer = textMeasurer,
+                text = completeLabel,
+                style = labelStyle,
+                topLeft = Offset(completeLabelX, completeLabelY)
+            )
 
             stars.forEach { star ->
                 val id = star.title + star.createdAt

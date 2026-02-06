@@ -13,6 +13,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.setMain
 import org.junit.*
 import org.junit.runner.RunWith
@@ -235,7 +236,7 @@ class CompleteLocalE2ETest {
     // TEST 5: Wallpaper Generation - Shows Correct Task
     // ============================================
     @Test
-    fun testWallpaperGeneratorShowsTopTask() = runTest {
+    fun testWallpaperGeneratorShowsTopTask() = runBlocking {
         // Create multiple tasks with different urgencies
         val taskHigh = StarEntity(
             localId = UUID.randomUUID().toString(),

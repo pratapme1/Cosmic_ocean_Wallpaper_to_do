@@ -11,6 +11,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
@@ -22,6 +23,7 @@ import android.util.DisplayMetrics
 import android.util.Log
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
+import androidx.exifinterface.media.ExifInterface
 import androidx.room.InvalidationTracker
 import com.cosmicocean.MainActivity
 import com.cosmicocean.R
@@ -437,14 +439,19 @@ class RealTimeWallpaperService : Service() {
                 val options = android.graphics.BitmapFactory.Options().apply {
                     inPreferredConfig = Bitmap.Config.ARGB_8888
                 }
-                val bitmap = android.graphics.BitmapFactory.decodeFile(path, options)
+                val decoded = android.graphics.BitmapFactory.decodeFile(path, options)
 
-                if (bitmap != null) {
-                    Log.d(TAG, "DEBUG loadCustomWallpaper: Loaded bitmap ${bitmap.width}x${bitmap.height}, config=${bitmap.config}")
+                if (decoded != null) {
+                    val oriented = applyExifOrientation(decoded, path)
+                    if (oriented != decoded && !decoded.isRecycled) {
+                        decoded.recycle()
+                    }
+                    Log.d(TAG, "DEBUG loadCustomWallpaper: Loaded bitmap ${oriented.width}x${oriented.height}, config=${oriented.config}")
+                    return@withContext oriented
                 } else {
                     Log.e(TAG, "DEBUG loadCustomWallpaper: decodeFile returned NULL for valid file!")
                 }
-                return@withContext bitmap
+                return@withContext decoded
             }
 
             Log.w(TAG, "Custom wallpaper file not found or empty: $path (exists=${file.exists()}, size=${file.length()})")
@@ -452,6 +459,39 @@ class RealTimeWallpaperService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load custom wallpaper: ${e.message}", e)
             null
+        }
+    }
+
+    private fun applyExifOrientation(bitmap: Bitmap, path: String): Bitmap {
+        return try {
+            val exif = ExifInterface(path)
+            val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+            val matrix = Matrix()
+            when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+                ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+                ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+                ExifInterface.ORIENTATION_TRANSPOSE -> {
+                    matrix.postRotate(90f)
+                    matrix.postScale(-1f, 1f)
+                }
+                ExifInterface.ORIENTATION_TRANSVERSE -> {
+                    matrix.postRotate(270f)
+                    matrix.postScale(-1f, 1f)
+                }
+                else -> Unit
+            }
+
+            if (matrix.isIdentity) {
+                bitmap
+            } else {
+                Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "EXIF orientation read failed: ${e.message}")
+            bitmap
         }
     }
 
