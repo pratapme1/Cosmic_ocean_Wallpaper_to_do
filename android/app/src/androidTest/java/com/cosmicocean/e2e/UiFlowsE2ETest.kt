@@ -78,7 +78,12 @@ class UiFlowsE2ETest {
 
     @Test
     fun quickAddRecurringAndSubtaskPersist() {
+        val parentId = UUID.randomUUID().toString()
+        val parentTitle = "Parent ${UUID.randomUUID()}"
         val title = "Recurring Quick Add ${UUID.randomUUID()}"
+
+        seedStars(listOf(buildStarEntity(parentTitle, localId = parentId)))
+        recreateActivity()
 
         ensureHudVisible()
         composeTestRule.onNodeWithContentDescription("Add Task").performClick()
@@ -91,6 +96,9 @@ class UiFlowsE2ETest {
         composeTestRule.onNodeWithText("Weekly", substring = true).performClick()
         composeTestRule.onNodeWithTag("quick_add_subtask_toggle", useUnmergedTree = true)
             .performClick()
+        composeTestRule.onNodeWithTag("quick_add_parent_field", useUnmergedTree = true)
+            .performClick()
+        composeTestRule.onNodeWithText(parentTitle, substring = true).performClick()
 
         composeTestRule.onNodeWithTag("quick_add_title", useUnmergedTree = true)
             .performTextInput(title)
@@ -103,7 +111,42 @@ class UiFlowsE2ETest {
                     it.title == title &&
                         it.isRecurring &&
                         it.echoInterval == "WEEKLY" &&
-                        it.isSubtask
+                        it.isSubtask &&
+                        it.parentId == parentId
+                }
+            }
+        }
+    }
+
+    @Test
+    fun subtaskParentLinkPersists() {
+        val parentId = UUID.randomUUID().toString()
+        val parentTitle = "Parent ${UUID.randomUUID()}"
+        val childTitle = "Child ${UUID.randomUUID()}"
+        seedStars(listOf(buildStarEntity(parentTitle, localId = parentId)))
+        recreateActivity()
+
+        ensureHudVisible()
+        composeTestRule.onNodeWithContentDescription("Add Task").performClick()
+        composeTestRule.onNodeWithText("New Cosmic Task").assertExists()
+
+        composeTestRule.onNodeWithTag("quick_add_subtask_toggle", useUnmergedTree = true)
+            .performClick()
+        composeTestRule.onNodeWithTag("quick_add_parent_field", useUnmergedTree = true)
+            .performClick()
+        composeTestRule.onNodeWithText(parentTitle, substring = true).performClick()
+
+        composeTestRule.onNodeWithTag("quick_add_title", useUnmergedTree = true)
+            .performTextInput(childTitle)
+        composeTestRule.onNodeWithText("Release Star").performClick()
+
+        val db = database()
+        composeTestRule.waitUntil(6_000) {
+            runBlocking {
+                db.starDao().getAllActiveStarsSync().any {
+                    it.title == childTitle &&
+                        it.isSubtask &&
+                        it.parentId == parentId
                 }
             }
         }

@@ -17,13 +17,18 @@ import com.cosmicocean.model.Star
 fun EditStarOverlay(
     star: Star,
     onDismiss: () -> Unit,
-    onSave: (String, Int, Float, Boolean, com.cosmicocean.model.EchoInterval?, Boolean) -> Unit,
+    availableParents: List<Star>,
+    onSave: (String, Int, Float, Boolean, com.cosmicocean.model.EchoInterval?, Boolean, String?) -> Unit,
     onStartFocus: (Int) -> Unit
 ) {
     var title by remember { mutableStateOf(star.title) }
     var urgency by remember { mutableIntStateOf(star.urgency) }
     var isRecurring by remember { mutableStateOf(star.isRecurring) }
     var isSubtask by remember { mutableStateOf(star.isSubtask) }
+    var selectedParentId by remember { mutableStateOf(star.parentId) }
+    var showParentMenu by remember { mutableStateOf(false) }
+    var showParentError by remember { mutableStateOf(false) }
+    val parentOptions = remember(availableParents) { availableParents.sortedBy { it.dueDate ?: Long.MAX_VALUE } }
     var recurrencePattern by remember {
         mutableStateOf(star.echoInterval ?: com.cosmicocean.model.EchoInterval.DAILY)
     }
@@ -233,13 +238,78 @@ fun EditStarOverlay(
                 )
                 Switch(
                     checked = isSubtask,
-                    onCheckedChange = { isSubtask = it },
+                    onCheckedChange = {
+                        if (parentOptions.isEmpty()) return@Switch
+                        isSubtask = it
+                        if (!isSubtask) {
+                            selectedParentId = null
+                            showParentError = false
+                        }
+                    },
                     modifier = Modifier.testTag("edit_subtask_toggle"),
+                    enabled = parentOptions.isNotEmpty(),
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color(0xFF3AA0FF),
                         checkedTrackColor = Color(0xFF3AA0FF).copy(alpha = 0.5f)
                     )
                 )
+            }
+
+            if (parentOptions.isEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "No parent tasks available",
+                    color = Color.Gray.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            } else if (isSubtask) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Parent Task", color = Color.Gray)
+                ExposedDropdownMenuBox(
+                    expanded = showParentMenu,
+                    onExpandedChange = { showParentMenu = it }
+                ) {
+                    val selectedLabel = parentOptions.firstOrNull { it.id == selectedParentId }?.title ?: "Select parent"
+                    OutlinedTextField(
+                        value = selectedLabel,
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showParentMenu) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                            .testTag("edit_parent_field"),
+                        textStyle = LocalTextStyle.current.copy(color = Color.White),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF3AA0FF),
+                            unfocusedBorderColor = Color.Gray
+                        )
+                    )
+                    ExposedDropdownMenu(
+                        expanded = showParentMenu,
+                        onDismissRequest = { showParentMenu = false }
+                    ) {
+                        parentOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option.title) },
+                                onClick = {
+                                    selectedParentId = option.id
+                                    showParentError = false
+                                    showParentMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+                if (showParentError) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "Pick a parent task to save",
+                        color = Color(0xFFFFB74D),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.testTag("edit_parent_error")
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -256,6 +326,10 @@ fun EditStarOverlay(
 
             Button(
                 onClick = {
+                    if (isSubtask && selectedParentId == null) {
+                        showParentError = true
+                        return@Button
+                    }
                     // Convert due value to minutes
                     val dueInMinutes = (dueValue.toFloatOrNull() ?: 0f) * when (dueUnit) {
                         "minutes" -> 1f
@@ -269,7 +343,8 @@ fun EditStarOverlay(
                         dueInMinutes,
                         isRecurring,
                         if (isRecurring) recurrencePattern else null,
-                        isSubtask
+                        isSubtask,
+                        selectedParentId
                     )
                 },
                 modifier = Modifier

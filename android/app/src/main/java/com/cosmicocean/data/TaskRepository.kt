@@ -153,6 +153,7 @@ class TaskRepository(
                 "is_recurring" to star.isRecurring,
                 "echo_interval" to (star.echoInterval?.name ?: ""),
                 "is_subtask" to star.isSubtask,
+                "parent_id" to (star.parentId ?: ""),
                 "priority" to star.urgency,
                 "due_date" to star.dueDate
             )
@@ -189,6 +190,11 @@ class TaskRepository(
                 Log.w(TAG, "Achievement update failed: ${e.message}")
             }
         }
+        if ((star.isCompleted && existing?.isCompleted != true) ||
+            (star.isArchived && existing?.isArchived != true)
+        ) {
+            unlinkChildrenForParent(star.id)
+        }
 
         // Queue to SyncManager
         val updateData = when {
@@ -212,7 +218,8 @@ class TaskRepository(
                 "due_date" to star.dueDate,
                 "is_recurring" to star.isRecurring,
                 "echo_interval" to (star.echoInterval?.name ?: ""),
-                "is_subtask" to star.isSubtask
+                "is_subtask" to star.isSubtask,
+                "parent_id" to (star.parentId ?: "")
             )
         }
         
@@ -229,6 +236,8 @@ class TaskRepository(
         // Soft delete locally for sync
         starDao.softDelete(star.id)
         Log.d(TAG, "Soft deleted star locally: ${star.id}")
+
+        unlinkChildrenForParent(star.id)
 
         // Queue to SyncManager
         syncManager.queueDelete(star.id)
@@ -280,6 +289,28 @@ class TaskRepository(
         }
     }
 
+    private suspend fun unlinkChildrenForParent(parentId: String) {
+        val children = starDao.getChildrenForParent(parentId)
+        if (children.isEmpty()) return
+        val now = System.currentTimeMillis()
+        children.forEach { child ->
+            val updated = child.copy(
+                parentId = null,
+                isSubtask = false,
+                syncStatus = "pending",
+                updatedAt = now
+            )
+            starDao.insertStarWithTransaction(updated)
+            syncManager.queueUpdate(
+                child.localId,
+                mapOf(
+                    "is_subtask" to false,
+                    "parent_id" to ""
+                )
+            )
+        }
+    }
+
     // === Entity Conversions ===
 
     private fun StarEntity.toDomain(): Star {
@@ -291,6 +322,7 @@ class TaskRepository(
             dueDate = dueDate,
             contextTag = contextTag,
             isSubtask = isSubtask,
+            parentId = parentId,
             isRecurring = isRecurring,
             echoInterval = echoInterval?.let { EchoInterval.valueOf(it) },
             createdAt = createdAt,
@@ -314,6 +346,7 @@ class TaskRepository(
             y = particle.y,
             createdAt = createdAt,
             isSubtask = isSubtask,
+            parentId = parentId,
             isRecurring = isRecurring,
             echoInterval = echoInterval?.name,
             isCompleted = isCompleted,

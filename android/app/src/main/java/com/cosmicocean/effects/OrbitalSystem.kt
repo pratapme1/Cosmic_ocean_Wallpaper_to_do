@@ -13,7 +13,8 @@ data class OrbitalRelationship(
     var orbitAngle: Float,
     var angularVelocity: Float,
     var eccentricity: Float,
-    var phaseOffset: Float
+    var phaseOffset: Float,
+    val baseRadius: Float
 )
 
 class OrbitalSystem(private val engine: VerletEngine) {
@@ -35,7 +36,8 @@ class OrbitalSystem(private val engine: VerletEngine) {
         val angularVelocity = BASE_ANGULAR_VELOCITY * (MAX_ORBIT_RADIUS / orbitRadius)
         val eccentricity = MIN_ECCENTRICITY + Math.random().toFloat() * (MAX_ECCENTRICITY - MIN_ECCENTRICITY)
         
-        child.particle.radius *= SUBTASK_SIZE_MULTIPLIER
+        val baseRadius = child.particle.radius
+        child.particle.radius = baseRadius * SUBTASK_SIZE_MULTIPLIER
         
         orbits.add(OrbitalRelationship(
             parentId = parent.id,
@@ -44,8 +46,22 @@ class OrbitalSystem(private val engine: VerletEngine) {
             orbitAngle = phaseOffset,
             angularVelocity = angularVelocity,
             eccentricity = eccentricity,
-            phaseOffset = phaseOffset
+            phaseOffset = phaseOffset,
+            baseRadius = baseRadius
         ))
+    }
+
+    fun resetOrbits(stars: List<Star>) {
+        if (orbits.isEmpty()) return
+        val baseRadiusByChild = orbits.associate { it.childId to it.baseRadius }
+        stars.forEach { star ->
+            val baseRadius = baseRadiusByChild[star.id]
+            if (baseRadius != null) {
+                star.particle.radius = baseRadius
+                star.particle.isFixed = false
+            }
+        }
+        orbits.clear()
     }
 
     fun update(stars: List<Star>, delta: Float) {
@@ -83,11 +99,22 @@ class OrbitalSystem(private val engine: VerletEngine) {
             // Draw orbit path
             val a = orbit.orbitRadius
             val b = orbit.orbitRadius * (1 - orbit.eccentricity)
-            
-            // Simplified: just a line between parent and child for now
+            val center = androidx.compose.ui.geometry.Offset(parent.particle.x, parent.particle.y)
+            val topLeft = androidx.compose.ui.geometry.Offset(center.x - a, center.y - b)
+            val size = androidx.compose.ui.geometry.Size(a * 2f, b * 2f)
+
+            drawScope.drawOval(
+                color = Color.White,
+                topLeft = topLeft,
+                size = size,
+                alpha = 0.18f,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.2f)
+            )
+
+            // Subtle connector line between parent and child
             drawScope.drawLine(
                 color = Color.White,
-                start = androidx.compose.ui.geometry.Offset(parent.particle.x, parent.particle.y),
+                start = center,
                 end = androidx.compose.ui.geometry.Offset(child.particle.x, child.particle.y),
                 strokeWidth = 1f,
                 alpha = 0.2f

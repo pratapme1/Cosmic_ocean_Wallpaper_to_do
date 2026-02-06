@@ -23,6 +23,7 @@
 - **Settings Close Buttons**: Privacy and Environment settings now include a close button for quick return.
 - **Recurring + Subtask Toggles**: Quick Add and Edit overlays now support recurring tasks and subtasks with interval selection.
 - **High-Contrast Text Mode**: Optional higher-contrast wallpaper text rendering for custom uploads.
+- **Parent-Linked Subtasks**: Subtasks now link to a parent task with parent selection and persistence.
 
 ### Changed
 - **Wallpaper Typography System**: Unified header, badge, task title, and meta sizing with consistent spacing across device sizes.
@@ -35,6 +36,7 @@
 - **Settings Cleanup**: Removed unused AI/LLM settings screen that had no user entrypoint.
 - **Tutorial Flow**: Onboarding now advances only after key actions (create/edit/refresh/customize).
 - **All-Clear Visual**: Replaced blue checkmark with a calm orbit indicator.
+- **Subtask Visuals**: Canvas now orbits subtasks around parents; wallpaper indents subtasks and caps overflow.
 
 ### Fixed
 - **Badge Truncation**: Long system badges now ellipsize cleanly without clipping or overlap.

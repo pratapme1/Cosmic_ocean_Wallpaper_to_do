@@ -513,7 +513,7 @@ object LocalWallpaperGenerator {
         val allTasks = weatherTasks ?: tasks
         val focusEnabled = environmentPreferences?.focusModeEnabled == true
         val contextBadge = buildContextBadge(environmentPreferences)
-        val highlightIndex = findContextHighlightIndex(sortedTasks, environmentPreferences)
+        val highlightTaskId = findContextHighlightTaskId(sortedTasks, environmentPreferences)
         val shortSuggestion = findShortSuggestion(allTasks, environmentPreferences)
         val showAmbientPulse = environmentPreferences?.ambientRemindersEnabled == true &&
             shouldShowAmbientPulse(allTasks, now)
@@ -594,7 +594,7 @@ object LocalWallpaperGenerator {
                 height,
                 achievementReservedSpace,
                 readability = readability,
-                highlightIndex = highlightIndex,
+                highlightTaskId = highlightTaskId,
                 badges = buildBadgeRow(
                     focusEnabled = focusEnabled,
                     contextBadge = contextBadge,
@@ -633,7 +633,7 @@ object LocalWallpaperGenerator {
         val allTasks = weatherTasks ?: tasks
         val focusEnabled = environmentPreferences?.focusModeEnabled == true
         val contextBadge = buildContextBadge(environmentPreferences)
-        val highlightIndex = findContextHighlightIndex(sortedTasks, environmentPreferences)
+        val highlightTaskId = findContextHighlightTaskId(sortedTasks, environmentPreferences)
         val shortSuggestion = findShortSuggestion(allTasks, environmentPreferences)
         var backgroundLuminance = 0.5f
 
@@ -702,7 +702,7 @@ object LocalWallpaperGenerator {
                 height,
                 achievementReservedSpace,
                 readability = readability,
-                highlightIndex = highlightIndex,
+                highlightTaskId = highlightTaskId,
                 badges = buildBadgeRow(
                     focusEnabled = focusEnabled,
                     contextBadge = contextBadge,
@@ -1340,20 +1340,22 @@ object LocalWallpaperGenerator {
         return lower.contains(token) || lower.contains(normalized)
     }
 
-    private fun findContextHighlightIndex(
+    private fun findContextHighlightTaskId(
         tasks: List<StarEntity>,
         prefs: EnvironmentPreferences?
-    ): Int? {
+    ): String? {
         if (tasks.isEmpty()) return null
+        val parentTasks = tasks.filter { !it.isSubtask || it.parentId.isNullOrBlank() }
+        if (parentTasks.isEmpty()) return null
         val contextMode = prefs?.contextMode ?: ContextMode.AUTO
         if (contextMode == ContextMode.MANUAL) {
             val manual = prefs?.manualContext?.trim().orEmpty()
             if (manual.isNotEmpty()) {
-                val idx = tasks.indexOfFirst { matchesContext(it, manual) }
-                if (idx >= 0) return idx
+                val match = parentTasks.firstOrNull { matchesContext(it, manual) }
+                if (match != null) return match.localId
             }
         }
-        return 0
+        return parentTasks.firstOrNull()?.localId
     }
 
     private fun buildContextBadge(prefs: EnvironmentPreferences?): String? {
@@ -2275,7 +2277,7 @@ object LocalWallpaperGenerator {
         height: Int,
         reservedRightSpace: Float = 0f,
         readability: TextReadability,
-        highlightIndex: Int? = null,
+        highlightTaskId: String? = null,
         badges: List<String> = emptyList()
     ) {
         val layout = getLayoutConfig(width, height)
@@ -2325,7 +2327,7 @@ object LocalWallpaperGenerator {
             }
         }
 
-        // Draw up to 3 tasks
+        // Draw tasks with parent/subtask grouping
         val titlePaint = TextPaint().apply {
             isAntiAlias = true
             color = colors.titleColor
@@ -2344,16 +2346,84 @@ object LocalWallpaperGenerator {
             textAlign = if (isRtl) Paint.Align.RIGHT else Paint.Align.LEFT
         }
 
+        val subtaskTitlePaint = TextPaint().apply {
+            isAntiAlias = true
+            color = colors.titleColor
+            textSize = typography.taskTitle * 0.85f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setShadowLayer(readability.shadowRadius, readability.shadowDx, readability.shadowDy, readability.shadowColor)
+            textAlign = if (isRtl) Paint.Align.RIGHT else Paint.Align.LEFT
+        }
+
+        val subtaskMetaPaint = TextPaint().apply {
+            isAntiAlias = true
+            color = colors.subtitleColor
+            textSize = typography.taskMeta * 0.85f
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            setShadowLayer(readability.shadowRadius * 0.7f, readability.shadowDx, readability.shadowDy, readability.shadowColor)
+            textAlign = if (isRtl) Paint.Align.RIGHT else Paint.Align.LEFT
+        }
+
         val circleRadius = max(typography.taskMeta * 0.45f, 4f * density)
+        val subtaskCircleRadius = circleRadius * 0.65f
         val bulletGap = 8f * density
         val bulletX = if (isRtl) rightEdge else marginH
-        val textStartX = if (isRtl) marginH else bulletX + circleRadius * 2f + bulletGap
-        val textEndX = if (isRtl) bulletX - circleRadius * 2f - bulletGap else rightEdge
-        val maxWidth = (textEndX - textStartX)
-            .toInt()
-            .coerceAtLeast(100)
+        val subtaskIndent = max(circleRadius * 1.6f, 14f * density)
 
-        val showNextLabel = highlightIndex != null && highlightIndex == 0
+        data class RenderEntry(
+            val task: StarEntity?,
+            val isSubtask: Boolean,
+            val overflowCount: Int = 0,
+            val showBullet: Boolean = true
+        )
+
+        val parentIdSet = tasks.map { it.localId }.toSet()
+        val parentTasks = mutableListOf<StarEntity>()
+        tasks.forEach { task ->
+            val isOrphan = task.isSubtask &&
+                !task.parentId.isNullOrBlank() &&
+                !parentIdSet.contains(task.parentId!!)
+            if (!task.isSubtask || task.parentId.isNullOrBlank() || isOrphan) {
+                parentTasks.add(task)
+            }
+        }
+        val childrenByParent = tasks.filter {
+            it.isSubtask && !it.parentId.isNullOrBlank() && parentIdSet.contains(it.parentId!!)
+        }.groupBy { it.parentId!! }
+
+        val maxParents = 3
+        val maxSubtasksPerParent = 2
+        val renderEntries = mutableListOf<RenderEntry>()
+        val shownTaskIds = mutableSetOf<String>()
+
+        parentTasks.take(maxParents).forEach { parent ->
+            renderEntries.add(RenderEntry(task = parent, isSubtask = false))
+            shownTaskIds.add(parent.localId)
+            val children = childrenByParent[parent.localId].orEmpty()
+                .sortedBy { it.dueDate ?: Long.MAX_VALUE }
+            children.take(maxSubtasksPerParent).forEach { child ->
+                renderEntries.add(RenderEntry(task = child, isSubtask = true))
+                shownTaskIds.add(child.localId)
+            }
+            val hidden = children.size - maxSubtasksPerParent
+            if (hidden > 0) {
+                renderEntries.add(
+                    RenderEntry(
+                        task = null,
+                        isSubtask = true,
+                        overflowCount = hidden,
+                        showBullet = false
+                    )
+                )
+            }
+        }
+
+        val highlightRowIndex = if (highlightTaskId == null) {
+            -1
+        } else {
+            renderEntries.indexOfFirst { it.task?.localId == highlightTaskId }
+        }
+        val showNextLabel = highlightRowIndex == 0
         if (showNextLabel) {
             val nextPaint = Paint().apply {
                 isAntiAlias = true
@@ -2363,17 +2433,24 @@ object LocalWallpaperGenerator {
                 setShadowLayer(readability.shadowRadius, readability.shadowDx, readability.shadowDy, readability.shadowColor)
                 textAlign = if (isRtl) Paint.Align.RIGHT else Paint.Align.LEFT
             }
+            val textStartX = if (isRtl) marginH else bulletX + circleRadius * 2f + bulletGap
+            val maxWidth = (rightEdge - textStartX).toInt().coerceAtLeast(100)
             val nextX = if (isRtl) textStartX + maxWidth else textStartX
             canvas.drawText("NEXT", nextX, currentY + nextPaint.textSize, nextPaint)
             currentY += nextPaint.textSize + baseSpacing * 0.6f
         }
+
         data class TaskRenderInfo(
-            val task: StarEntity,
+            val entry: RenderEntry,
             val circleY: Float,
             val titleLayout: StaticLayout,
             val titleTop: Float,
             val metaText: String?,
-            val metaY: Float?
+            val metaY: Float?,
+            val bulletX: Float,
+            val bulletRadius: Float,
+            val textStartX: Float,
+            val maxWidth: Int
         )
 
         val renderItems = mutableListOf<TaskRenderInfo>()
@@ -2382,10 +2459,24 @@ object LocalWallpaperGenerator {
         val titleToMetaSpacing = max(6f * density, typography.taskMeta * 0.5f)
         val itemSpacing = max(layout.margins.vertical, typography.taskMeta * 1.2f)
 
-        tasks.take(3).forEach { task ->
-            val titleText = bidi.unicodeWrap(task.title)
+        renderEntries.forEach { entry ->
+            val isSub = entry.isSubtask
+            val indent = if (isSub) subtaskIndent else 0f
+            val bulletRadius = if (isSub) subtaskCircleRadius else circleRadius
+            val rowBulletX = if (isRtl) bulletX - indent else bulletX + indent
+            val textStartX = if (isRtl) marginH else rowBulletX + bulletRadius * 2f + bulletGap
+            val textEndX = if (isRtl) rowBulletX - bulletRadius * 2f - bulletGap else rightEdge
+            val maxWidth = (textEndX - textStartX).toInt().coerceAtLeast(100)
+            val titlePaintUse = if (isSub) subtaskTitlePaint else titlePaint
+            val metaPaintUse = if (isSub) subtaskMetaPaint else metaPaint
+            val titleText = if (entry.task == null) {
+                "+ ${entry.overflowCount} more"
+            } else {
+                entry.task.title
+            }
+
             val titleLayout = StaticLayout.Builder
-                .obtain(titleText, 0, titleText.length, titlePaint, maxWidth)
+                .obtain(bidi.unicodeWrap(titleText), 0, titleText.length, titlePaintUse, maxWidth)
                 .setAlignment(if (isRtl) Layout.Alignment.ALIGN_OPPOSITE else Layout.Alignment.ALIGN_NORMAL)
                 .setTextDirection(if (isRtl) TextDirectionHeuristics.FIRSTSTRONG_RTL else TextDirectionHeuristics.FIRSTSTRONG_LTR)
                 .setBreakStrategy(Layout.BREAK_STRATEGY_HIGH_QUALITY)
@@ -2395,27 +2486,31 @@ object LocalWallpaperGenerator {
                 .build()
             val titleTop = currentY
             val firstLineBaseline = titleLayout.getLineBaseline(0)
-            val circleY = titleTop + firstLineBaseline - (circleRadius * 0.1f)
+            val circleY = titleTop + firstLineBaseline - (bulletRadius * 0.1f)
             var nextY = currentY + titleLayout.height
 
-            val metaText = formatDueDate(task.dueDate)
+            val metaText = entry.task?.let { formatDueDate(it.dueDate) }
             val metaY = if (metaText != null) {
-                val y = nextY + titleToMetaSpacing + metaPaint.textSize
-                nextY = y + itemSpacing
+                val y = nextY + titleToMetaSpacing + metaPaintUse.textSize
+                nextY = y + itemSpacing * if (isSub) 0.7f else 1f
                 y
             } else {
-                nextY += itemSpacing
+                nextY += itemSpacing * if (isSub) 0.7f else 1f
                 null
             }
 
             renderItems.add(
                 TaskRenderInfo(
-                    task = task,
+                    entry = entry,
                     circleY = circleY,
                     titleLayout = titleLayout,
                     titleTop = titleTop,
                     metaText = metaText,
-                    metaY = metaY
+                    metaY = metaY,
+                    bulletX = rowBulletX,
+                    bulletRadius = bulletRadius,
+                    textStartX = textStartX,
+                    maxWidth = maxWidth
                 )
             )
 
@@ -2424,13 +2519,15 @@ object LocalWallpaperGenerator {
 
         drawIntentForecastPath(
             canvas = canvas,
-            points = renderItems.map { android.graphics.PointF(bulletX, it.circleY) },
+            points = renderItems
+                .filter { !it.entry.isSubtask && it.entry.task != null }
+                .map { android.graphics.PointF(it.bulletX, it.circleY) },
             colors = colors
         )
 
         renderItems.forEachIndexed { index, info ->
-            // Priority indicator circle
-            val circleColor = getDueDatePriorityColor(info.task.dueDate)
+            val entry = info.entry
+            val circleColor = entry.task?.let { getDueDatePriorityColor(it.dueDate) } ?: colors.subtitleColor
 
             val circlePaint = Paint().apply {
                 isAntiAlias = true
@@ -2438,37 +2535,39 @@ object LocalWallpaperGenerator {
                 style = Paint.Style.FILL
             }
 
-            if (highlightIndex != null && index == highlightIndex) {
+            if (highlightRowIndex >= 0 && index == highlightRowIndex && entry.task != null) {
                 val glowPaint = Paint().apply {
                     isAntiAlias = true
                     color = colors.taskCircleGlow
                     alpha = 200
-                    maskFilter = BlurMaskFilter(circleRadius * 2.8f, BlurMaskFilter.Blur.NORMAL)
+                    maskFilter = BlurMaskFilter(info.bulletRadius * 2.8f, BlurMaskFilter.Blur.NORMAL)
                     style = Paint.Style.FILL
                 }
-                canvas.drawCircle(marginH, info.circleY, circleRadius * 2.8f, glowPaint)
+                canvas.drawCircle(info.bulletX, info.circleY, info.bulletRadius * 2.8f, glowPaint)
             }
 
-            canvas.drawCircle(bulletX, info.circleY, circleRadius, circlePaint)
+            if (entry.showBullet) {
+                canvas.drawCircle(info.bulletX, info.circleY, info.bulletRadius, circlePaint)
+            }
 
             canvas.save()
-            canvas.translate(textStartX, info.titleTop)
+            canvas.translate(info.textStartX, info.titleTop)
             info.titleLayout.draw(canvas)
             canvas.restore()
 
             info.metaText?.let { meta ->
                 info.metaY?.let { y ->
-                    val metaDisplay = TextUtils.ellipsize(bidi.unicodeWrap(meta), metaPaint, maxWidth.toFloat(), TextUtils.TruncateAt.END).toString()
-                    val metaX = if (isRtl) textStartX + maxWidth else textStartX
-                    canvas.drawText(metaDisplay, metaX, y, metaPaint)
+                    val metaPaintUse = if (entry.isSubtask) subtaskMetaPaint else metaPaint
+                    val metaDisplay = TextUtils.ellipsize(bidi.unicodeWrap(meta), metaPaintUse, info.maxWidth.toFloat(), TextUtils.TruncateAt.END).toString()
+                    val metaX = if (isRtl) info.textStartX + info.maxWidth else info.textStartX
+                    canvas.drawText(metaDisplay, metaX, y, metaPaintUse)
                 }
             }
         }
 
         currentY = if (renderItems.isEmpty()) startY else currentY
 
-        // Remaining count
-        val remainingCount = totalTaskCount - tasks.size.coerceAtMost(3)
+        val remainingCount = (totalTaskCount - shownTaskIds.size).coerceAtLeast(0)
         if (remainingCount > 0) {
             canvas.drawText("+ $remainingCount more today", marginH, currentY, metaPaint)
         }

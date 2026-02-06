@@ -62,6 +62,10 @@ class MainViewModel(
                         existingStar.completedAt = loadedStar.completedAt
                         existingStar.isArchived = loadedStar.isArchived
                         existingStar.archivedAt = loadedStar.archivedAt
+                        existingStar.isSubtask = loadedStar.isSubtask
+                        existingStar.parentId = loadedStar.parentId
+                        existingStar.isRecurring = loadedStar.isRecurring
+                        existingStar.echoInterval = loadedStar.echoInterval
                         existingStar.updateDueIn() // Update color based on new priority
                     } else {
                         // New star - add it
@@ -69,6 +73,8 @@ class MainViewModel(
                         engine.addParticle(loadedStar.particle)
                     }
                 }
+
+                rebuildOrbits()
             }
         }
     }
@@ -77,6 +83,24 @@ class MainViewModel(
         repository.addStar(star)
         if (parent != null) {
             orbitalSystem.createOrbit(parent, star)
+        }
+    }
+
+    private fun rebuildOrbits() {
+        orbitalSystem.resetOrbits(stars)
+        val parents = stars.associateBy { it.id }
+        stars.forEach { star ->
+            val parentId = star.parentId
+            if (star.isSubtask && !parentId.isNullOrBlank()) {
+                val parent = parents[parentId]
+                if (parent != null && parent.id != star.id) {
+                    orbitalSystem.createOrbit(parent, star)
+                } else {
+                    star.isSubtask = false
+                    star.parentId = null
+                    star.resetRadiusToUrgency()
+                }
+            }
         }
     }
 

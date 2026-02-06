@@ -83,6 +83,77 @@ class WallpaperScenarioScreenshotE2ETest {
         }
     }
 
+    @Test
+    fun generateSubtaskHierarchyScenario() {
+        val now = System.currentTimeMillis()
+        val parentId = UUID.randomUUID().toString()
+        val tasks = listOf(
+            StarEntity(
+                localId = parentId,
+                serverId = null,
+                title = "Parent Task",
+                urgency = 2,
+                dueDate = now + 3_600_000L,
+                x = 120f,
+                y = 240f,
+                createdAt = now,
+                isSubtask = false,
+                isRecurring = false,
+                echoInterval = null,
+                isCompleted = false,
+                completedAt = null,
+                isArchived = false,
+                archivedAt = null
+            ),
+            StarEntity(
+                localId = UUID.randomUUID().toString(),
+                serverId = null,
+                title = "Subtask A",
+                urgency = 2,
+                dueDate = now + 4_200_000L,
+                x = 120f,
+                y = 240f,
+                createdAt = now,
+                isSubtask = true,
+                parentId = parentId,
+                isRecurring = false,
+                echoInterval = null,
+                isCompleted = false,
+                completedAt = null,
+                isArchived = false,
+                archivedAt = null
+            ),
+            StarEntity(
+                localId = UUID.randomUUID().toString(),
+                serverId = null,
+                title = "Subtask B",
+                urgency = 1,
+                dueDate = now + 5_400_000L,
+                x = 120f,
+                y = 240f,
+                createdAt = now,
+                isSubtask = true,
+                parentId = parentId,
+                isRecurring = false,
+                echoInterval = null,
+                isCompleted = false,
+                completedAt = null,
+                isArchived = false,
+                archivedAt = null
+            )
+        )
+
+        val bitmap = LocalWallpaperGenerator.generate(
+            tasks = tasks,
+            totalTaskCount = tasks.size,
+            theme = WallpaperTheme.DEEP_OCEAN,
+            width = 1080,
+            height = 2400
+        )
+        writeScreenshot(bitmap, "scenario_subtasks_1080x2400.png")
+        bitmap.recycle()
+    }
+
     private fun buildTaskList(count: Int): List<StarEntity> {
         val now = System.currentTimeMillis()
         return (1..count).map { idx ->

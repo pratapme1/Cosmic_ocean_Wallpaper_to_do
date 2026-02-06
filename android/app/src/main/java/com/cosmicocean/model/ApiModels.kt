@@ -61,6 +61,8 @@ data class TaskResponse(
     val y: Double? = null,
     @SerializedName("is_subtask")
     val isSubtask: Boolean = false,
+    @SerializedName("parent_id")
+    val parentId: String? = null,
     @SerializedName("is_recurring")
     val isRecurring: Boolean = false,
     @SerializedName("echo_interval")

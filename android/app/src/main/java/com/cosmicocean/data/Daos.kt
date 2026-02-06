@@ -30,6 +30,9 @@ interface StarDao {
     
     @Query("SELECT * FROM stars WHERE localId = :localId OR serverId = :localId")
     suspend fun getById(localId: String): StarEntity?
+
+    @Query("SELECT * FROM stars WHERE parentId = :parentId AND isDeleted = 0")
+    suspend fun getChildrenForParent(parentId: String): List<StarEntity>
     
     // === Transaction Methods (CRITICAL FIX: Issue #3) ===
     

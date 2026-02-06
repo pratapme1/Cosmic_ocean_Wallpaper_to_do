@@ -86,6 +86,8 @@ class LocalOnlyApiService(
         val title = body["rawTitle"] ?: body["title"] ?: "New Task"
         val priority = body["priority"]?.toIntOrNull() ?: 2
         val dueDateMs = TaskDateUtils.parseToMillis(body["due_date"] ?: body["dueDate"], body["due_time"] ?: body["dueTime"])
+        val isSubtask = body["is_subtask"]?.toBoolean() ?: false
+        val parentId = if (isSubtask) body["parent_id"]?.takeIf { it.isNotBlank() } else null
         val localId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
         val entity = com.cosmicocean.data.StarEntity(
@@ -97,7 +99,8 @@ class LocalOnlyApiService(
             x = 0f,
             y = 0f,
             createdAt = now,
-            isSubtask = false,
+            isSubtask = isSubtask,
+            parentId = parentId,
             isRecurring = false,
             echoInterval = null,
             isCompleted = false,
@@ -142,6 +145,12 @@ class LocalOnlyApiService(
         val dueDateValue = body["due_date"] ?: body["dueDate"]
         val dueTimeValue = body["due_time"] ?: body["dueTime"]
         val parsedDueDate = TaskDateUtils.parseToMillis(dueDateValue, dueTimeValue)
+        val isSubtask = (body["is_subtask"] as? Boolean) ?: existing.isSubtask
+        val parentId = if (isSubtask) {
+            body["parent_id"]?.toString()?.takeIf { it.isNotBlank() }
+        } else {
+            null
+        }
         val updated = existing.copy(
             title = body["rawTitle"]?.toString() ?: body["title"]?.toString() ?: existing.title,
             urgency = (body["priority"] as? Number)?.toInt() ?: existing.urgency,
@@ -152,6 +161,8 @@ class LocalOnlyApiService(
             x = (body["x"] as? Number)?.toFloat() ?: existing.x,
             y = (body["y"] as? Number)?.toFloat() ?: existing.y,
             dueDate = parsedDueDate ?: existing.dueDate,
+            parentId = parentId,
+            isSubtask = isSubtask,
             updatedAt = System.currentTimeMillis(),
             syncStatus = "synced"
         )
@@ -459,6 +470,7 @@ class LocalOnlyApiService(
             x = x.toDouble(),
             y = y.toDouble(),
             isSubtask = isSubtask,
+            parentId = parentId,
             isRecurring = isRecurring,
             echoInterval = echoInterval,
             archived = isArchived,

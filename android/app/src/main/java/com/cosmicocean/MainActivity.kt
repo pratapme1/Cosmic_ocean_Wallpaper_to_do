@@ -662,20 +662,26 @@ class MainActivity : ComponentActivity() {
                         }
 
                         if (showQuickAdd) {
+                            val availableParents = stars.filter { !it.isCompleted && !it.isArchived && !it.isSubtask }
                             QuickAddOverlay(
                                 onDismiss = { showQuickAdd = false },
-                                onSave = { title, recurringOverride, echoIntervalOverride, isSubtask ->
-                                    createNewStar(title, lastTapOffset, recurringOverride, echoIntervalOverride, isSubtask)
+                                availableParents = availableParents,
+                                onSave = { title, recurringOverride, echoIntervalOverride, isSubtask, parentId ->
+                                    createNewStar(title, lastTapOffset, recurringOverride, echoIntervalOverride, isSubtask, parentId)
                                 }
                             )
                         }
 
                         if (editingStar != null) {
+                            val availableParents = stars.filter {
+                                !it.isCompleted && !it.isArchived && !it.isSubtask && it.id != editingStar!!.id
+                            }
                             EditStarOverlay(
                                 star = editingStar!!,
                                 onDismiss = { editingStar = null },
-                                onSave = { title, urgency, dueInMinutes, isRecurring, echoInterval, isSubtask ->
-                                    updateStar(editingStar!!, title, urgency, dueInMinutes, isRecurring, echoInterval, isSubtask)
+                                availableParents = availableParents,
+                                onSave = { title, urgency, dueInMinutes, isRecurring, echoInterval, isSubtask, parentId ->
+                                    updateStar(editingStar!!, title, urgency, dueInMinutes, isRecurring, echoInterval, isSubtask, parentId)
                                     editingStar = null
                                 },
                                 onStartFocus = { minutes ->
@@ -987,14 +993,20 @@ class MainActivity : ComponentActivity() {
         dueInMinutes: Float,
         isRecurring: Boolean,
         echoInterval: com.cosmicocean.model.EchoInterval?,
-        isSubtask: Boolean
+        isSubtask: Boolean,
+        parentId: String?
     ) {
         star.title = title
         star.urgency = urgency
         star.dueIn = dueInMinutes
         star.isRecurring = isRecurring
         star.echoInterval = if (isRecurring) echoInterval else null
-        star.isSubtask = isSubtask
+        val resolvedParent = parentId?.takeIf { it.isNotBlank() }
+        val validParent = resolvedParent?.let { id ->
+            viewModel.stars.firstOrNull { it.id == id && it.id != star.id && !it.isSubtask }
+        }
+        star.isSubtask = isSubtask && validParent != null
+        star.parentId = if (star.isSubtask) validParent?.id else null
 
         // Update due date timestamp
         star.dueDate = System.currentTimeMillis() + (dueInMinutes * 60 * 1000).toLong()
@@ -1032,7 +1044,8 @@ class MainActivity : ComponentActivity() {
         offset: androidx.compose.ui.geometry.Offset?,
         recurringOverride: Boolean? = null,
         echoIntervalOverride: com.cosmicocean.model.EchoInterval? = null,
-        isSubtask: Boolean = false
+        isSubtask: Boolean = false,
+        parentId: String? = null
     ) {
         val random = java.util.Random()
 
@@ -1069,6 +1082,12 @@ class MainActivity : ComponentActivity() {
             }
 
             // TaskRepository.addStar() handles both local DB insert AND backend sync
+            val resolvedParent = parentId?.takeIf { it.isNotBlank() }
+            val parentStar = if (isSubtask && resolvedParent != null) {
+                viewModel.stars.firstOrNull { it.id == resolvedParent && !it.isSubtask }
+            } else {
+                null
+            }
             val star = Star(
                 x = x,
                 y = y,
@@ -1076,7 +1095,8 @@ class MainActivity : ComponentActivity() {
                 urgency = urgency,
                 dueDate = dueDateMs,
                 contextTag = contextTag,
-                isSubtask = isSubtask,
+                isSubtask = isSubtask && parentStar != null,
+                parentId = parentStar?.id,
                 isRecurring = resolvedRecurring,
                 echoInterval = resolvedEchoInterval
             )
@@ -1089,7 +1109,7 @@ class MainActivity : ComponentActivity() {
             star.particle.y = adjusted.second
             star.particle.oldX = adjusted.first
             star.particle.oldY = adjusted.second
-            viewModel.addStar(star)
+            viewModel.addStar(star, parentStar)
             // No need for local delay here anymore, as RealTimeWallpaperService.ACTION_FORCE_UPDATE 
             // now includes a 500ms delay internally for consistency.
             advanceTutorialStep(1)
@@ -1148,7 +1168,16 @@ class MainActivity : ComponentActivity() {
             ?: runBlocking(Dispatchers.IO) { database.starDao().getByLocalId(starId)?.toStar() }
             ?: return
         runOnUiThread {
-            updateStar(star, title, urgency, dueInMinutes, star.isRecurring, star.echoInterval, star.isSubtask)
+            updateStar(
+                star,
+                title,
+                urgency,
+                dueInMinutes,
+                star.isRecurring,
+                star.echoInterval,
+                star.isSubtask,
+                star.parentId
+            )
         }
     }
 
@@ -1168,6 +1197,7 @@ class MainActivity : ComponentActivity() {
             dueDate = dueDate,
             contextTag = contextTag,
             isSubtask = isSubtask,
+            parentId = parentId,
             isRecurring = isRecurring,
             echoInterval = echoInterval?.let { com.cosmicocean.model.EchoInterval.valueOf(it) },
             createdAt = createdAt,

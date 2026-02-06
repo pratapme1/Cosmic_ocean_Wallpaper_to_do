@@ -18,6 +18,7 @@ class Star(
     var dueDate: Long?, // Timestamp
     var contextTag: String? = null,
     var isSubtask: Boolean = false,
+    var parentId: String? = null,
     var isRecurring: Boolean = false,
     var echoInterval: EchoInterval? = null,
     val createdAt: Long = System.currentTimeMillis(),
@@ -75,6 +76,10 @@ class Star(
                 else -> Temperature.BLUE
             }
         }
+    }
+
+    fun resetRadiusToUrgency() {
+        particle.radius = RADIUS_MAP[urgency] ?: RADIUS_DEFAULT
     }
 
     fun getColor(): Int {

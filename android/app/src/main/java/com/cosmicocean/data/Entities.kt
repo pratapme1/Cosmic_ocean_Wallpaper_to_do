@@ -30,6 +30,7 @@ data class StarEntity(
     val y: Float,
     val createdAt: Long,
     val isSubtask: Boolean,
+    val parentId: String? = null,
     val isRecurring: Boolean,
     val echoInterval: String?, // Enum as String
     val isCompleted: Boolean,

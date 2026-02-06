@@ -10,12 +10,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.cosmicocean.model.EchoInterval
+import com.cosmicocean.model.Star
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuickAddOverlay(
     onDismiss: () -> Unit,
-    onSave: (String, Boolean?, EchoInterval?, Boolean) -> Unit
+    availableParents: List<Star>,
+    onSave: (String, Boolean?, EchoInterval?, Boolean, String?) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
     var recurringEnabled by remember { mutableStateOf(false) }
@@ -23,6 +25,10 @@ fun QuickAddOverlay(
     var recurrencePattern by remember { mutableStateOf(EchoInterval.DAILY) }
     var showRecurrenceMenu by remember { mutableStateOf(false) }
     var isSubtask by remember { mutableStateOf(false) }
+    var selectedParentId by remember { mutableStateOf<String?>(null) }
+    var showParentMenu by remember { mutableStateOf(false) }
+    var showParentError by remember { mutableStateOf(false) }
+    val parentOptions = remember(availableParents) { availableParents.sortedBy { it.dueDate ?: Long.MAX_VALUE } }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -148,8 +154,16 @@ fun QuickAddOverlay(
                 )
                 Switch(
                     checked = isSubtask,
-                    onCheckedChange = { isSubtask = it },
+                    onCheckedChange = {
+                        if (parentOptions.isEmpty()) return@Switch
+                        isSubtask = it
+                        if (!isSubtask) {
+                            selectedParentId = null
+                            showParentError = false
+                        }
+                    },
                     modifier = Modifier.testTag("quick_add_subtask_toggle"),
+                    enabled = parentOptions.isNotEmpty(),
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color(0xFF00E5FF),
                         checkedTrackColor = Color(0xFF00E5FF).copy(alpha = 0.5f)
@@ -157,14 +171,75 @@ fun QuickAddOverlay(
                 )
             }
 
+            if (parentOptions.isEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "No parent tasks available",
+                    color = Color.Gray.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            } else if (isSubtask) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Parent Task", color = Color.Gray)
+                ExposedDropdownMenuBox(
+                    expanded = showParentMenu,
+                    onExpandedChange = { showParentMenu = it }
+                ) {
+                    val selectedLabel = parentOptions.firstOrNull { it.id == selectedParentId }?.title ?: "Select parent"
+                    OutlinedTextField(
+                        value = selectedLabel,
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showParentMenu) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                            .testTag("quick_add_parent_field"),
+                        textStyle = LocalTextStyle.current.copy(color = Color.White),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF00E5FF),
+                            unfocusedBorderColor = Color.Gray
+                        )
+                    )
+                    ExposedDropdownMenu(
+                        expanded = showParentMenu,
+                        onDismissRequest = { showParentMenu = false }
+                    ) {
+                        parentOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option.title) },
+                                onClick = {
+                                    selectedParentId = option.id
+                                    showParentError = false
+                                    showParentMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+                if (showParentError) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "Pick a parent task to save",
+                        color = Color(0xFFFFB74D),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.testTag("quick_add_parent_error")
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
             
             Button(
                 onClick = {
                     if (text.isNotBlank()) {
+                        if (isSubtask && selectedParentId == null) {
+                            showParentError = true
+                            return@Button
+                        }
                         val recurringOverride = if (recurringTouched) recurringEnabled else null
                         val echoInterval = if (recurringEnabled) recurrencePattern else null
-                        onSave(text, recurringOverride, echoInterval, isSubtask)
+                        onSave(text, recurringOverride, echoInterval, isSubtask, selectedParentId)
                         onDismiss()
                     }
                 },

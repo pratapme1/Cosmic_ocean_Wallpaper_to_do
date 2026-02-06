@@ -633,6 +633,7 @@ class SyncManager(
             y = this.y?.toFloat() ?: 0.5f,
             createdAt = this.createdAt?.let { parseTimestamp(it) } ?: System.currentTimeMillis(),
             isSubtask = this.isSubtask ?: false,
+            parentId = this.parentId,
             isRecurring = this.isRecurring ?: false,
             echoInterval = this.echoInterval,
             isCompleted = this.completed ?: false,
@@ -654,7 +655,8 @@ class SyncManager(
             "x" to x,
             "y" to y,
             "is_recurring" to isRecurring,
-            "is_subtask" to isSubtask
+            "is_subtask" to isSubtask,
+            "parent_id" to parentId
         )
     }
 }

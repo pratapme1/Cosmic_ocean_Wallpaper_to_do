@@ -229,11 +229,12 @@
 ### 16b) Recurring Tasks + Subtasks
 - **Outcome**: Allow recurring schedules and subtask metadata
 - **Est.**: 2–3 days
-- **Status**: Done (2026-02-06)
+- **Status**: Done (2026-02-06, updated 2026-02-06)
 - **Acceptance Criteria**:
   - Quick Add and Edit overlays can toggle recurring + subtask
   - Recurrence interval persisted (daily/weekly/monthly)
   - Stored in local DB and visible to wallpaper renderer
+  - Subtasks linked to parent task with visual hierarchy
 
 ## P3 — Retention Drivers
 
