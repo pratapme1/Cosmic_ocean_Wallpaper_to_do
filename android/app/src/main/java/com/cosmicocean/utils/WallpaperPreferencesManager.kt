@@ -15,6 +15,7 @@ class WallpaperPreferencesManager(private val context: Context) {
         private const val KEY_RESOLUTION = "resolution"
         private const val KEY_LAST_SYNC = "last_sync"
         private const val KEY_WALLPAPER_ENABLED = "wallpaper_enabled"
+        private const val KEY_WALLPAPER_CONSENT = "wallpaper_consent"
         private const val KEY_WALLPAPER_MODE = "wallpaper_mode"
         private const val KEY_CUSTOM_WALLPAPER_PATH = "custom_wallpaper_path"
 
@@ -108,6 +109,14 @@ class WallpaperPreferencesManager(private val context: Context) {
 
     fun hasSetWallpaperPreference(): Boolean {
         return prefs.contains(KEY_WALLPAPER_ENABLED)
+    }
+
+    fun hasWallpaperConsent(): Boolean {
+        return prefs.contains(KEY_WALLPAPER_CONSENT)
+    }
+
+    fun setWallpaperConsent(granted: Boolean): Boolean {
+        return prefs.edit().putBoolean(KEY_WALLPAPER_CONSENT, granted).commit()
     }
 
     fun setWallpaperEnabled(enabled: Boolean): Boolean {

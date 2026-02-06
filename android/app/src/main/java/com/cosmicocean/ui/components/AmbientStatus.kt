@@ -20,7 +20,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun AmbientStatusHUD(stars: List<Star>, isInteracting: Boolean) {
     var idleTime by remember { mutableLongStateOf(0L) }
-    var currentMessage by remember { mutableStateOf("All clear") }
+    var currentMessage by remember { mutableStateOf("Calm orbit") }
     
     // Update logic
     LaunchedEffect(stars, isInteracting) {
@@ -37,7 +37,7 @@ fun AmbientStatusHUD(stars: List<Star>, isInteracting: Boolean) {
                 val newMessage = when {
                     overdue > 0 -> if (overdue == 1) "1 overdue task" else "$overdue overdue tasks"
                     urgent > 0 -> if (urgent == 1) "1 task due in next 2 hours" else "$urgent tasks due in next 2 hours"
-                    else -> "All clear"
+                    else -> "Calm orbit"
                 }
                 
                 if (newMessage != currentMessage) {

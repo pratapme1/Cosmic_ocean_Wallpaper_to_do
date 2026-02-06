@@ -105,7 +105,9 @@ class EnvironmentSettingsViewModel(
                                 hapticsRateLimitMinutes = apiPrefs.hapticsRateLimitMinutes ?: 30,
                                 overdueHeatmapEnabled = apiPrefs.overdueHeatmapEnabled ?: false,
                                 ambientRemindersEnabled = apiPrefs.ambientRemindersEnabled ?: false,
-                                tutorialSeen = apiPrefs.tutorialSeen ?: false
+                                highContrastTextEnabled = apiPrefs.highContrastTextEnabled ?: false,
+                                tutorialSeen = apiPrefs.tutorialSeen ?: false,
+                                tutorialStep = apiPrefs.tutorialStep ?: 0
                             ),
                             isLoading = false
                         )
@@ -189,7 +191,9 @@ class EnvironmentSettingsViewModel(
                         "haptics_rate_limit_minutes" -> repo.setHapticsRateLimit((value as Number).toInt())
                         "overdue_heatmap_enabled" -> repo.setOverdueHeatmapEnabled(value as Boolean)
                         "ambient_reminders_enabled" -> repo.setAmbientRemindersEnabled(value as Boolean)
+                        "high_contrast_text_enabled" -> repo.setHighContrastTextEnabled(value as Boolean)
                         "tutorial_seen" -> repo.setTutorialSeen(value as Boolean)
+                        "tutorial_step" -> repo.setTutorialStep((value as Number).toInt())
                     }
                     Log.d(TAG, "LOCAL-FIRST: Saved $key = $value locally")
                 } catch (e: Exception) {

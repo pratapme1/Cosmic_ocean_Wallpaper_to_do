@@ -448,37 +448,82 @@ fun CosmicCanvas(
                 )
             }
 
-            // Zone labels (always visible for guidance)
+            // Zone labels (cosmic chips, always visible for guidance)
             val labelAlpha = if (activeZoneType != null) 0.95f else 0.45f
             val labelFontSize = (12f * screenScale).coerceIn(11f, 17f)
             val labelStyle = TextStyle(
                 color = Color.White.copy(alpha = labelAlpha),
                 fontSize = labelFontSize.sp,
-                letterSpacing = (0.7f * screenScale).coerceIn(0.2f, 1.0f).sp,
+                letterSpacing = (0.4f * screenScale).coerceIn(0.2f, 0.8f).sp,
                 fontWeight = FontWeight.SemiBold
             )
-            val labelYBase = (size.height / 2f) - (glowRadius * 0.45f)
+            val labelYBase = (size.height / 2f) - (glowRadius * 0.55f)
+            val chipPaddingH = (10f * screenScale).coerceIn(8f, 14f)
+            val chipPaddingV = (6f * screenScale).coerceIn(5f, 10f)
+            val iconRadius = (5f * screenScale).coerceIn(4f, 7f)
+            val iconGap = (6f * screenScale).coerceIn(4f, 10f)
+            val chipCorner = (14f * screenScale).coerceIn(10f, 18f)
 
-            val archiveLabel = "ARCHIVE"
-            val archiveLabelX = (archiveX + glowRadius * 0.35f).coerceAtLeast(12f)
-            val archiveLabelY = labelYBase.coerceIn(24f, size.height - 24f)
-            drawText(
-                textMeasurer = textMeasurer,
-                text = archiveLabel,
-                style = labelStyle,
-                topLeft = Offset(archiveLabelX, archiveLabelY)
+            fun drawZoneChip(
+                label: String,
+                iconColor: Color,
+                anchorX: Float,
+                alignRight: Boolean
+            ) {
+                val layout = textMeasurer.measure(text = label, style = labelStyle)
+                val chipWidth = layout.size.width + chipPaddingH * 2f + iconRadius * 2f + iconGap
+                val chipHeight = layout.size.height + chipPaddingV * 2f
+                val chipX = if (alignRight) anchorX - chipWidth else anchorX
+                val chipY = labelYBase.coerceIn(24f, size.height - 24f - chipHeight)
+
+                drawRoundRect(
+                    color = Color.Black.copy(alpha = 0.35f * labelAlpha),
+                    topLeft = Offset(chipX, chipY),
+                    size = androidx.compose.ui.geometry.Size(chipWidth, chipHeight),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(chipCorner, chipCorner)
+                )
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.12f * labelAlpha),
+                    topLeft = Offset(chipX, chipY),
+                    size = androidx.compose.ui.geometry.Size(chipWidth, chipHeight),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(chipCorner, chipCorner),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1f)
+                )
+
+                val iconCenterX = chipX + chipPaddingH + iconRadius
+                val iconCenterY = chipY + chipHeight / 2f
+                drawCircle(
+                    color = iconColor.copy(alpha = labelAlpha),
+                    radius = iconRadius,
+                    center = Offset(iconCenterX, iconCenterY)
+                )
+                drawCircle(
+                    color = Color.Black.copy(alpha = 0.45f * labelAlpha),
+                    radius = iconRadius * 0.55f,
+                    center = Offset(iconCenterX, iconCenterY)
+                )
+
+                val textX = iconCenterX + iconRadius + iconGap
+                val textY = chipY + (chipHeight - layout.size.height) / 2f
+                drawText(
+                    textMeasurer = textMeasurer,
+                    text = label,
+                    style = labelStyle,
+                    topLeft = Offset(textX, textY)
+                )
+            }
+
+            drawZoneChip(
+                label = "Archive",
+                iconColor = Color(0xFF6B6F7A),
+                anchorX = (archiveX + glowRadius * 0.35f).coerceAtLeast(12f),
+                alignRight = false
             )
-
-            val completeLabel = "COMPLETE"
-            val completeLayout = textMeasurer.measure(text = completeLabel, style = labelStyle)
-            val completeLabelX = (completionX - glowRadius * 0.35f - completeLayout.size.width)
-                .coerceAtLeast(12f)
-            val completeLabelY = labelYBase.coerceIn(24f, size.height - 24f - completeLayout.size.height)
-            drawText(
-                textMeasurer = textMeasurer,
-                text = completeLabel,
-                style = labelStyle,
-                topLeft = Offset(completeLabelX, completeLabelY)
+            drawZoneChip(
+                label = "Complete",
+                iconColor = Color(0xFF00FF88),
+                anchorX = (completionX - glowRadius * 0.35f).coerceAtLeast(12f),
+                alignRight = true
             )
 
             stars.forEach { star ->

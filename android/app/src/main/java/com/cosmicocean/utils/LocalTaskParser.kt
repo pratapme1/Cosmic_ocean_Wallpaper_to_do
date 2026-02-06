@@ -32,7 +32,7 @@ object LocalTaskParser {
         Regex("\\b(morning|this morning|early morning)\\b", RegexOption.IGNORE_CASE) to 9,
         Regex("\\b(afternoon|this afternoon)\\b", RegexOption.IGNORE_CASE) to 15,
         Regex("\\b(evening|this evening)\\b", RegexOption.IGNORE_CASE) to 19,
-        Regex("\\b(tonight)\\b", RegexOption.IGNORE_CASE) to 20,
+        Regex("\\b(tonight|night|this night)\\b", RegexOption.IGNORE_CASE) to 20,
         Regex("\\b(noon)\\b", RegexOption.IGNORE_CASE) to 12,
         Regex("\\b(midnight)\\b", RegexOption.IGNORE_CASE) to 0,
         Regex("\\b(eod|end of day)\\b", RegexOption.IGNORE_CASE) to 17
@@ -381,7 +381,12 @@ object LocalTaskParser {
             extractions.add("priority")
         }
 
-        val cleanedTitle = cleanTitle(working)
+        val baseTitle = cleanTitle(working)
+        val cleanedTitle = if (baseTitle == "New Task" && original.isNotBlank()) {
+            original.trim().replaceFirstChar { it.uppercase() }
+        } else {
+            baseTitle
+        }
         val dueDateStr = dueDateTime?.toLocalDate()?.format(DateTimeFormatter.ISO_LOCAL_DATE)
         val dueTimeStr = if (explicitTime) {
             dueTime?.let { DateTimeFormatter.ofPattern("HH:mm").format(it) }

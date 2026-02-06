@@ -2,6 +2,7 @@ package com.cosmicocean.e2e
 
 import android.content.Context
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -39,17 +40,15 @@ class WallpaperConsentE2ETest {
         composeTestRule.waitForIdle()
 
         val prefs = WallpaperPreferencesManager(context)
-        if (BuildConfig.LOCAL_ONLY) {
-            // Local-only flow auto-enables wallpaper updates without consent dialog
-            composeTestRule.onNodeWithText("Cosmic Wallpaper Setup").assertDoesNotExist()
-            assert(prefs.isWallpaperEnabled())
-        } else {
-            // Online flow expects consent dialog
-            composeTestRule.onNodeWithText("Cosmic Wallpaper Setup").assertExists()
+        // Consent dialog should appear on first launch (local-first, optional sync)
+        composeTestRule.onNodeWithText("Cosmic Wallpaper Setup").assertExists()
 
-            // Test "Not Now" (Disable Sync)
-            composeTestRule.onNodeWithText("Not Now").performClick()
-            composeTestRule.onNodeWithText("Cosmic Wallpaper Setup").assertDoesNotExist()
+        // Test "Not Now" (Disable Sync)
+        composeTestRule.onNodeWithText("Not Now").performClick()
+        composeTestRule.waitUntil(5_000) {
+            composeTestRule.onAllNodesWithText("Cosmic Wallpaper Setup")
+                .fetchSemanticsNodes()
+                .isEmpty()
         }
     }
 }

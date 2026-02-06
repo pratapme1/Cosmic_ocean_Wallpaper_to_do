@@ -49,7 +49,7 @@ import kotlin.math.sin
  * - Particle systems (stars/bubbles)
  * - Task display with "RIGHT NOW" header
  * - Achievement display
- * - Dark overlay for custom backgrounds
+ * - Custom backgrounds preserved (no overlays/effects)
  * - Auto font contrast adjustment
  * - WCAG-compliant text rendering
  */
@@ -353,7 +353,11 @@ object LocalWallpaperGenerator {
         )
     }
 
-    private fun resolveTextReadability(isCustom: Boolean, backgroundLuminance: Float? = null): TextReadability {
+    private fun resolveTextReadability(
+        isCustom: Boolean,
+        backgroundLuminance: Float? = null,
+        highContrast: Boolean = false
+    ): TextReadability {
         val luminance = backgroundLuminance ?: 0.5f
         val shadowAlpha = if (isCustom) {
             when {
@@ -365,10 +369,12 @@ object LocalWallpaperGenerator {
         } else {
             110
         }
-        val radius = if (isCustom && luminance >= 0.6f) 6f else 4f
+        val baseRadius = if (isCustom && luminance >= 0.6f) 6f else 4f
+        val finalAlpha = if (highContrast && isCustom) maxOf(shadowAlpha, 200) else shadowAlpha
+        val finalRadius = if (highContrast && isCustom) maxOf(baseRadius, 7f) else baseRadius
         return TextReadability(
-            shadowColor = Color.argb(shadowAlpha, 0, 0, 0),
-            shadowRadius = radius,
+            shadowColor = Color.argb(finalAlpha, 0, 0, 0),
+            shadowRadius = finalRadius,
             shadowDx = 2f,
             shadowDy = 2f
         )
@@ -513,7 +519,10 @@ object LocalWallpaperGenerator {
             shouldShowAmbientPulse(allTasks, now)
         val showCelebration = recentCompletionAt != null &&
             now - recentCompletionAt < COMPLETION_CELEBRATION_WINDOW_MS
-        val readability = resolveTextReadability(isCustom = false)
+        val readability = resolveTextReadability(
+            isCustom = false,
+            highContrast = environmentPreferences?.highContrastTextEnabled == true
+        )
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -602,7 +611,7 @@ object LocalWallpaperGenerator {
     /**
      * Generate wallpaper bitmap with custom background image
      * Shows top 3 tasks with +more indicator
-     * Includes dark overlay for text readability
+     * Custom mode preserves the uploaded image (no overlays/effects)
      */
     fun generateWithCustomBackground(
         tasks: List<StarEntity>,
@@ -626,10 +635,6 @@ object LocalWallpaperGenerator {
         val contextBadge = buildContextBadge(environmentPreferences)
         val highlightIndex = findContextHighlightIndex(sortedTasks, environmentPreferences)
         val shortSuggestion = findShortSuggestion(allTasks, environmentPreferences)
-        val showAmbientPulse = environmentPreferences?.ambientRemindersEnabled == true &&
-            shouldShowAmbientPulse(allTasks, now)
-        val showCelebration = recentCompletionAt != null &&
-            now - recentCompletionAt < COMPLETION_CELEBRATION_WINDOW_MS
         var backgroundLuminance = 0.5f
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -670,42 +675,14 @@ object LocalWallpaperGenerator {
 
         // Use high contrast colors for custom backgrounds
         val colors = getCustomBackgroundColors(urgency)
-        val readability = resolveTextReadability(isCustom = true, backgroundLuminance)
+        val readability = resolveTextReadability(
+            isCustom = true,
+            backgroundLuminance = backgroundLuminance,
+            highContrast = environmentPreferences?.highContrastTextEnabled == true
+        )
 
-        // Layer 2.5: Environment overlays on top of custom background
-        if (environmentPreferences?.environmentEnabled != false) {
-            drawEnvironmentLayers(
-                canvas = canvas,
-                width = width,
-                height = height,
-                themeColors = colors,
-                environmentPreferences = environmentPreferences,
-                weatherTasks = weatherTasks ?: tasks,
-                isCustomBackground = true
-            )
-        }
-
-        if (environmentPreferences?.environmentEnabled != false && environmentPreferences?.overdueHeatmapEnabled == true) {
-            val metrics = calculateProductivityMetrics(allTasks, now)
-            drawOverdueHeatmap(canvas, metrics, width, height)
-        }
-
-        if (showAmbientPulse) {
-            drawAmbientPulse(canvas, width, height, colors, now)
-        }
-
-        if (focusEnabled) {
-            drawFocusOverlay(canvas, width, height)
-        }
-
-        if (showCelebration) {
-            drawCompletionBurst(canvas, width, height, colors, now)
-        }
-
-        drawCustomReadabilityOverlay(canvas, width, height, backgroundLuminance)
-
-        // Layer 2.75: Transition gradient (scene → task zone)
-        drawTransitionGradient(canvas, colors, width, height)
+        // NOTE: Custom wallpaper mode intentionally skips all environment overlays,
+        // heatmaps, pulses, and transition gradients to preserve the uploaded image.
 
         // Layer 3: Achievement panel (if any)
         val achievementReservedSpace = if (achievementCount > 0 || streakDays > 0) {
@@ -2612,39 +2589,39 @@ object LocalWallpaperGenerator {
         val centerY = layout.layoutZones.task.centerY
         val typography = layout.typography
 
-        // Draw checkmark circle
-        val circleRadius = width * 0.12f
-        val circlePaint = Paint().apply {
+        // Draw orbit ring + pulse dot (calm, cosmic)
+        val orbitRadius = width * 0.11f
+        val ringPaint = Paint().apply {
             isAntiAlias = true
             color = colors.taskCircle
-            alpha = 180
+            alpha = 170
+            style = Paint.Style.STROKE
+            strokeWidth = orbitRadius * 0.12f
+        }
+        canvas.drawCircle(centerX, centerY, orbitRadius, ringPaint)
+
+        val glowPaint = Paint().apply {
+            isAntiAlias = true
+            color = colors.taskCircle
+            alpha = 90
             style = Paint.Style.FILL
         }
-        canvas.drawCircle(centerX, centerY, circleRadius, circlePaint)
+        canvas.drawCircle(centerX, centerY, orbitRadius * 0.55f, glowPaint)
 
-        // Draw checkmark
-        val checkPaint = Paint().apply {
+        val seconds = (System.currentTimeMillis() / 1000L) % 360L
+        val angle = Math.toRadians(seconds.toDouble())
+        val dotRadius = orbitRadius * 0.14f
+        val dotX = centerX + kotlin.math.cos(angle).toFloat() * orbitRadius
+        val dotY = centerY + kotlin.math.sin(angle).toFloat() * orbitRadius
+        val dotPaint = Paint().apply {
             isAntiAlias = true
             color = Color.WHITE
-            style = Paint.Style.STROKE
-            strokeWidth = circleRadius * 0.15f
-            strokeCap = Paint.Cap.ROUND
-            strokeJoin = Paint.Join.ROUND
+            alpha = 210
+            style = Paint.Style.FILL
         }
+        canvas.drawCircle(dotX, dotY, dotRadius, dotPaint)
 
-        val checkSize = circleRadius * 0.5f
-        canvas.drawLine(
-            centerX - checkSize * 0.5f, centerY,
-            centerX - checkSize * 0.1f, centerY + checkSize * 0.4f,
-            checkPaint
-        )
-        canvas.drawLine(
-            centerX - checkSize * 0.1f, centerY + checkSize * 0.4f,
-            centerX + checkSize * 0.5f, centerY - checkSize * 0.3f,
-            checkPaint
-        )
-
-        // "All clear ✨" text with glow effect
+        // "Calm orbit" text with glow effect
         val messagePaint = Paint().apply {
             isAntiAlias = true
             color = colors.titleColor
@@ -2655,9 +2632,9 @@ object LocalWallpaperGenerator {
         }
 
         canvas.drawText(
-            "All clear ✨",
+            "Calm orbit",
             centerX,
-            centerY + circleRadius + layout.margins.vertical + typography.emptyTitle,
+            centerY + orbitRadius + layout.margins.vertical + typography.emptyTitle,
             messagePaint
         )
 
@@ -2672,7 +2649,7 @@ object LocalWallpaperGenerator {
         canvas.drawText(
             "Rest. You earned it.",
             centerX,
-            centerY + circleRadius + layout.margins.vertical + typography.emptyTitle + typography.emptySubtitle + (layout.margins.vertical * 0.5f),
+            centerY + orbitRadius + layout.margins.vertical + typography.emptyTitle + typography.emptySubtitle + (layout.margins.vertical * 0.5f),
             subtitlePaint
         )
     }

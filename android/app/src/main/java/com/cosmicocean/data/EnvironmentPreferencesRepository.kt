@@ -61,7 +61,9 @@ class EnvironmentPreferencesRepository(private val context: Context) {
         private val HAPTICS_RATE_LIMIT = intPreferencesKey("haptics_rate_limit_minutes")
         private val OVERDUE_HEATMAP_ENABLED = booleanPreferencesKey("overdue_heatmap_enabled")
         private val AMBIENT_REMINDERS_ENABLED = booleanPreferencesKey("ambient_reminders_enabled")
+        private val HIGH_CONTRAST_TEXT_ENABLED = booleanPreferencesKey("high_contrast_text_enabled")
         private val TUTORIAL_SEEN = booleanPreferencesKey("tutorial_seen")
+        private val TUTORIAL_STEP = intPreferencesKey("tutorial_step")
     }
 
     /**
@@ -109,7 +111,9 @@ class EnvironmentPreferencesRepository(private val context: Context) {
             hapticsRateLimitMinutes = preferences[HAPTICS_RATE_LIMIT] ?: 30,
             overdueHeatmapEnabled = preferences[OVERDUE_HEATMAP_ENABLED] ?: false,
             ambientRemindersEnabled = preferences[AMBIENT_REMINDERS_ENABLED] ?: false,
-            tutorialSeen = preferences[TUTORIAL_SEEN] ?: false
+            highContrastTextEnabled = preferences[HIGH_CONTRAST_TEXT_ENABLED] ?: false,
+            tutorialSeen = preferences[TUTORIAL_SEEN] ?: false,
+            tutorialStep = preferences[TUTORIAL_STEP] ?: 0
         )
     }
 
@@ -260,9 +264,21 @@ class EnvironmentPreferencesRepository(private val context: Context) {
         }
     }
 
+    suspend fun setHighContrastTextEnabled(enabled: Boolean) {
+        context.environmentDataStore.edit { preferences ->
+            preferences[HIGH_CONTRAST_TEXT_ENABLED] = enabled
+        }
+    }
+
     suspend fun setTutorialSeen(seen: Boolean) {
         context.environmentDataStore.edit { preferences ->
             preferences[TUTORIAL_SEEN] = seen
+        }
+    }
+
+    suspend fun setTutorialStep(step: Int) {
+        context.environmentDataStore.edit { preferences ->
+            preferences[TUTORIAL_STEP] = step
         }
     }
 
@@ -292,7 +308,9 @@ class EnvironmentPreferencesRepository(private val context: Context) {
             preferences[HAPTICS_RATE_LIMIT] = prefs.hapticsRateLimitMinutes
             preferences[OVERDUE_HEATMAP_ENABLED] = prefs.overdueHeatmapEnabled
             preferences[AMBIENT_REMINDERS_ENABLED] = prefs.ambientRemindersEnabled
+            preferences[HIGH_CONTRAST_TEXT_ENABLED] = prefs.highContrastTextEnabled
             preferences[TUTORIAL_SEEN] = prefs.tutorialSeen
+            preferences[TUTORIAL_STEP] = prefs.tutorialStep
         }
     }
 
@@ -330,7 +348,9 @@ class EnvironmentPreferencesRepository(private val context: Context) {
             "haptics_rate_limit_minutes" to prefs.hapticsRateLimitMinutes,
             "overdue_heatmap_enabled" to prefs.overdueHeatmapEnabled,
             "ambient_reminders_enabled" to prefs.ambientRemindersEnabled,
-            "tutorial_seen" to prefs.tutorialSeen
+            "high_contrast_text_enabled" to prefs.highContrastTextEnabled,
+            "tutorial_seen" to prefs.tutorialSeen,
+            "tutorial_step" to prefs.tutorialStep
         )
     }
 }

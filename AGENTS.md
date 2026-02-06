@@ -17,6 +17,7 @@
 - 2026-02-06: Deep e2e suite expansion + double run completed (screenshots saved; no skips after edit/focus stabilization).
 - 2026-02-06: Verified no-skip e2e runs with screenshot review (qa-runs/2026-02-06-e2e-run2, qa-runs/2026-02-06-e2e-run3).
 - 2026-02-06: Lock screen wallpaper CRUD verification + full e2e run (screenshots saved, qa-runs/2026-02-06-e2e-run4).
+- 2026-02-06: Custom wallpaper overlay removal + action-based tutorial + recurring/subtask UX + consent flow fix (unit + UI tests, screenshots saved, qa-runs/2026-02-06-e2e-full-run6).
 
 ## Release Discipline
 - Every release APK build must follow this order: update `CHANGELOG.md` → commit/push → rebuild APK named from changelog version.

@@ -209,7 +209,10 @@ class TaskRepository(
                 "priority" to star.urgency,
                 "x" to star.particle.x,
                 "y" to star.particle.y,
-                "due_date" to star.dueDate
+                "due_date" to star.dueDate,
+                "is_recurring" to star.isRecurring,
+                "echo_interval" to (star.echoInterval?.name ?: ""),
+                "is_subtask" to star.isSubtask
             )
         }
         

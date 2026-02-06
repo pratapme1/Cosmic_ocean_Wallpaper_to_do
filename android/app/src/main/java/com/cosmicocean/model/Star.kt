@@ -17,9 +17,9 @@ class Star(
     var urgency: Int, // 1, 2, 3
     var dueDate: Long?, // Timestamp
     var contextTag: String? = null,
-    val isSubtask: Boolean = false,
-    val isRecurring: Boolean = false,
-    val echoInterval: EchoInterval? = null,
+    var isSubtask: Boolean = false,
+    var isRecurring: Boolean = false,
+    var echoInterval: EchoInterval? = null,
     val createdAt: Long = System.currentTimeMillis(),
     var id: String = "star-${System.currentTimeMillis()}"
 ) {

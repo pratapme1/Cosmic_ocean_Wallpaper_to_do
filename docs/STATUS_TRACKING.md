@@ -26,6 +26,7 @@
 | 2026-02-06 | Codex | Deep e2e suite expansion + 2 full runs (no skips) | Pass | android/app/build/reports/tests/testDebugUnitTest, android/app/build/reports/androidTests/connected, qa-runs/2026-02-06-e2e-run1, qa-runs/2026-02-06-e2e-run2 |
 | 2026-02-06 | Codex | Deep e2e suite expansion + 2 full runs (no skips, verified) | Pass | android/app/build/reports/tests/testDebugUnitTest, android/app/build/reports/androidTests/connected, qa-runs/2026-02-06-e2e-run2, qa-runs/2026-02-06-e2e-run3 |
 | 2026-02-06 | Codex | Lock screen wallpaper CRUD verification + full e2e run | Pass | android/app/build/reports/tests/testDebugUnitTest, android/app/build/reports/androidTests/connected, qa-runs/2026-02-06-e2e-run4 |
+| 2026-02-06 | Codex | Custom wallpaper overlay removal + action-based tutorial + recurring/subtask UX + consent flow fix | Pass | android/app/build/reports/tests/testDebugUnitTest, android/app/build/reports/androidTests/connected, qa-runs/2026-02-06-consent-test, qa-runs/2026-02-06-e2e-full-run6 |
 
 ## Blockers
 | Date | Item | Reason | Owner |

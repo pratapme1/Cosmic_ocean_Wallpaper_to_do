@@ -24,7 +24,9 @@ data class EnvironmentPreferences(
     val hapticsRateLimitMinutes: Int = 30,
     val overdueHeatmapEnabled: Boolean = false,
     val ambientRemindersEnabled: Boolean = false,
-    val tutorialSeen: Boolean = false
+    val highContrastTextEnabled: Boolean = false,
+    val tutorialSeen: Boolean = false,
+    val tutorialStep: Int = 0
 )
 
 enum class TimeOfDayMode(val displayName: String, val description: String) {

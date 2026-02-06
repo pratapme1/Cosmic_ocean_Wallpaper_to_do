@@ -3,8 +3,6 @@ package com.cosmicocean.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -16,43 +14,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private data class TutorialStep(
-    val title: String,
-    val body: String
-)
-
 @Composable
 fun TutorialOverlay(
-    onDone: () -> Unit,
+    title: String,
+    body: String,
+    stepIndex: Int,
+    totalSteps: Int,
     onSkip: () -> Unit
 ) {
-    val steps = remember {
-        listOf(
-            TutorialStep(
-                title = "Dynamic Environments",
-                body = "Your wallpaper reacts to tasks, time, and environment settings."
-            ),
-            TutorialStep(
-                title = "Due Alerts",
-                body = "Enable haptics to feel when tasks are due soon or overdue."
-            ),
-            TutorialStep(
-                title = "Move Stars to Complete",
-                body = "Drag a star into the Sun (right) to complete, or into the Black Hole (left) to archive. Tap a star to edit, double-tap empty space to create."
-            ),
-            TutorialStep(
-                title = "Privacy First",
-                body = "Everything works locally. You control what’s shared."
-            ),
-            TutorialStep(
-                title = "Customize",
-                body = "Upload a custom wallpaper and keep overlays if you want."
-            )
-        )
-    }
-
-    var index by remember { mutableStateOf(0) }
-    val isLast = index == steps.lastIndex
+    val safeIndex = stepIndex.coerceIn(0, totalSteps.coerceAtLeast(1) - 1)
 
     Box(
         modifier = Modifier
@@ -69,44 +39,39 @@ fun TutorialOverlay(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = steps[index].title,
+                text = title,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White
             )
             Text(
-                text = steps[index].body,
+                text = body,
                 fontSize = 14.sp,
                 color = Color.White.copy(alpha = 0.8f)
             )
 
+            Text(
+                text = "Complete this step to continue.",
+                fontSize = 12.sp,
+                color = Color.White.copy(alpha = 0.6f)
+            )
+
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                steps.indices.forEach { i ->
+                (0 until totalSteps).forEach { i ->
                     Box(
                         modifier = Modifier
-                            .size(if (i == index) 10.dp else 8.dp)
+                            .size(if (i == safeIndex) 10.dp else 8.dp)
                             .background(
-                                if (i == index) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.3f),
+                                if (i == safeIndex) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.3f),
                                 shape = RoundedCornerShape(999.dp)
                             )
                     )
                 }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onSkip) {
                     Text("Skip", color = Color.White.copy(alpha = 0.7f))
-                }
-                Button(
-                    onClick = {
-                        if (isLast) onDone() else index += 1
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF))
-                ) {
-                    Text(if (isLast) "Done" else "Next", color = Color.Black)
                 }
             }
         }

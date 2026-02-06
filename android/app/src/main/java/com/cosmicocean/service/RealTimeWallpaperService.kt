@@ -79,6 +79,7 @@ class RealTimeWallpaperService : Service() {
         private const val WAKE_LOCK_TIMEOUT_MS = 30_000L // 30 seconds max
 
         private const val ACTION_FORCE_UPDATE = "com.cosmicocean.service.FORCE_UPDATE"
+        private const val ACTION_FORCE_UPDATE_IMMEDIATE = "com.cosmicocean.service.FORCE_UPDATE_IMMEDIATE"
 
         fun start(context: Context) {
             val intent = Intent(context, RealTimeWallpaperService::class.java)
@@ -98,6 +99,19 @@ class RealTimeWallpaperService : Service() {
             Log.d(TAG, "Requesting immediate wallpaper update")
             val intent = Intent(context, RealTimeWallpaperService::class.java).apply {
                 action = ACTION_FORCE_UPDATE
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+        @JvmStatic
+        fun updateNowImmediate(context: Context) {
+            Log.d(TAG, "Requesting immediate wallpaper update (force)")
+            val intent = Intent(context, RealTimeWallpaperService::class.java).apply {
+                action = ACTION_FORCE_UPDATE_IMMEDIATE
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -132,7 +146,17 @@ class RealTimeWallpaperService : Service() {
         // ALWAYS call startForeground for all intents to satisfy system requirements
         startForeground(NOTIFICATION_ID, createNotification())
 
-        if (intent?.action == ACTION_FORCE_UPDATE) {
+        if (intent?.action == ACTION_FORCE_UPDATE_IMMEDIATE) {
+            Log.d(TAG, "Force immediate update requested")
+            handler.removeCallbacks(updateRunnable)
+            if (wallpaperGenerationInProgress) {
+                pendingUpdate = true
+                currentUpdateJob?.cancel()
+            } else {
+                updateWallpaper()
+            }
+            handler.postDelayed(updateRunnable, UPDATE_INTERVAL_MS)
+        } else if (intent?.action == ACTION_FORCE_UPDATE) {
             Log.d(TAG, "Force update requested - updating immediately")
             // Serialization: Cancel existing tick but schedule a fresh one after this update
             handler.removeCallbacks(updateRunnable)

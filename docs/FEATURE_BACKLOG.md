@@ -134,13 +134,13 @@
 
 ### 11) Custom Wallpaper Overlay Rules
 - **Problem**: Overlays unclear on custom images
-- **Outcome**: Defined behavior for overlays on custom wallpapers
+- **Outcome**: Preserve custom wallpaper pixels with clean task overlay
 - **Est.**: 3–5 days
 - **Acceptance Criteria**:
-  - User toggle for overlays on custom wallpapers
-  - Clear preview of combined result
-  - Persisted per wallpaper
-- **Status**: In progress (2026-02-05 added luminance-aware gradient + vignette overlay; toggle + preview still pending)
+  - No environment overlays on custom wallpapers
+  - Task text remains readable without altering the uploaded image
+  - Behavior is consistent across devices and refreshes
+- **Status**: Done (2026-02-06)
 
 ### 11b) Homepage HUD Clarity & Auto-Hide
 - **Problem**: HUD icons clutter the canvas and hide stars/labels.
@@ -226,6 +226,15 @@
 - **Acceptance Criteria**:
   - Quick batch start flow
 
+### 16b) Recurring Tasks + Subtasks
+- **Outcome**: Allow recurring schedules and subtask metadata
+- **Est.**: 2–3 days
+- **Status**: Done (2026-02-06)
+- **Acceptance Criteria**:
+  - Quick Add and Edit overlays can toggle recurring + subtask
+  - Recurrence interval persisted (daily/weekly/monthly)
+  - Stored in local DB and visible to wallpaper renderer
+
 ## P3 — Retention Drivers
 
 ### 17) Streaks + Recovery
@@ -267,6 +276,7 @@
 ### 21) Accessibility Pass
 - **Outcome**: High contrast + reduced motion
 - **Est.**: 1 week
+- **Status**: In progress (high-contrast wallpaper text toggle added 2026-02-06)
 - **Acceptance Criteria**:
   - Toggles for contrast and motion
 
@@ -281,7 +291,7 @@
 - **Overlapping geofences**: Select the smallest-radius (most specific) location. If ties, use user priority order.
 - **No location permission**: Default to manual context selection; do not show location prompts repeatedly.
 - **Low battery / background limits**: Freeze context to last known; show a subtle “context paused” indicator.
-- **Custom wallpaper**: Overlays default OFF unless user enables; respect per-wallpaper setting.
+- **Custom wallpaper**: No environment overlays; preserve uploaded image and rely on text contrast.
 
 ## UI/UX Design Criteria (Required)
 - **Clarity first**: Critical states (overdue, due soon) must be readable in < 2 seconds.
@@ -386,3 +396,4 @@
 - 2026-02-06: Full e2e instrumentation run completed with screenshots (see `docs/STATUS_TRACKING.md`).
 - 2026-02-06: Deep e2e expansion run completed twice with screenshots; no skips after stabilizing edit/focus flows (see `docs/STATUS_TRACKING.md`).
 - 2026-02-06: Verified no-skip e2e runs with screenshot review (see `docs/STATUS_TRACKING.md`).
+- 2026-02-06: Recurring + subtask UX + consent flow verified with full e2e run (see `qa-runs/2026-02-06-e2e-full-run6`).

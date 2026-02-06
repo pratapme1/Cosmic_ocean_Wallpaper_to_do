@@ -18,7 +18,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -56,6 +55,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import androidx.annotation.VisibleForTesting
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var database: CosmicDatabase
     private lateinit var zoneManager: ZoneManager
     private val editingStarState = mutableStateOf<Star?>(null)
+    private val envRepo by lazy { EnvironmentPreferencesRepository(applicationContext) }
 
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -163,7 +164,7 @@ class MainActivity : ComponentActivity() {
                 var lastTapOffset by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
                 var isInteracting by remember { mutableStateOf(false) }
                 var currentTheme by remember { mutableStateOf(wallpaperPreferences.getTheme()) }
-                var showWallpaperConsent by remember { mutableStateOf(!wallpaperPreferences.hasSetWallpaperPreference()) }
+                var showWallpaperConsent by remember { mutableStateOf(!wallpaperPreferences.hasWallpaperConsent()) }
                 var isUploadingWallpaper by remember { mutableStateOf(false) }
                 var dismissNextTask by remember { mutableStateOf(false) }
                 var dismissShortSuggestion by remember { mutableStateOf(false) }
@@ -172,8 +173,6 @@ class MainActivity : ComponentActivity() {
                 val context = LocalContext.current
                 val contentResolver = context.contentResolver
                 val coroutineScope = rememberCoroutineScope()
-                var showTutorial by rememberSaveable { mutableStateOf(false) }
-                val envRepo = remember { EnvironmentPreferencesRepository(applicationContext) }
                 val envPrefs by envRepo.preferencesFlow.collectAsState(initial = EnvironmentPreferences())
                 var hudVisible by remember { mutableStateOf(true) }
                 var lastInteractionAt by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -219,9 +218,29 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                LaunchedEffect(envPrefs.tutorialSeen) {
-                    showTutorial = !envPrefs.tutorialSeen
+                val tutorialSteps = remember {
+                    listOf(
+                        TutorialStep(
+                            title = "Create a task",
+                            body = "Double-tap empty space or tap + to release your first star."
+                        ),
+                        TutorialStep(
+                            title = "Edit or complete",
+                            body = "Tap a star to edit it, or drag it into the Sun to complete."
+                        ),
+                        TutorialStep(
+                            title = "Refresh wallpaper",
+                            body = "Tap the refresh icon to update your lock screen instantly."
+                        ),
+                        TutorialStep(
+                            title = "Customize",
+                            body = "Upload a custom wallpaper or open settings. Everything stays local unless you enable sync."
+                        )
+                    )
                 }
+                val tutorialTotalSteps = tutorialSteps.size
+                val tutorialStepIndex = envPrefs.tutorialStep.coerceIn(0, tutorialTotalSteps)
+                val showTutorial = !envPrefs.tutorialSeen && tutorialStepIndex < tutorialTotalSteps
 
                 LaunchedEffect(Unit) {
                     com.cosmicocean.ui.components.CelebrationBus.events.collect {
@@ -280,7 +299,8 @@ class MainActivity : ComponentActivity() {
                                 android.util.Log.d("MainActivity", "Wallpaper mode set to CUSTOM, path: ${permanentFile.absolutePath}")
 
                                 // Trigger immediate local wallpaper update
-                                triggerImmediateUpdate()
+                                triggerImmediateUpdate(force = true)
+                                advanceTutorialStep(4)
                                 Toast.makeText(context, "Custom wallpaper applied!", Toast.LENGTH_SHORT).show()
 
                                 // OPTIONAL: Background upload to backend for sync/backup
@@ -317,6 +337,7 @@ class MainActivity : ComponentActivity() {
                             Button(
                                 onClick = {
                                     wallpaperPreferences.setWallpaperEnabled(true)
+                                    wallpaperPreferences.setWallpaperConsent(true)
                                     showWallpaperConsent = false
                                     schedulePeriodicWallpaperUpdates()
                                     Toast.makeText(context, "Cosmic sync enabled!", Toast.LENGTH_SHORT).show()
@@ -329,6 +350,7 @@ class MainActivity : ComponentActivity() {
                             TextButton(
                                 onClick = {
                                     wallpaperPreferences.setWallpaperEnabled(false)
+                                    wallpaperPreferences.setWallpaperConsent(true)
                                     showWallpaperConsent = false
                                     Toast.makeText(context, "Manual mode only.", Toast.LENGTH_SHORT).show()
                                 }
@@ -517,6 +539,7 @@ class MainActivity : ComponentActivity() {
                                             registerInteraction()
                                             android.widget.Toast.makeText(this@MainActivity, "Refreshing wallpaper...", android.widget.Toast.LENGTH_SHORT).show()
                                             triggerImmediateUpdate()
+                                            advanceTutorialStep(3)
                                         },
                                         modifier = Modifier.background(Color.Black.copy(0.4f), shape = MaterialTheme.shapes.small)
                                     ) {
@@ -536,6 +559,7 @@ class MainActivity : ComponentActivity() {
                                     IconButton(
                                         onClick = {
                                             registerInteraction()
+                                            advanceTutorialStep(4)
                                             showSettings = true
                                         },
                                         modifier = Modifier.background(Color.Black.copy(0.4f), shape = MaterialTheme.shapes.small)
@@ -640,7 +664,9 @@ class MainActivity : ComponentActivity() {
                         if (showQuickAdd) {
                             QuickAddOverlay(
                                 onDismiss = { showQuickAdd = false },
-                                onSave = { title -> createNewStar(title, lastTapOffset) }
+                                onSave = { title, recurringOverride, echoIntervalOverride, isSubtask ->
+                                    createNewStar(title, lastTapOffset, recurringOverride, echoIntervalOverride, isSubtask)
+                                }
                             )
                         }
 
@@ -648,8 +674,8 @@ class MainActivity : ComponentActivity() {
                             EditStarOverlay(
                                 star = editingStar!!,
                                 onDismiss = { editingStar = null },
-                                onSave = { title, urgency, dueInMinutes ->
-                                    updateStar(editingStar!!, title, urgency, dueInMinutes)
+                                onSave = { title, urgency, dueInMinutes, isRecurring, echoInterval, isSubtask ->
+                                    updateStar(editingStar!!, title, urgency, dueInMinutes, isRecurring, echoInterval, isSubtask)
                                     editingStar = null
                                 },
                                 onStartFocus = { minutes ->
@@ -775,13 +801,12 @@ class MainActivity : ComponentActivity() {
 
                         if (canShowTutorial) {
                             TutorialOverlay(
-                                onDone = {
-                                    showTutorial = false
-                                    coroutineScope.launch { envRepo.setTutorialSeen(true) }
-                                },
+                                title = tutorialSteps[tutorialStepIndex].title,
+                                body = tutorialSteps[tutorialStepIndex].body,
+                                stepIndex = tutorialStepIndex,
+                                totalSteps = tutorialTotalSteps,
                                 onSkip = {
-                                    showTutorial = false
-                                    coroutineScope.launch { envRepo.setTutorialSeen(true) }
+                                    completeTutorial()
                                 }
                             )
                         }
@@ -795,6 +820,11 @@ class MainActivity : ComponentActivity() {
         val title: String,
         val startedAt: Long,
         val durationMinutes: Int
+    )
+
+    private data class TutorialStep(
+        val title: String,
+        val body: String
     )
 
     private data class ShortSuggestion(
@@ -811,6 +841,26 @@ class MainActivity : ComponentActivity() {
         val minutes = (remaining / 60000).toInt()
         val seconds = ((remaining % 60000) / 1000).toInt()
         return "${minutes}m ${seconds}s"
+    }
+
+    private fun advanceTutorialStep(targetStep: Int) {
+        lifecycleScope.launch {
+            val prefs = envRepo.preferencesFlow.first()
+            if (prefs.tutorialSeen) return@launch
+            val expectedNext = prefs.tutorialStep + 1
+            if (targetStep != expectedNext) return@launch
+            envRepo.setTutorialStep(targetStep)
+            if (targetStep >= 4) {
+                envRepo.setTutorialSeen(true)
+            }
+        }
+    }
+
+    private fun completeTutorial() {
+        lifecycleScope.launch {
+            envRepo.setTutorialStep(4)
+            envRepo.setTutorialSeen(true)
+        }
     }
 
     private fun findShortSuggestion(
@@ -859,6 +909,15 @@ class MainActivity : ComponentActivity() {
         return lower.contains(token) || lower.contains(contextValue.lowercase())
     }
 
+    private fun parseEchoInterval(pattern: String?): com.cosmicocean.model.EchoInterval? {
+        return when (pattern?.lowercase()) {
+            "daily" -> com.cosmicocean.model.EchoInterval.DAILY
+            "weekly" -> com.cosmicocean.model.EchoInterval.WEEKLY
+            "monthly" -> com.cosmicocean.model.EchoInterval.MONTHLY
+            else -> null
+        }
+    }
+
     private fun handleStarAction(star: Star, type: String) {
         lifecycleScope.launch {
             when (type) {
@@ -872,6 +931,9 @@ class MainActivity : ComponentActivity() {
                     viewModel.deleteStar(star)
                     Toast.makeText(this@MainActivity, "Star Exploded!", Toast.LENGTH_SHORT).show()
                 }
+            }
+            if (type == "complete" || type == "archive") {
+                advanceTutorialStep(2)
             }
             triggerImmediateUpdate()
         }
@@ -918,10 +980,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun updateStar(star: Star, title: String, urgency: Int, dueInMinutes: Float) {
+    private fun updateStar(
+        star: Star,
+        title: String,
+        urgency: Int,
+        dueInMinutes: Float,
+        isRecurring: Boolean,
+        echoInterval: com.cosmicocean.model.EchoInterval?,
+        isSubtask: Boolean
+    ) {
         star.title = title
         star.urgency = urgency
         star.dueIn = dueInMinutes
+        star.isRecurring = isRecurring
+        star.echoInterval = if (isRecurring) echoInterval else null
+        star.isSubtask = isSubtask
 
         // Update due date timestamp
         star.dueDate = System.currentTimeMillis() + (dueInMinutes * 60 * 1000).toLong()
@@ -929,6 +1002,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             try {
                 viewModel.updateStar(star)
+                advanceTutorialStep(2)
                 triggerImmediateUpdate()
             } catch (e: Exception) {}
         }
@@ -953,7 +1027,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun createNewStar(title: String, offset: androidx.compose.ui.geometry.Offset?) {
+    private fun createNewStar(
+        title: String,
+        offset: androidx.compose.ui.geometry.Offset?,
+        recurringOverride: Boolean? = null,
+        echoIntervalOverride: com.cosmicocean.model.EchoInterval? = null,
+        isSubtask: Boolean = false
+    ) {
         val random = java.util.Random()
 
         // Get screen dimensions for better placement
@@ -980,9 +1060,26 @@ class MainActivity : ComponentActivity() {
                 ?.removePrefix("@")
                 ?.trim()
                 ?.ifBlank { null }
+            val parsedEchoInterval = parseEchoInterval(parsed.recurringPattern)
+            val resolvedRecurring = recurringOverride ?: parsed.isRecurring
+            val resolvedEchoInterval = if (resolvedRecurring) {
+                echoIntervalOverride ?: parsedEchoInterval
+            } else {
+                null
+            }
 
             // TaskRepository.addStar() handles both local DB insert AND backend sync
-            val star = Star(x, y, cleanedTitle, urgency, dueDateMs, contextTag = contextTag)
+            val star = Star(
+                x = x,
+                y = y,
+                title = cleanedTitle,
+                urgency = urgency,
+                dueDate = dueDateMs,
+                contextTag = contextTag,
+                isSubtask = isSubtask,
+                isRecurring = resolvedRecurring,
+                echoInterval = resolvedEchoInterval
+            )
             val adjusted = zoneManager.clampToSafeArea(
                 x = star.particle.x,
                 y = star.particle.y,
@@ -995,6 +1092,7 @@ class MainActivity : ComponentActivity() {
             viewModel.addStar(star)
             // No need for local delay here anymore, as RealTimeWallpaperService.ACTION_FORCE_UPDATE 
             // now includes a 500ms delay internally for consistency.
+            advanceTutorialStep(1)
             triggerImmediateUpdate()
         }
     }
@@ -1050,7 +1148,7 @@ class MainActivity : ComponentActivity() {
             ?: runBlocking(Dispatchers.IO) { database.starDao().getByLocalId(starId)?.toStar() }
             ?: return
         runOnUiThread {
-            updateStar(star, title, urgency, dueInMinutes)
+            updateStar(star, title, urgency, dueInMinutes, star.isRecurring, star.echoInterval, star.isSubtask)
         }
     }
 
@@ -1146,8 +1244,12 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    private fun triggerImmediateUpdate() {
-        // 1. Fast path: Foreground Service (serialized with 500ms delay)
+    private fun triggerImmediateUpdate(force: Boolean = false) {
+        if (force) {
+            RealTimeWallpaperService.updateNowImmediate(this)
+            return
+        }
+        // 1. Fast path: Foreground Service
         RealTimeWallpaperService.updateNow(this)
 
         // 2. Backup path: WorkManager

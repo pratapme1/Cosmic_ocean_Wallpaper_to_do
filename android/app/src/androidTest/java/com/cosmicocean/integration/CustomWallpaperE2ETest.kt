@@ -311,7 +311,10 @@ class CustomWallpaperE2ETest {
             customBackground = customBackground,
             width = width,
             height = height,
-            theme = WallpaperTheme.COSMIC
+            theme = WallpaperTheme.COSMIC,
+            environmentPreferences = com.cosmicocean.ui.state.EnvironmentPreferences(
+                highContrastTextEnabled = true
+            )
         )
 
         val output = writeScreenshot(result, "custom_wallpaper_high_contrast.png")

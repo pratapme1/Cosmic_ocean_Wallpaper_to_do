@@ -3,7 +3,6 @@ package com.cosmicocean.e2e
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnySibling
-import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -65,13 +64,47 @@ class UiFlowsE2ETest {
         ensureHudVisible()
         composeTestRule.onNodeWithContentDescription("Add Task").performClick()
         composeTestRule.onNodeWithText("New Cosmic Task").assertExists()
-        composeTestRule.onNode(hasSetTextAction()).performTextInput(title)
+        composeTestRule.onNodeWithTag("quick_add_title", useUnmergedTree = true)
+            .performTextInput(title)
         composeTestRule.onNodeWithText("Release Star").performClick()
 
         val db = database()
         composeTestRule.waitUntil(5_000) {
             runBlocking {
                 db.starDao().getAllActiveStarsSync().any { it.title == title }
+            }
+        }
+    }
+
+    @Test
+    fun quickAddRecurringAndSubtaskPersist() {
+        val title = "Recurring Quick Add ${UUID.randomUUID()}"
+
+        ensureHudVisible()
+        composeTestRule.onNodeWithContentDescription("Add Task").performClick()
+        composeTestRule.onNodeWithText("New Cosmic Task").assertExists()
+
+        composeTestRule.onNodeWithTag("quick_add_recurring_toggle", useUnmergedTree = true)
+            .performClick()
+        composeTestRule.onNodeWithTag("quick_add_recurrence_field", useUnmergedTree = true)
+            .performClick()
+        composeTestRule.onNodeWithText("Weekly", substring = true).performClick()
+        composeTestRule.onNodeWithTag("quick_add_subtask_toggle", useUnmergedTree = true)
+            .performClick()
+
+        composeTestRule.onNodeWithTag("quick_add_title", useUnmergedTree = true)
+            .performTextInput(title)
+        composeTestRule.onNodeWithText("Release Star").performClick()
+
+        val db = database()
+        composeTestRule.waitUntil(6_000) {
+            runBlocking {
+                db.starDao().getAllActiveStarsSync().any {
+                    it.title == title &&
+                        it.isRecurring &&
+                        it.echoInterval == "WEEKLY" &&
+                        it.isSubtask
+                }
             }
         }
     }
@@ -500,7 +533,9 @@ class UiFlowsE2ETest {
             email = testEmail
         )
 
-        WallpaperPreferencesManager(context).setWallpaperEnabled(false)
+        val wallpaperPrefs = WallpaperPreferencesManager(context)
+        wallpaperPrefs.setWallpaperEnabled(false)
+        wallpaperPrefs.setWallpaperConsent(true)
         runBlocking {
             withContext(Dispatchers.IO) {
                 PrivacyPreferencesRepository(context).resetToDefaults()

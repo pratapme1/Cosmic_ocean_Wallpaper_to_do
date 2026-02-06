@@ -21,16 +21,20 @@
 - **Wallpaper Scenario Screenshots**: Added instrumentation coverage for multi-size, empty-state, and long/RTL text scenarios.
 - **Homepage Zone Labels**: “Archive” and “Complete” labels now render on the canvas for always-on guidance.
 - **Settings Close Buttons**: Privacy and Environment settings now include a close button for quick return.
+- **Recurring + Subtask Toggles**: Quick Add and Edit overlays now support recurring tasks and subtasks with interval selection.
+- **High-Contrast Text Mode**: Optional higher-contrast wallpaper text rendering for custom uploads.
 
 ### Changed
 - **Wallpaper Typography System**: Unified header, badge, task title, and meta sizing with consistent spacing across device sizes.
-- **Custom Wallpaper Readability Overlay**: Replaced flat dark overlay with gradient + vignette tuned by background luminance.
+- **Custom Wallpaper Rendering**: Uploaded wallpapers now render without environment overlays to preserve the original image.
 - **Generated Wallpaper Texture**: Added a subtle noise layer to reduce banding and improve depth.
 - **RTL/Long Text Rendering**: Wallpaper task layout now uses bidi wrapping and higher-quality line breaks.
 - **Homepage HUD Visibility**: Controls auto-hide after idle and return on touch to reduce clutter.
 - **Custom Wallpaper Scaling**: Added safe-copy handling to avoid recycled bitmap crashes during custom wallpaper generation.
 - **Environment Defaults**: Environment effects now default to off (weather/particles/heatmap/ambient reminders disabled until enabled).
 - **Settings Cleanup**: Removed unused AI/LLM settings screen that had no user entrypoint.
+- **Tutorial Flow**: Onboarding now advances only after key actions (create/edit/refresh/customize).
+- **All-Clear Visual**: Replaced blue checkmark with a calm orbit indicator.
 
 ### Fixed
 - **Badge Truncation**: Long system badges now ellipsize cleanly without clipping or overlap.
@@ -40,11 +44,12 @@
 - **UI Test Stability**: Dismiss System UI ANR dialog before capturing instrumentation screenshots.
 - **Sync Prompt Visibility**: Tutorial no longer blocks the wallpaper sync consent dialog.
 - **Edit Overlay Testability**: Added stable test tags and debug hooks to reliably exercise edit flows in instrumentation.
+- **Local Parser Edge Cases**: “Tomorrow evening” and related phrases now keep the intended title.
+- **Immediate Custom Wallpaper Updates**: Force refresh path eliminates long delays after consecutive wallpaper changes.
 
 ### Testing
-- **Full E2E Suite**: Ran full instrumentation suite with screenshots captured for HUD and settings flows.
-- **Deep E2E Expansion**: Added broader UI and wallpaper scenario coverage; ran the suite twice with evidence.
-- **Full E2E Suite (No Skips)**: Ran the full instrumentation suite twice with screenshots captured for HUD/settings/focus/close flows.
+- **Unit Tests**: `./gradlew :app:testDebugUnitTest`
+- **Full E2E Suite**: `./gradlew :app:connectedDebugAndroidTest` with screenshots captured and reviewed.
 - **Lockscreen CRUD Verification**: Captured lock screen wallpaper screenshots and verified bitmap changes after add/edit/complete.
 
 ## [2.7.1] - 2026-02-04 (Parsing Intelligence + UX)

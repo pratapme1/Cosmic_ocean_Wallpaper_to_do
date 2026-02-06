@@ -258,8 +258,12 @@ data class UserPreferencesResponse(
     val overdueHeatmapEnabled: Boolean? = true,
     @SerializedName("ambient_reminders_enabled")
     val ambientRemindersEnabled: Boolean? = true,
+    @SerializedName("high_contrast_text_enabled")
+    val highContrastTextEnabled: Boolean? = false,
     @SerializedName("tutorial_seen")
     val tutorialSeen: Boolean? = false,
+    @SerializedName("tutorial_step")
+    val tutorialStep: Int? = 0,
     // Epic 11: Custom Wallpaper
     @SerializedName("wallpaper_mode")
     val wallpaperMode: String? = "generated", // generated, custom

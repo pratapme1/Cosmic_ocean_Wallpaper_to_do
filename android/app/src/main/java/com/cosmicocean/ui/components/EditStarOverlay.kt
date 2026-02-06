@@ -17,11 +17,17 @@ import com.cosmicocean.model.Star
 fun EditStarOverlay(
     star: Star,
     onDismiss: () -> Unit,
-    onSave: (String, Int, Float) -> Unit,
+    onSave: (String, Int, Float, Boolean, com.cosmicocean.model.EchoInterval?, Boolean) -> Unit,
     onStartFocus: (Int) -> Unit
 ) {
     var title by remember { mutableStateOf(star.title) }
     var urgency by remember { mutableIntStateOf(star.urgency) }
+    var isRecurring by remember { mutableStateOf(star.isRecurring) }
+    var isSubtask by remember { mutableStateOf(star.isSubtask) }
+    var recurrencePattern by remember {
+        mutableStateOf(star.echoInterval ?: com.cosmicocean.model.EchoInterval.DAILY)
+    }
+    var showRecurrenceMenu by remember { mutableStateOf(false) }
 
     // Calculate initial due value and unit from star.dueIn (minutes)
     val initialDue = remember {
@@ -148,6 +154,94 @@ fun EditStarOverlay(
                 color = Color.Gray.copy(alpha = 0.7f)
             )
 
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text("Recurring", color = Color.Gray)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (isRecurring) "Enabled" else "Disabled",
+                    color = Color.White.copy(alpha = 0.8f)
+                )
+                Switch(
+                    checked = isRecurring,
+                    onCheckedChange = { isRecurring = it },
+                    modifier = Modifier.testTag("edit_recurring_toggle"),
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color(0xFF3AA0FF),
+                        checkedTrackColor = Color(0xFF3AA0FF).copy(alpha = 0.5f)
+                    )
+                )
+            }
+
+            if (isRecurring) {
+                Spacer(modifier = Modifier.height(12.dp))
+                ExposedDropdownMenuBox(
+                    expanded = showRecurrenceMenu,
+                    onExpandedChange = { showRecurrenceMenu = it }
+                ) {
+                    OutlinedTextField(
+                        value = recurrencePattern.name.lowercase().replaceFirstChar { it.uppercase() },
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showRecurrenceMenu) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                            .testTag("edit_recurrence_field"),
+                        textStyle = LocalTextStyle.current.copy(color = Color.White),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF3AA0FF),
+                            unfocusedBorderColor = Color.Gray
+                        )
+                    )
+                    ExposedDropdownMenu(
+                        expanded = showRecurrenceMenu,
+                        onDismissRequest = { showRecurrenceMenu = false }
+                    ) {
+                        listOf(
+                            com.cosmicocean.model.EchoInterval.DAILY,
+                            com.cosmicocean.model.EchoInterval.WEEKLY,
+                            com.cosmicocean.model.EchoInterval.MONTHLY
+                        ).forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                                onClick = {
+                                    recurrencePattern = option
+                                    showRecurrenceMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text("Subtask", color = Color.Gray)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (isSubtask) "Enabled" else "Disabled",
+                    color = Color.White.copy(alpha = 0.8f)
+                )
+                Switch(
+                    checked = isSubtask,
+                    onCheckedChange = { isSubtask = it },
+                    modifier = Modifier.testTag("edit_subtask_toggle"),
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color(0xFF3AA0FF),
+                        checkedTrackColor = Color(0xFF3AA0FF).copy(alpha = 0.5f)
+                    )
+                )
+            }
+
             Spacer(modifier = Modifier.height(32.dp))
 
             OutlinedButton(
@@ -169,7 +263,14 @@ fun EditStarOverlay(
                         "days" -> 1440f
                         else -> 1f
                     }
-                    onSave(title, urgency, dueInMinutes)
+                    onSave(
+                        title,
+                        urgency,
+                        dueInMinutes,
+                        isRecurring,
+                        if (isRecurring) recurrencePattern else null,
+                        isSubtask
+                    )
                 },
                 modifier = Modifier
                     .fillMaxWidth()

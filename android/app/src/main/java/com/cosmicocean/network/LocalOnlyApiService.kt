@@ -309,8 +309,14 @@ class LocalOnlyApiService(
         (body["ambient_reminders_enabled"] as? Boolean)?.let {
             environmentRepo.setAmbientRemindersEnabled(it)
         }
+        (body["high_contrast_text_enabled"] as? Boolean)?.let {
+            environmentRepo.setHighContrastTextEnabled(it)
+        }
         (body["tutorial_seen"] as? Boolean)?.let {
             environmentRepo.setTutorialSeen(it)
+        }
+        (body["tutorial_step"] as? Number)?.toInt()?.let {
+            environmentRepo.setTutorialStep(it)
         }
         return Response.success(buildPreferencesResponse())
     }
@@ -415,7 +421,9 @@ class LocalOnlyApiService(
             focusModeEnabled = env.focusModeEnabled,
             overdueHeatmapEnabled = env.overdueHeatmapEnabled,
             ambientRemindersEnabled = env.ambientRemindersEnabled,
+            highContrastTextEnabled = env.highContrastTextEnabled,
             tutorialSeen = env.tutorialSeen,
+            tutorialStep = env.tutorialStep,
             wallpaperMode = env.wallpaperMode,
             customWallpaperPath = wallpaperPrefs.getCustomWallpaperPath()
         )
