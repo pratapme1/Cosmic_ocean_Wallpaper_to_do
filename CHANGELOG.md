@@ -14,6 +14,14 @@
 ### Testing
 - (placeholder)
 
+## [2.7.3] - 2026-02-06 (Device Test Build)
+
+### Changed
+- **Release Packaging**: Version bump for device testing (no functional changes from 2.7.2).
+
+### Testing
+- **Release APK**: `./gradlew :app:assembleRelease`
+
 ## [2.7.2] - 2026-02-06 (Wallpaper QA + Settings UX)
 
 ### Added
