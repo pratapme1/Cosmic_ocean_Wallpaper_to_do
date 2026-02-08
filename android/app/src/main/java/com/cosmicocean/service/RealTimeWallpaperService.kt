@@ -60,8 +60,8 @@ class RealTimeWallpaperService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
     private var isUpdating = false  // Tracks if periodic updates are scheduled
-    private var wallpaperGenerationInProgress = false  // CRITICAL FIX: Tracks actual wallpaper generation
-    private var pendingUpdate = false  // Tracks updates requested while generation is running
+    @Volatile private var wallpaperGenerationInProgress = false  // CRITICAL FIX: Tracks actual wallpaper generation
+    @Volatile private var pendingUpdate = false  // Tracks updates requested while generation is running
     private var screenReceiver: BroadcastReceiver? = null
     private var retryCount = 0
     private var wakeLock: PowerManager.WakeLock? = null
@@ -528,7 +528,7 @@ class RealTimeWallpaperService : Service() {
             bitmap,
             null,
             true,
-            WallpaperManager.FLAG_LOCK
+            WallpaperManager.FLAG_LOCK or WallpaperManager.FLAG_SYSTEM
         )
         Log.d(TAG, "Wallpaper set successfully: ${bitmap.width}x${bitmap.height}")
     }

@@ -145,7 +145,7 @@ class WallpaperUpdateWorker(
                     bitmap,
                     null,
                     true,
-                    WallpaperManager.FLAG_LOCK  // Update LOCK screen only
+                    WallpaperManager.FLAG_LOCK or WallpaperManager.FLAG_SYSTEM  // Update both lock and home screen
                 )
 
                 Log.d(TAG, "✅ Wallpaper set successfully! Size: ${bitmap.width}x${bitmap.height}")
