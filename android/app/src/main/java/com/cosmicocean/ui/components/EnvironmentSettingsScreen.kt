@@ -76,8 +76,6 @@ fun EnvironmentSettingsScreen(
     onHapticsRateLimitChanged: (Int) -> Unit,
     onOverdueHeatmapEnabledChanged: (Boolean) -> Unit,
     onAmbientRemindersEnabledChanged: (Boolean) -> Unit,
-    onHighContrastTextChanged: (Boolean) -> Unit,
-    onUploadWallpaperClick: () -> Unit,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -517,57 +515,6 @@ fun EnvironmentSettingsScreen(
             )
 
             Divider(color = Color.White.copy(alpha = 0.1f))
-
-            // ===== WALLPAPER INTEGRATION SECTION =====
-            EnvironmentSectionHeader(title = "System Integration", icon = "🖼️")
-
-            EnvironmentSettingCard(
-                title = "Live Wallpaper Sync",
-                subtitle = if (preferences.isWallpaperEnabled) "Enabled • Updating every minute" else "Disabled • Manual use only",
-                icon = "⚙️"
-            ) {
-                Switch(
-                    checked = preferences.isWallpaperEnabled,
-                    onCheckedChange = onWallpaperEnabledChanged,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color(0xFF00E5FF),
-                        checkedTrackColor = Color(0xFF00E5FF).copy(alpha = 0.5f)
-                    )
-                )
-            }
-
-            EnvironmentInfoCard(
-                text = if (preferences.isWallpaperEnabled)
-                    "✅ Your system wallpaper is being updated automatically to reflect your cosmic ocean state."
-                else
-                    "❌ Automatic wallpaper updates are disabled. You can still manually refresh from the home screen.",
-                color = if (preferences.isWallpaperEnabled) Color(0xFF1A5F5F) else Color(0xFF5F1A1A)
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            EnvironmentSettingCard(
-                title = "High Contrast Text",
-                subtitle = if (preferences.highContrastTextEnabled) "Enabled • Stronger text contrast" else "Disabled • Standard text rendering",
-                icon = "🔤"
-            ) {
-                Switch(
-                    checked = preferences.highContrastTextEnabled,
-                    onCheckedChange = onHighContrastTextChanged,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color(0xFF00E5FF),
-                        checkedTrackColor = Color(0xFF00E5FF).copy(alpha = 0.5f)
-                    )
-                )
-            }
-
-            EnvironmentInfoCard(
-                text = if (preferences.highContrastTextEnabled)
-                    "Text uses a stronger shadow for readability on custom wallpapers (no image overlay)."
-                else
-                    "Keep your custom wallpaper untouched. Enable if text is hard to read.",
-                color = Color(0xFF1A2438)
-            )
 
             // Footer
             Spacer(modifier = Modifier.height(24.dp))
@@ -1246,10 +1193,6 @@ fun EnvironmentSettingsWrapper(
                     onAmbientRemindersEnabledChanged = { enabled ->
                         viewModel.updatePreference("ambient_reminders_enabled", enabled, context)
                     },
-                    onHighContrastTextChanged = { enabled ->
-                        viewModel.updatePreference("high_contrast_text_enabled", enabled, context)
-                    },
-                    onUploadWallpaperClick = {},
                     onNavigateBack = onNavigateBack
                 )
             }

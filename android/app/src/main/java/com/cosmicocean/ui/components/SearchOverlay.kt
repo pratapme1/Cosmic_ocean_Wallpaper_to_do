@@ -228,6 +228,22 @@ private fun TaskSearchItem(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Subtask badge
+                    if (star.isSubtask) {
+                        Text(
+                            "SUBTASK",
+                            modifier = Modifier
+                                .background(
+                                    Color(0xFF6B6F7A).copy(alpha = 0.4f),
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                            color = Color(0xFFE0E0E0),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
                     // Status badge
                     Surface(
                         color = statusColor.copy(alpha = 0.2f),

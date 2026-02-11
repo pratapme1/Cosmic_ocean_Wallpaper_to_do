@@ -19,7 +19,6 @@ class TaskRepositoryTest {
     private lateinit var context: Context
     private lateinit var syncManager: SyncManager
     private lateinit var repository: TaskRepository
-    private lateinit var wallpaperUpdateLatch: CountDownLatch
 
     @Before
     fun setup() {
@@ -27,19 +26,17 @@ class TaskRepositoryTest {
         apiService = mockk(relaxed = true)
         context = mockk(relaxed = true)
         syncManager = mockk(relaxed = true)
-        wallpaperUpdateLatch = CountDownLatch(1)
 
         repository = TaskRepository(
             starDao = starDao,
             apiService = apiService,
             context = context,
-            syncManager = syncManager,
-            wallpaperUpdater = { wallpaperUpdateLatch.countDown() }
+            syncManager = syncManager
         )
     }
 
     @Test
-    fun `addStar queues create and triggers wallpaper update`() = runTest {
+    fun `addStar queues create`() = runTest {
         val star = Star(x = 100f, y = 100f, title = "Test Star", urgency = 1, dueDate = null)
 
         coEvery { starDao.insertStarWithTransaction(any()) } returns Unit
@@ -49,11 +46,10 @@ class TaskRepositoryTest {
 
         coVerify { starDao.insertStarWithTransaction(match { it.localId == localId && it.syncStatus == "pending" }) }
         coVerify { syncManager.queueCreate(localId, any(), any()) }
-        assertTrue("Wallpaper update should be triggered", wallpaperUpdateLatch.await(1, TimeUnit.SECONDS))
     }
 
     @Test
-    fun `updateStar queues update and triggers wallpaper update`() = runTest {
+    fun `updateStar queues update`() = runTest {
         val star = Star(x = 100f, y = 100f, title = "Test Star", urgency = 1, dueDate = null, id = "local-1")
 
         coEvery { starDao.insertStarWithTransaction(any()) } returns Unit
@@ -63,11 +59,10 @@ class TaskRepositoryTest {
 
         coVerify { starDao.insertStarWithTransaction(match { it.localId == "local-1" && it.syncStatus == "pending" }) }
         coVerify { syncManager.queueUpdate("local-1", any()) }
-        assertTrue("Wallpaper update should be triggered", wallpaperUpdateLatch.await(1, TimeUnit.SECONDS))
     }
 
     @Test
-    fun `deleteStar queues delete and triggers wallpaper update`() = runTest {
+    fun `deleteStar queues delete`() = runTest {
         val star = Star(x = 100f, y = 100f, title = "Test Star", urgency = 1, dueDate = null, id = "local-1")
 
         coEvery { starDao.softDelete(any(), any()) } returns Unit
@@ -77,11 +72,10 @@ class TaskRepositoryTest {
 
         coVerify { starDao.softDelete("local-1", any()) }
         coVerify { syncManager.queueDelete("local-1") }
-        assertTrue("Wallpaper update should be triggered", wallpaperUpdateLatch.await(1, TimeUnit.SECONDS))
     }
 
     @Test
-    fun `clearAllTasks queues clear and triggers wallpaper update`() = runTest {
+    fun `clearAllTasks queues clear`() = runTest {
         coEvery { starDao.deleteAllStars() } returns Unit
         coEvery { syncManager.queueClearAll() } returns Unit
 
@@ -89,6 +83,76 @@ class TaskRepositoryTest {
 
         coVerify { starDao.deleteAllStars() }
         coVerify { syncManager.queueClearAll() }
-        assertTrue("Wallpaper update should be triggered", wallpaperUpdateLatch.await(1, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun `completing parent star does NOT unlink children`() = runTest {
+        val parent = Star(x = 100f, y = 100f, title = "Parent", urgency = 1, dueDate = null, id = "parent-1")
+        
+        val parentEntity = parent.toEntity().copy(localId = "parent-1")
+        
+        // Mark as completed
+        parent.isCompleted = true
+        parent.completedAt = 1000L
+        
+        coEvery { starDao.getByLocalId("parent-1") } returns parentEntity
+        coEvery { starDao.insertStarWithTransaction(any()) } returns Unit
+        coEvery { starDao.getChildrenForParent("parent-1") } returns emptyList() 
+
+        repository.updateStar(parent)
+
+        coVerify { starDao.insertStarWithTransaction(match { it.localId == "parent-1" && it.isCompleted }) }
+        coVerify(exactly = 0) { starDao.getChildrenForParent("parent-1") }
+    }
+
+    @Test
+    fun `archiving parent star DOES unlink children`() = runTest {
+        val parent = Star(x = 100f, y = 100f, title = "Parent", urgency = 1, dueDate = null, id = "parent-1")
+        val child = Star(x = 110f, y = 110f, title = "Child", urgency = 1, dueDate = null, id = "child-1", isSubtask = true, parentId = "parent-1")
+        val childEntity = child.toEntity().copy(localId = "child-1")
+
+        val parentEntity = parent.toEntity().copy(localId = "parent-1")
+        
+        // Mark as archived
+        parent.isArchived = true
+        parent.archivedAt = 1000L
+        
+        coEvery { starDao.getByLocalId("parent-1") } returns parentEntity
+        coEvery { starDao.insertStarWithTransaction(any()) } returns Unit
+        coEvery { starDao.getChildrenForParent("parent-1") } returns listOf(childEntity)
+        coEvery { syncManager.queueUpdate(any(), any()) } returns Unit
+
+        repository.updateStar(parent)
+
+        coVerify { starDao.insertStarWithTransaction(match { it.localId == "parent-1" && it.isArchived }) }
+        coVerify { starDao.getChildrenForParent("parent-1") }
+        coVerify { starDao.insertStarWithTransaction(match { it.localId == "child-1" && !it.isSubtask && it.parentId == null }) }
+    }
+
+    private fun Star.toEntity(): StarEntity {
+        return StarEntity(
+            localId = id,
+            serverId = null,
+            title = title,
+            urgency = urgency,
+            dueDate = dueDate,
+            x = particle.x,
+            y = particle.y,
+            createdAt = createdAt,
+            isSubtask = isSubtask,
+            parentId = parentId,
+            isRecurring = isRecurring,
+            echoInterval = echoInterval?.name,
+            isCompleted = isCompleted,
+            completedAt = completedAt,
+            isArchived = isArchived,
+            archivedAt = archivedAt,
+            contextTag = contextTag,
+            syncStatus = "pending",
+            syncVersion = 0,
+            updatedAt = System.currentTimeMillis(),
+            isDeleted = false,
+            serverUpdatedAt = null
+        )
     }
 }

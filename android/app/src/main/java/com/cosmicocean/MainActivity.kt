@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
@@ -49,7 +50,7 @@ import com.cosmicocean.viewmodel.MainViewModelFactory
 import com.cosmicocean.viewmodel.EnvironmentSettingsViewModel
 import com.cosmicocean.data.EnvironmentPreferencesRepository
 import com.cosmicocean.ui.state.EnvironmentPreferences
-import com.cosmicocean.service.RealTimeWallpaperService
+import com.cosmicocean.service.CosmicLiveWallpaperService
 import com.cosmicocean.sync.SyncManager
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -115,12 +116,12 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "$action: $description", Toast.LENGTH_SHORT).show()
         }
 
-        // Schedule periodic wallpaper updates to keep urgency states current
-        schedulePeriodicWallpaperUpdates()
         scheduleDueHaptics()
 
         setContent {
-            var isAuthenticated by remember { mutableStateOf(tokenManager.isLoggedIn()) }
+            var isAuthenticated by remember { 
+                mutableStateOf(tokenManager.isLoggedIn() || BuildConfig.LOCAL_ONLY) 
+            }
             var authError by remember { mutableStateOf<String?>(null) }
 
             if (!isAuthenticated) {
@@ -164,17 +165,24 @@ class MainActivity : ComponentActivity() {
                 var lastTapOffset by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
                 var isInteracting by remember { mutableStateOf(false) }
                 var currentTheme by remember { mutableStateOf(wallpaperPreferences.getTheme()) }
-                var showWallpaperConsent by remember { mutableStateOf(!wallpaperPreferences.hasWallpaperConsent()) }
+                var showWallpaperConsent by remember { mutableStateOf(false) }
+                var showDiscovery by remember { mutableStateOf(false) }
                 var isUploadingWallpaper by remember { mutableStateOf(false) }
                 var dismissNextTask by remember { mutableStateOf(false) }
                 var dismissShortSuggestion by remember { mutableStateOf(false) }
                 var showCelebration by remember { mutableStateOf(false) }
                 var activeFocus by remember { mutableStateOf<FocusSession?>(null) }
                 val context = LocalContext.current
-                val contentResolver = context.contentResolver
                 val coroutineScope = rememberCoroutineScope()
                 val envPrefs by envRepo.preferencesFlow.collectAsState(initial = EnvironmentPreferences())
                 var hudVisible by remember { mutableStateOf(true) }
+
+                LaunchedEffect(isAuthenticated) {
+                    if (isAuthenticated && !envPrefs.tutorialSeen && envPrefs.tutorialStep == 0) {
+                        showDiscovery = true
+                    }
+                }
+
                 var lastInteractionAt by remember { mutableLongStateOf(System.currentTimeMillis()) }
                 val hudAutoHideMs = 2500L
                 val hudZones = remember { mutableStateMapOf<String, ZoneManager.ZoneRect>() }
@@ -234,13 +242,12 @@ class MainActivity : ComponentActivity() {
                         ),
                         TutorialStep(
                             title = "Customize",
-                            body = "Upload a custom wallpaper or open settings. Everything stays local unless you enable sync."
+                            body = "Upload a custom wallpaper or open settings."
                         )
                     )
                 }
                 val tutorialTotalSteps = tutorialSteps.size
-                val tutorialStepIndex = envPrefs.tutorialStep.coerceIn(0, tutorialTotalSteps)
-                val showTutorial = !envPrefs.tutorialSeen && tutorialStepIndex < tutorialTotalSteps
+                val showTutorial = !envPrefs.tutorialSeen && envPrefs.tutorialStep < tutorialTotalSteps
 
                 LaunchedEffect(Unit) {
                     com.cosmicocean.ui.components.CelebrationBus.events.collect {
@@ -257,7 +264,6 @@ class MainActivity : ComponentActivity() {
                         focusRemaining = remaining
                         if (remaining == "Done") {
                             envRepo.setFocusModeEnabled(false)
-                            RealTimeWallpaperService.updateNow(this@MainActivity)
                             activeFocus = null
                             break
                         }
@@ -282,24 +288,26 @@ class MainActivity : ComponentActivity() {
                                     return@launch
                                 }
 
-                                // LOCAL-FIRST FIX: Save to permanent local storage
-                                val permanentFile = File(context.filesDir, "custom_wallpaper.jpg")
-                                android.util.Log.d("MainActivity", "DEBUG: Saving from temp ${tempFile.absolutePath} (size=${tempFile.length()}) to ${permanentFile.absolutePath}")
+                                // LOCAL-FIRST FIX: Save to permanent local storage with unique name to bypass caching
+                                val oldPath = wallpaperPreferences.getCustomWallpaperPath()
+                                if (oldPath != null) {
+                                    try {
+                                        val oldFile = File(oldPath)
+                                        if (oldFile.exists()) oldFile.delete()
+                                    } catch (e: Exception) {
+                                        android.util.Log.w("MainActivity", "Failed to delete old wallpaper", e)
+                                    }
+                                }
 
+                                val newFileName = "custom_wallpaper_${System.currentTimeMillis()}.jpg"
+                                val permanentFile = File(context.filesDir, newFileName)
                                 tempFile.copyTo(permanentFile, overwrite = true)
                                 tempFile.delete() // Clean up temp file
-
-                                android.util.Log.d("MainActivity", "DEBUG: Permanent file saved: exists=${permanentFile.exists()}, size=${permanentFile.length()}, canRead=${permanentFile.canRead()}")
-                                android.util.Log.d("MainActivity", "Custom wallpaper saved to: ${permanentFile.absolutePath}")
 
                                 // LOCAL-FIRST FIX: Set wallpaper mode and path in preferences
                                 wallpaperPreferences.setWallpaperMode(WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM)
                                 wallpaperPreferences.setCustomWallpaperPath(permanentFile.absolutePath)
 
-                                android.util.Log.d("MainActivity", "Wallpaper mode set to CUSTOM, path: ${permanentFile.absolutePath}")
-
-                                // Trigger immediate local wallpaper update
-                                triggerImmediateUpdate(force = true)
                                 advanceTutorialStep(4)
                                 Toast.makeText(context, "Custom wallpaper applied!", Toast.LENGTH_SHORT).show()
 
@@ -308,9 +316,7 @@ class MainActivity : ComponentActivity() {
                                     val requestFile = permanentFile.asRequestBody("image/jpeg".toMediaTypeOrNull())
                                     val body = MultipartBody.Part.createFormData("image", permanentFile.name, requestFile)
                                     NetworkModule.getApi(context).uploadWallpaper(body)
-                                    android.util.Log.d("MainActivity", "Custom wallpaper synced to backend")
                                 } catch (e: Exception) {
-                                    // Backend sync failure is non-critical for local-first
                                     android.util.Log.w("MainActivity", "Backend sync failed (offline mode): ${e.message}")
                                 }
                             } catch (e: Exception) {
@@ -321,45 +327,6 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
-                }
-
-                if (showWallpaperConsent) {
-                    AlertDialog(
-                        onDismissRequest = { /* Don't dismiss without choice */ },
-                        title = { Text("Cosmic Wallpaper Setup", color = Color.White) },
-                        text = {
-                            Text(
-                                "To fully experience the Cosmic Ocean, can we update your system wallpaper every minute? This allows your lock screen to reflect your current cosmic tasks and urgency levels.",
-                                color = Color.LightGray
-                            )
-                        },
-                        confirmButton = {
-                            Button(
-                                onClick = {
-                                    wallpaperPreferences.setWallpaperEnabled(true)
-                                    wallpaperPreferences.setWallpaperConsent(true)
-                                    showWallpaperConsent = false
-                                    schedulePeriodicWallpaperUpdates()
-                                    Toast.makeText(context, "Cosmic sync enabled!", Toast.LENGTH_SHORT).show()
-                                }
-                            ) {
-                                Text("Enable Sync")
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(
-                                onClick = {
-                                    wallpaperPreferences.setWallpaperEnabled(false)
-                                    wallpaperPreferences.setWallpaperConsent(true)
-                                    showWallpaperConsent = false
-                                    Toast.makeText(context, "Manual mode only.", Toast.LENGTH_SHORT).show()
-                                }
-                            ) {
-                                Text("Not Now", color = Color.Gray)
-                            }
-                        },
-                        containerColor = Color(0xFF14141E)
-                    )
                 }
 
                 LaunchedEffect(isInteracting) {
@@ -390,7 +357,7 @@ class MainActivity : ComponentActivity() {
                             },
                             onStarFinalized = { star, action -> handleStarAction(star, action) },
                             onStarSnooze = { star, duration -> snoozeStar(star, duration) },
-                            onStarDragEnd = { star -> saveStarPosition(star) },  // EPIC 9: Save position after drag
+                            onStarDragEnd = { star -> saveStarPosition(star) },
                             audioEngine = audioEngine
                         )
 
@@ -492,7 +459,6 @@ class MainActivity : ComponentActivity() {
                                     onStop = {
                                         coroutineScope.launch {
                                             envRepo.setFocusModeEnabled(false)
-                                            RealTimeWallpaperService.updateNow(this@MainActivity)
                                         }
                                         activeFocus = null
                                     }
@@ -533,25 +499,14 @@ class MainActivity : ComponentActivity() {
                                         .padding(16.dp)
                                         .onGloballyPositioned { coords -> updateHudZone("hudControls", coords) }
                                 ) {
-                                    // Refresh Wallpaper Button
-                                    IconButton(
-                                        onClick = {
-                                            registerInteraction()
-                                            android.widget.Toast.makeText(this@MainActivity, "Refreshing wallpaper...", android.widget.Toast.LENGTH_SHORT).show()
-                                            triggerImmediateUpdate()
-                                            advanceTutorialStep(3)
-                                        },
-                                        modifier = Modifier.background(Color.Black.copy(0.4f), shape = MaterialTheme.shapes.small)
-                                    ) {
-                                        Icon(Icons.Default.Refresh, contentDescription = "Refresh Wallpaper", tint = Color.White)
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
                                     IconButton(
                                         onClick = {
                                             registerInteraction()
                                             showSearch = true
                                         },
-                                        modifier = Modifier.background(Color.Black.copy(0.4f), shape = MaterialTheme.shapes.small)
+                                        modifier = Modifier
+                                            .testTag("search_button")
+                                            .background(Color.Black.copy(0.4f), shape = MaterialTheme.shapes.small)
                                     ) {
                                         Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.White)
                                     }
@@ -562,7 +517,9 @@ class MainActivity : ComponentActivity() {
                                             advanceTutorialStep(4)
                                             showSettings = true
                                         },
-                                        modifier = Modifier.background(Color.Black.copy(0.4f), shape = MaterialTheme.shapes.small)
+                                        modifier = Modifier
+                                            .testTag("settings_button")
+                                            .background(Color.Black.copy(0.4f), shape = MaterialTheme.shapes.small)
                                     ) {
                                         Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White)
                                     }
@@ -570,13 +527,14 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
-                        // NEW: Glassmorphic Wallpaper Upload Button (Bottom Start)
+                        // Customize Button
                         Box(modifier = Modifier.align(Alignment.BottomStart)) {
                             AnimatedVisibility(visible = shouldShowHud, enter = fadeIn(), exit = fadeOut()) {
                                 Box(
                                     modifier = Modifier
                                         .padding(24.dp)
-                                        .padding(bottom = 80.dp) // Align with FAB height
+                                        .padding(bottom = 80.dp)
+                                        .testTag("custom_wallpaper_button")
                                         .onGloballyPositioned { coords -> updateHudZone("customizeButton", coords) }
                                 ) {
                                     Box(
@@ -620,11 +578,11 @@ class MainActivity : ComponentActivity() {
                                                 Icon(
                                                     painter = painterResource(id = R.drawable.ic_upload),
                                                     contentDescription = "Custom Wallpaper",
-                                                    tint = Color(0xFFE040FB), // Cosmic Purple Accent
+                                                    tint = Color(0xFFE040FB),
                                                     modifier = Modifier.size(20.dp)
                                                 )
                                                 Text(
-                                                    "Customize",
+                                                    "Custom Wallpaper",
                                                     color = Color.White.copy(alpha = 0.9f),
                                                     style = MaterialTheme.typography.labelLarge
                                                 )
@@ -645,6 +603,7 @@ class MainActivity : ComponentActivity() {
                                     modifier = Modifier
                                         .padding(24.dp)
                                         .padding(bottom = 80.dp)
+                                        .testTag("add_task_button")
                                         .onGloballyPositioned { coords -> updateHudZone("fab", coords) },
                                     containerColor = Color(0xFF00E5FF)
                                 ) {
@@ -687,7 +646,6 @@ class MainActivity : ComponentActivity() {
                                 onStartFocus = { minutes ->
                                     coroutineScope.launch {
                                         envRepo.setFocusModeEnabled(true)
-                                        RealTimeWallpaperService.updateNow(this@MainActivity)
                                     }
                                     activeFocus = FocusSession(
                                         title = editingStar!!.title,
@@ -712,13 +670,9 @@ class MainActivity : ComponentActivity() {
                                 onDoneForToday = { showSettings = false; markDoneForToday() },
                                 onSnoozeOverdue = { showSnoozeOverdueConfirm = true },
                                 onClearAll = { showSettings = false; clearAllTasks() },
-                                onLogout = {
-                                    showSettings = false
-                                    handleLogout()
-                                    isAuthenticated = false
-                                },
                                 userEmail = tokenManager.getEmail(),
                                 currentTheme = currentTheme,
+                                isCustomWallpaper = wallpaperPreferences.getWallpaperMode() == WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM,
                                 onThemeChange = { newTheme ->
                                     currentTheme = newTheme
                                     changeWallpaperTheme(newTheme)
@@ -734,14 +688,12 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // Epic 10: Privacy Settings Screen
                         if (showPrivacySettings) {
                             PrivacySettingsWrapper(
                                 onNavigateBack = { showPrivacySettings = false }
                             )
                         }
 
-                        // Epic 10 Phase 3: Environment Settings Screen
                         if (showEnvironmentSettings) {
                             EnvironmentSettingsWrapper(
                                 viewModel = viewModel(
@@ -757,13 +709,8 @@ class MainActivity : ComponentActivity() {
                                     }
                                 ),
                                 onNavigateBack = { showEnvironmentSettings = false },
-                                onWallpaperEnabledChanged = { enabled: Boolean ->
-                                    // Re-start or stop service when toggled
-                                    if (enabled) {
-                                        com.cosmicocean.service.RealTimeWallpaperService.start(this@MainActivity)
-                                    } else {
-                                        com.cosmicocean.service.RealTimeWallpaperService.stop(this@MainActivity)
-                                    }
+                                onWallpaperEnabledChanged = { enabled ->
+                                    // Keep sync with local state if needed
                                 }
                             )
                         }
@@ -794,8 +741,9 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        val canShowTutorial = showTutorial &&
+                        val canShowTutorial = !envPrefs.tutorialSeen && envPrefs.tutorialStep < tutorialTotalSteps &&
                             !showWallpaperConsent &&
+                            !showDiscovery &&
                             !showQuickAdd &&
                             !showSearch &&
                             !showSettings &&
@@ -807,12 +755,54 @@ class MainActivity : ComponentActivity() {
 
                         if (canShowTutorial) {
                             TutorialOverlay(
-                                title = tutorialSteps[tutorialStepIndex].title,
-                                body = tutorialSteps[tutorialStepIndex].body,
-                                stepIndex = tutorialStepIndex,
+                                title = tutorialSteps[envPrefs.tutorialStep].title,
+                                body = tutorialSteps[envPrefs.tutorialStep].body,
+                                stepIndex = envPrefs.tutorialStep,
                                 totalSteps = tutorialTotalSteps,
+                                onNext = {
+                                    if (envPrefs.tutorialStep < tutorialTotalSteps - 1) {
+                                        lifecycleScope.launch { envRepo.setTutorialStep(envPrefs.tutorialStep + 1) }
+                                    } else {
+                                        completeTutorial()
+                                    }
+                                },
                                 onSkip = {
                                     completeTutorial()
+                                }
+                            )
+                        }
+
+                        if (showDiscovery) {
+                            DiscoveryOverlay(
+                                onDismiss = { 
+                                    showDiscovery = false
+                                    // Start Wallpaper setup next
+                                    if (!wallpaperPreferences.hasWallpaperConsent()) {
+                                        showWallpaperConsent = true
+                                    } else {
+                                        // If already has consent (edge case), start tutorial
+                                        lifecycleScope.launch { envRepo.setTutorialStep(0) }
+                                    }
+                                }
+                            )
+                        }
+
+                        if (showWallpaperConsent) {
+                            WallpaperSetupOverlay(
+                                onSetupClick = {
+                                    wallpaperPreferences.setWallpaperEnabled(true)
+                                    wallpaperPreferences.setWallpaperConsent(true)
+                                    showWallpaperConsent = false
+                                    // Start tutorial after wallpaper setup
+                                    lifecycleScope.launch { envRepo.setTutorialStep(0) }
+                                    Toast.makeText(context, "Cosmic wallpaper ready!", Toast.LENGTH_SHORT).show()
+                                },
+                                onDismiss = {
+                                    wallpaperPreferences.setWallpaperEnabled(false)
+                                    wallpaperPreferences.setWallpaperConsent(true)
+                                    showWallpaperConsent = false
+                                    // Start tutorial even if wallpaper is declined
+                                    lifecycleScope.launch { envRepo.setTutorialStep(0) }
                                 }
                             )
                         }
@@ -822,22 +812,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private data class FocusSession(
-        val title: String,
-        val startedAt: Long,
-        val durationMinutes: Int
-    )
-
-    private data class TutorialStep(
-        val title: String,
-        val body: String
-    )
-
-    private data class ShortSuggestion(
-        val star: Star,
-        val title: String,
-        val estimateMinutes: Int
-    )
+    private data class FocusSession(val title: String, val startedAt: Long, val durationMinutes: Int)
+    private data class TutorialStep(val title: String, val body: String)
+    private data class ShortSuggestion(val star: Star, val title: String, val estimateMinutes: Int)
 
     private fun formatFocusRemaining(session: FocusSession): String {
         val totalMs = session.durationMinutes * 60 * 1000L
@@ -869,11 +846,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun findShortSuggestion(
-        stars: List<Star>,
-        contextMode: com.cosmicocean.ui.state.ContextMode,
-        manualContext: String
-    ): ShortSuggestion? {
+    private fun findShortSuggestion(stars: List<Star>, contextMode: com.cosmicocean.ui.state.ContextMode, manualContext: String): ShortSuggestion? {
         val candidates = stars.filter { !it.isCompleted && !it.isArchived }
             .mapNotNull { star ->
                 val estimate = extractEstimateMinutesFromTitle(star.title)
@@ -897,14 +870,9 @@ class MainActivity : ComponentActivity() {
         val minRegex = Regex("(\\d{1,3})\\s*(m|min|mins|minutes)")
         val hourRegex = Regex("(\\d{1,3})\\s*(h|hr|hrs|hours)")
         val minMatch = minRegex.find(lower)
-        if (minMatch != null) {
-            return minMatch.groupValues[1].toIntOrNull()
-        }
+        if (minMatch != null) return minMatch.groupValues[1].toIntOrNull()
         val hourMatch = hourRegex.find(lower)
-        if (hourMatch != null) {
-            val hours = hourMatch.groupValues[1].toIntOrNull() ?: return null
-            return hours * 60
-        }
+        if (hourMatch != null) return (hourMatch.groupValues[1].toIntOrNull() ?: 0) * 60
         return null
     }
 
@@ -933,7 +901,6 @@ class MainActivity : ComponentActivity() {
                 }
                 "archive" -> viewModel.archiveStar(star)
                 "delete" -> {
-                    // CRITICAL FIX: Use viewModel.deleteStar() to remove from Room DB + backend
                     viewModel.deleteStar(star)
                     Toast.makeText(this@MainActivity, "Star Exploded!", Toast.LENGTH_SHORT).show()
                 }
@@ -941,81 +908,41 @@ class MainActivity : ComponentActivity() {
             if (type == "complete" || type == "archive") {
                 advanceTutorialStep(2)
             }
-            triggerImmediateUpdate()
         }
     }
 
     private fun snoozeStar(star: Star, durationMinutes: Int) {
-        // Apply snooze locally
         star.snooze(durationMinutes)
-
-        // Sync to backend API
         lifecycleScope.launch {
             try {
-                NetworkModule.getApi(this@MainActivity).snoozeTask(
-                    star.id,
-                    mapOf("duration_minutes" to durationMinutes)
-                )
-                val durationText = when {
-                    durationMinutes < 60 -> "${durationMinutes}m"
-                    durationMinutes < 1440 -> "${durationMinutes / 60}h"
-                    else -> "${durationMinutes / 1440}d"
-                }
-                Toast.makeText(this@MainActivity, "Snoozed for $durationText", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "Snooze failed (offline)", Toast.LENGTH_SHORT).show()
-            }
+                NetworkModule.getApi(this@MainActivity).snoozeTask(star.id, mapOf("duration_minutes" to durationMinutes))
+            } catch (e: Exception) {}
         }
-
-        triggerImmediateUpdate()
     }
 
     private fun saveStarPosition(star: Star) {
-        // EPIC 9 FIX: Save star position after dragging
-        val adjusted = zoneManager.clampToSafeArea(
-            x = star.particle.x,
-            y = star.particle.y,
-            radius = star.particle.radius
-        )
+        val adjusted = zoneManager.clampToSafeArea(star.particle.x, star.particle.y, star.particle.radius)
         star.particle.x = adjusted.first
         star.particle.y = adjusted.second
         star.particle.oldX = adjusted.first
         star.particle.oldY = adjusted.second
-        lifecycleScope.launch {
-            viewModel.updateStar(star)
-        }
+        lifecycleScope.launch { viewModel.updateStar(star) }
     }
 
-    private fun updateStar(
-        star: Star,
-        title: String,
-        urgency: Int,
-        dueInMinutes: Float,
-        isRecurring: Boolean,
-        echoInterval: com.cosmicocean.model.EchoInterval?,
-        isSubtask: Boolean,
-        parentId: String?
-    ) {
+    private fun updateStar(star: Star, title: String, urgency: Int, dueInMinutes: Float, isRecurring: Boolean, echoInterval: com.cosmicocean.model.EchoInterval?, isSubtask: Boolean, parentId: String?) {
         star.title = title
         star.urgency = urgency
         star.dueIn = dueInMinutes
         star.isRecurring = isRecurring
         star.echoInterval = if (isRecurring) echoInterval else null
-        val resolvedParent = parentId?.takeIf { it.isNotBlank() }
-        val validParent = resolvedParent?.let { id ->
-            viewModel.stars.firstOrNull { it.id == id && it.id != star.id && !it.isSubtask }
-        }
+        val validParent = parentId?.let { id -> viewModel.stars.firstOrNull { it.id == id && it.id != star.id && !it.isSubtask } }
         star.isSubtask = isSubtask && validParent != null
         star.parentId = if (star.isSubtask) validParent?.id else null
-
-        // Update due date timestamp
         star.dueDate = System.currentTimeMillis() + (dueInMinutes * 60 * 1000).toLong()
-
         lifecycleScope.launch {
             try {
                 viewModel.updateStar(star)
                 advanceTutorialStep(2)
-                triggerImmediateUpdate()
             } catch (e: Exception) {}
         }
     }
@@ -1023,418 +950,101 @@ class MainActivity : ComponentActivity() {
     private fun clearAllTasks() {
         lifecycleScope.launch {
             try {
-                // LOCAL-FIRST FIX: Use ViewModel which handles local DB + sync queue
                 viewModel.clearAllTasks()
-
-                // Also clear constellation and orbit data
                 database.constellationDao().deleteAllLinks()
                 database.orbitDao().deleteAllOrbits()
-
-                triggerImmediateUpdate()
                 Toast.makeText(this@MainActivity, "Ocean Cleared", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                android.util.Log.e("MainActivity", "Failed to clear data: ${e.message}")
-                Toast.makeText(this@MainActivity, "Failed to clear data", Toast.LENGTH_SHORT).show()
-            }
+            } catch (e: Exception) {}
         }
     }
 
-    private fun createNewStar(
-        title: String,
-        offset: androidx.compose.ui.geometry.Offset?,
-        recurringOverride: Boolean? = null,
-        echoIntervalOverride: com.cosmicocean.model.EchoInterval? = null,
-        isSubtask: Boolean = false,
-        parentId: String? = null
-    ) {
+    private fun createNewStar(title: String, offset: androidx.compose.ui.geometry.Offset?, recurringOverride: Boolean? = null, echoIntervalOverride: com.cosmicocean.model.EchoInterval? = null, isSubtask: Boolean = false, parentId: String? = null) {
         val random = java.util.Random()
-
-        // Get screen dimensions for better placement
         val displayMetrics = resources.displayMetrics
         val screenWidth = displayMetrics.widthPixels.toFloat()
         val screenHeight = displayMetrics.heightPixels.toFloat()
         zoneManager.updateScreenSize(screenWidth, screenHeight)
-
-        // EPIC 9: Random placement across full screen (15% padding to avoid edges)
-        // Stars stay where created - no zone forces, color shows urgency instead
-        val horizontalPadding = screenWidth * 0.15f
-        val verticalPadding = screenHeight * 0.1f
-
-        // If user tapped, use that position; otherwise, random placement
-        val x = offset?.x ?: (horizontalPadding + random.nextFloat() * (screenWidth - 2 * horizontalPadding))
-        val y = offset?.y ?: (verticalPadding + random.nextFloat() * (screenHeight - 2 * verticalPadding))
+        val x = offset?.x ?: (screenWidth * 0.15f + random.nextFloat() * screenWidth * 0.7f)
+        val y = offset?.y ?: (screenHeight * 0.1f + random.nextFloat() * screenHeight * 0.8f)
 
         lifecycleScope.launch {
             val parsed = viewModel.parseTaskInput(title)
             val dueDateMs = com.cosmicocean.utils.TaskDateUtils.parseToMillis(parsed.dueDate, parsed.dueTime)
-            val cleanedTitle = parsed.title.ifBlank { title }
-            val urgency = parsed.priority
-            val contextTag = parsed.contextTags?.firstOrNull()
-                ?.removePrefix("@")
-                ?.trim()
-                ?.ifBlank { null }
-            val parsedEchoInterval = parseEchoInterval(parsed.recurringPattern)
-            val resolvedRecurring = recurringOverride ?: parsed.isRecurring
-            val resolvedEchoInterval = if (resolvedRecurring) {
-                echoIntervalOverride ?: parsedEchoInterval
-            } else {
-                null
-            }
-
-            // TaskRepository.addStar() handles both local DB insert AND backend sync
-            val resolvedParent = parentId?.takeIf { it.isNotBlank() }
-            val parentStar = if (isSubtask && resolvedParent != null) {
-                viewModel.stars.firstOrNull { it.id == resolvedParent && !it.isSubtask }
-            } else {
-                null
-            }
-            val star = Star(
-                x = x,
-                y = y,
-                title = cleanedTitle,
-                urgency = urgency,
-                dueDate = dueDateMs,
-                contextTag = contextTag,
-                isSubtask = isSubtask && parentStar != null,
-                parentId = parentStar?.id,
-                isRecurring = resolvedRecurring,
-                echoInterval = resolvedEchoInterval
-            )
-            val adjusted = zoneManager.clampToSafeArea(
-                x = star.particle.x,
-                y = star.particle.y,
-                radius = star.particle.radius
-            )
+            val parentStar = if (isSubtask && parentId != null) viewModel.stars.firstOrNull { it.id == parentId && !it.isSubtask } else null
+            val star = Star(x = x, y = y, title = parsed.title.ifBlank { title }, urgency = parsed.priority, dueDate = dueDateMs, contextTag = parsed.contextTags?.firstOrNull()?.removePrefix("@")?.trim()?.ifBlank { null }, isSubtask = isSubtask && parentStar != null, parentId = parentStar?.id, isRecurring = recurringOverride ?: parsed.isRecurring, echoInterval = if (recurringOverride ?: parsed.isRecurring) echoIntervalOverride ?: parseEchoInterval(parsed.recurringPattern) else null)
+            val adjusted = zoneManager.clampToSafeArea(star.particle.x, star.particle.y, star.particle.radius)
             star.particle.x = adjusted.first
             star.particle.y = adjusted.second
             star.particle.oldX = adjusted.first
             star.particle.oldY = adjusted.second
             viewModel.addStar(star, parentStar)
-            // No need for local delay here anymore, as RealTimeWallpaperService.ACTION_FORCE_UPDATE 
-            // now includes a 500ms delay internally for consistency.
             advanceTutorialStep(1)
-            triggerImmediateUpdate()
         }
-    }
-
-    @VisibleForTesting
-    fun openEditForStarId(starId: String) {
-        if (!BuildConfig.DEBUG) return
-        val star = viewModel.stars.firstOrNull { it.id == starId }
-        if (star != null) {
-            runOnUiThread {
-                editingStarState.value = star
-            }
-            return
-        }
-
-        val entity = runBlocking(Dispatchers.IO) {
-            database.starDao().getByLocalId(starId)
-        } ?: return
-
-        val fallbackStar = entity.toStar()
-        runOnUiThread {
-            editingStarState.value = fallbackStar
-        }
-    }
-
-    @VisibleForTesting
-    fun getStarPosition(starId: String): Pair<Float, Float>? {
-        if (!BuildConfig.DEBUG) return null
-        val star = viewModel.stars.firstOrNull { it.id == starId }
-        if (star != null) {
-            return Pair(star.particle.x, star.particle.y)
-        }
-        return runBlocking(Dispatchers.IO) {
-            database.starDao().getByLocalId(starId)?.let { Pair(it.x, it.y) }
-        }
-    }
-
-    @VisibleForTesting
-    fun getZoneTargets(): Pair<Float, Float> {
-        return Pair(zoneManager.archivedZoneX, zoneManager.completedZoneX)
-    }
-
-    @VisibleForTesting
-    fun hasStarInViewModel(starId: String): Boolean {
-        if (!BuildConfig.DEBUG) return false
-        return viewModel.stars.any { it.id == starId }
-    }
-
-    @VisibleForTesting
-    fun updateStarForTest(starId: String, title: String, urgency: Int, dueInMinutes: Float) {
-        if (!BuildConfig.DEBUG) return
-        val star = viewModel.stars.firstOrNull { it.id == starId }
-            ?: runBlocking(Dispatchers.IO) { database.starDao().getByLocalId(starId)?.toStar() }
-            ?: return
-        runOnUiThread {
-            updateStar(
-                star,
-                title,
-                urgency,
-                dueInMinutes,
-                star.isRecurring,
-                star.echoInterval,
-                star.isSubtask,
-                star.parentId
-            )
-        }
-    }
-
-    @VisibleForTesting
-    fun getStarSnapshot(starId: String): Pair<String, Int>? {
-        if (!BuildConfig.DEBUG) return null
-        val star = viewModel.stars.firstOrNull { it.id == starId } ?: return null
-        return Pair(star.title, star.urgency)
-    }
-
-    private fun com.cosmicocean.data.StarEntity.toStar(): Star {
-        val star = Star(
-            x = x,
-            y = y,
-            title = title,
-            urgency = urgency,
-            dueDate = dueDate,
-            contextTag = contextTag,
-            isSubtask = isSubtask,
-            parentId = parentId,
-            isRecurring = isRecurring,
-            echoInterval = echoInterval?.let { com.cosmicocean.model.EchoInterval.valueOf(it) },
-            createdAt = createdAt,
-            id = localId
-        )
-        star.isCompleted = isCompleted
-        star.completedAt = completedAt
-        star.isArchived = isArchived
-        star.archivedAt = archivedAt
-        star.isSnoozed = isSnoozed
-        star.snoozeUntil = snoozeUntil
-        return star
     }
 
     private fun reportAppOpen() {
-        lifecycleScope.launch {
-            try {
-                NetworkModule.getApi(this@MainActivity).reportAppOpen()
-            } catch (e: Exception) {}
-        }
+        lifecycleScope.launch { try { NetworkModule.getApi(this@MainActivity).reportAppOpen() } catch (e: Exception) {} }
     }
 
     private fun markDoneForToday() {
-        lifecycleScope.launch {
-            try {
-                val response = NetworkModule.getApi(this@MainActivity).markDoneForToday()
-                if (response.isSuccessful) {
-                    triggerImmediateUpdate()
-                }
-            } catch (e: Exception) {}
-        }
-    }
-
-    private fun schedulePeriodicWallpaperUpdates() {
-        // LOCAL-FIRST: Auto-enable wallpaper updates if preference not set
-        if (com.cosmicocean.BuildConfig.LOCAL_ONLY && !wallpaperPreferences.hasSetWallpaperPreference()) {
-            wallpaperPreferences.setWallpaperEnabled(true)
-        }
-        // Only proceed if wallpaper integration is explicitly enabled by the user
-        if (!wallpaperPreferences.isWallpaperEnabled()) {
-            android.util.Log.d("MainActivity", "Wallpaper updates skipped: Consent not granted.")
-            return
-        }
-
-        // Start real-time wallpaper service (1-minute updates)
-        RealTimeWallpaperService.start(this)
-
-        // Keep WorkManager as fallback (every 15 minutes) in case service is killed
-        val periodicWorkRequest = androidx.work.PeriodicWorkRequestBuilder<com.cosmicocean.worker.WallpaperUpdateWorker>(
-            15, java.util.concurrent.TimeUnit.MINUTES
-        )
-            // LOCAL-FIRST: No network required for local wallpaper generation
-            .setConstraints(androidx.work.Constraints.Builder().build())
-            .build()
-
-        // FIX: Changed from KEEP to UPDATE - ensures fresh scheduling even if worker was in failed state
-        // UPDATE preserves enqueue time and doesn't cancel running workers (better than REPLACE)
-        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "wallpaper_periodic_update",
-            androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
-            periodicWorkRequest
-        )
+        lifecycleScope.launch { try { NetworkModule.getApi(this@MainActivity).markDoneForToday() } catch (e: Exception) {} }
     }
 
     private fun scheduleDueHaptics() {
-        val periodicWorkRequest = androidx.work.PeriodicWorkRequestBuilder<com.cosmicocean.worker.DueHapticsWorker>(
-            15, java.util.concurrent.TimeUnit.MINUTES
-        ).setConstraints(androidx.work.Constraints.Builder().build()).build()
-
-        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "due_haptics_worker",
-            androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
-            periodicWorkRequest
-        )
-    }
-
-    private fun triggerImmediateUpdate(force: Boolean = false) {
-        if (force) {
-            RealTimeWallpaperService.updateNowImmediate(this)
-            return
-        }
-        // 1. Fast path: Foreground Service
-        RealTimeWallpaperService.updateNow(this)
-
-        // 2. Backup path: WorkManager
-        // FIX: Added setExpedited for truly immediate execution
-        val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.cosmicocean.worker.WallpaperUpdateWorker>()
-            .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-            // LOCAL-FIRST: No network required for local wallpaper generation
-            .setConstraints(androidx.work.Constraints.Builder().build())
-            .build()
-        androidx.work.WorkManager.getInstance(this).enqueue(workRequest)
+        val periodicWorkRequest = androidx.work.PeriodicWorkRequestBuilder<com.cosmicocean.worker.DueHapticsWorker>(15, java.util.concurrent.TimeUnit.MINUTES).build()
+        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork("due_haptics_worker", androidx.work.ExistingPeriodicWorkPolicy.UPDATE, periodicWorkRequest)
     }
 
     private fun handleLogin(email: String, password: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
         lifecycleScope.launch {
             try {
-                val response = NetworkModule.getApi(this@MainActivity).login(
-                    mapOf(
-                        "email" to email,
-                        "password" to password
-                    )
-                )
-
+                val response = NetworkModule.getApi(this@MainActivity).login(mapOf("email" to email, "password" to password))
                 if (response.isSuccessful && response.body() != null) {
                     val authResponse = response.body()!!
-                    tokenManager.saveTokens(
-                        authResponse.accessToken,
-                        authResponse.refreshToken,
-                        authResponse.user.id,
-                        authResponse.user.email
-                    )
-                    // Start real-time wallpaper service
-                    RealTimeWallpaperService.start(this@MainActivity)
-                    Toast.makeText(this@MainActivity, "Welcome back, ${authResponse.user.email}!", Toast.LENGTH_SHORT).show()
+                    tokenManager.saveTokens(authResponse.accessToken, authResponse.refreshToken, authResponse.user.id, authResponse.user.email)
                     onSuccess()
-                } else {
-                    val errorMsg = when (response.code()) {
-                        401 -> "Invalid email or password"
-                        404 -> "User not found"
-                        else -> "Login failed: ${response.code()}"
-                    }
-                    onError(errorMsg)
-                }
-            } catch (e: Exception) {
-                onError("Connection error: ${e.message}")
-            }
+                } else onError("Login failed")
+            } catch (e: Exception) { onError("Connection error") }
         }
     }
 
     private fun handleRegister(email: String, password: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
-        if (password.length < 8) {
-            onError("Password must be at least 8 characters")
-            return
-        }
-
+        if (password.length < 8) { onError("Password too short"); return }
         lifecycleScope.launch {
             try {
-                // Get device timezone
-                val deviceTimezone = java.util.TimeZone.getDefault().id
-
-                val response = NetworkModule.getApi(this@MainActivity).register(
-                    mapOf(
-                        "email" to email,
-                        "password" to password,
-                        "timezone" to deviceTimezone
-                    )
-                )
-
+                val response = NetworkModule.getApi(this@MainActivity).register(mapOf("email" to email, "password" to password, "timezone" to java.util.TimeZone.getDefault().id))
                 if (response.isSuccessful && response.body() != null) {
                     val authResponse = response.body()!!
-                    tokenManager.saveTokens(
-                        authResponse.accessToken,
-                        authResponse.refreshToken,
-                        authResponse.user.id,
-                        authResponse.user.email
-                    )
-                    // Start real-time wallpaper service
-                    RealTimeWallpaperService.start(this@MainActivity)
-                    Toast.makeText(this@MainActivity, "Account created! Welcome ${authResponse.user.email}!", Toast.LENGTH_SHORT).show()
+                    tokenManager.saveTokens(authResponse.accessToken, authResponse.refreshToken, authResponse.user.id, authResponse.user.email)
                     onSuccess()
-                } else {
-                    val errorMsg = when (response.code()) {
-                        409 -> "Email already registered"
-                        400 -> "Invalid email or password format"
-                        else -> "Registration failed: ${response.code()}"
-                    }
-                    onError(errorMsg)
-                }
-            } catch (e: Exception) {
-                onError("Connection error: ${e.message}")
-            }
+                } else onError("Registration failed")
+            } catch (e: Exception) { onError("Connection error") }
         }
     }
 
     private fun handleLogout() {
-        // Stop real-time wallpaper service
-        RealTimeWallpaperService.stop(this)
-
-        // CRITICAL FIX: Clear local database to prevent user data leakage
-        // This ensures new user doesn't see previous user's cached tasks
         lifecycleScope.launch {
             try {
                 database.starDao().deleteAllStars()
                 database.constellationDao().deleteAllLinks()
                 database.orbitDao().deleteAllOrbits()
-                android.util.Log.d("MainActivity", "Local database cleared on logout")
-            } catch (e: Exception) {
-                android.util.Log.e("MainActivity", "Failed to clear database: ${e.message}")
-            }
+            } catch (e: Exception) {}
         }
-
         tokenManager.clearTokens()
-        Toast.makeText(this@MainActivity, "Logged out successfully", Toast.LENGTH_SHORT).show()
     }
 
     private fun handleForgotPassword(email: String) {
-        Toast.makeText(
-            this,
-            "📧 Password reset link sent to $email\n\nCheck your inbox and spam folder.",
-            Toast.LENGTH_LONG
-        ).show()
+        Toast.makeText(this, "Password reset link sent to $email", Toast.LENGTH_LONG).show()
     }
 
     private fun changeWallpaperTheme(theme: String) {
-        android.util.Log.e("MainActivity", "🎨 Theme change requested: $theme")
-
-        // 1. Update local preferences
         wallpaperPreferences.setTheme(theme)
-        android.util.Log.e("MainActivity", "✅ Local preferences updated to: $theme")
-
-        // 2. Update backend if authenticated
         if (tokenManager.isLoggedIn()) {
             lifecycleScope.launch {
                 try {
-                    // Re-detect resolution to ensure we always use correct screen size
-                    val resolution = wallpaperPreferences.detectDeviceResolution()
-                    android.util.Log.e("MainActivity", "Sending PATCH /api/user with theme=$theme, resolution=$resolution")
-                    NetworkModule.getApi(this@MainActivity).updateUser(
-                        mapOf(
-                            "theme" to theme,
-                            "resolution" to resolution
-                        )
-                    )
-                    android.util.Log.e("MainActivity", "✅ Backend updated successfully")
-                    Toast.makeText(this@MainActivity, "Theme changed to $theme", Toast.LENGTH_SHORT).show()
-                } catch (e: Exception) {
-                    android.util.Log.e("MainActivity", "⚠️ Backend update failed: ${e.message}", e)
-                    Toast.makeText(this@MainActivity, "Theme saved locally", Toast.LENGTH_SHORT).show()
-                }
+                    NetworkModule.getApi(this@MainActivity).updateUser(mapOf("theme" to theme, "resolution" to wallpaperPreferences.detectDeviceResolution()))
+                } catch (e: Exception) {}
             }
-        } else {
-            Toast.makeText(this@MainActivity, "Theme changed to $theme", Toast.LENGTH_SHORT).show()
         }
-
-        // 3. Trigger immediate wallpaper update
-        android.util.Log.e("MainActivity", "🚀 Triggering immediate wallpaper update...")
-        triggerImmediateUpdate()
     }
 }

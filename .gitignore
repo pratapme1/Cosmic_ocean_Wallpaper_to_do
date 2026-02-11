@@ -130,10 +130,12 @@ backend/verify-*.js
 .env*.local
 android/app/keystore/
 
-# Images
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.svg
-*.webp
+# Images (Temporarily disabled for verification)
+# *.png
+# *.jpg
+# *.jpeg
+# *.gif
+# *.svg
+# *.webp
+
+!qa-runs/reactive-test-20260207/*.png

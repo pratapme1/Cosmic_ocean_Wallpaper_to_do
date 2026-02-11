@@ -1,10 +1,8 @@
 package com.cosmicocean.e2e
 
 import android.content.Context
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.cosmicocean.MainActivity
@@ -15,6 +13,7 @@ import com.cosmicocean.test.ScreenshotTestRule
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Before
 
 @RunWith(AndroidJUnit4::class)
 class WallpaperConsentE2ETest {
@@ -25,9 +24,8 @@ class WallpaperConsentE2ETest {
     @get:Rule
     val screenshotRule = ScreenshotTestRule()
 
-    @Test
-    fun testWallpaperConsentFlow() {
-        // Ensure the consent dialog is shown by clearing the preference before recreation
+    @Before
+    fun setup() {
         val context: Context = InstrumentationRegistry.getInstrumentation().targetContext
         TokenManager(context).saveTokens(
             accessToken = "test-access",
@@ -36,19 +34,71 @@ class WallpaperConsentE2ETest {
             email = "test@example.com"
         )
         WallpaperPreferencesManager(context).clearAll()
-        composeTestRule.activityRule.scenario.recreate()
-        composeTestRule.waitForIdle()
+        val envRepo = com.cosmicocean.data.EnvironmentPreferencesRepository(context)
+        kotlinx.coroutines.runBlocking {
+            envRepo.resetToDefaults()
+        }
+    }
 
-        val prefs = WallpaperPreferencesManager(context)
-        // Consent dialog should appear on first launch (local-first, optional sync)
-        composeTestRule.onNodeWithText("Cosmic Wallpaper Setup").assertExists()
+    @Test
+    fun testWallpaperConsentFlow() {
+        // Handle Auth if it appears
+        if (composeTestRule.onAllNodesWithText("Skip to Guest").fetchSemanticsNodes().isNotEmpty()) {
+            composeTestRule.onNodeWithText("Skip to Guest").performClick()
+            composeTestRule.waitForIdle()
+        }
 
-        // Test "Not Now" (Disable Sync)
-        composeTestRule.onNodeWithText("Not Now").performClick()
-        composeTestRule.waitUntil(5_000) {
-            composeTestRule.onAllNodesWithText("Cosmic Wallpaper Setup")
+        // FIRST: Skip App Info (Discovery) overlay
+        composeTestRule.waitUntil(15000) {
+            composeTestRule.onAllNodesWithTag("discovery_skip_button").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeTestRule.onNodeWithTag("discovery_skip_button").performClick()
+
+        // SECOND: Consent dialog should appear
+        composeTestRule.waitUntil(15000) {
+            composeTestRule.onAllNodesWithText("Live Wallpaper Setup").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeTestRule.onNodeWithText("Live Wallpaper Setup").assertExists()
+
+        // Test "Not Now" (Dismiss)
+        composeTestRule.onNodeWithTag("wallpaper_setup_dismiss_button").performClick()
+        composeTestRule.waitUntil(15000) {
+            composeTestRule.onAllNodesWithText("Live Wallpaper Setup")
                 .fetchSemanticsNodes()
                 .isEmpty()
         }
+    }
+
+    @Test
+    fun testWallpaperConsentSuccessFlow() {
+        // Handle Auth if it appears
+        if (composeTestRule.onAllNodesWithText("Skip to Guest").fetchSemanticsNodes().isNotEmpty()) {
+            composeTestRule.onNodeWithText("Skip to Guest").performClick()
+            composeTestRule.waitForIdle()
+        }
+
+        // FIRST: Skip App Info (Discovery) overlay
+        composeTestRule.waitUntil(15000) {
+            composeTestRule.onAllNodesWithTag("discovery_skip_button").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeTestRule.onNodeWithTag("discovery_skip_button").performClick()
+
+        // SECOND: Click "Setup Wallpaper"
+        composeTestRule.waitUntil(15000) {
+            composeTestRule.onAllNodesWithTag("wallpaper_setup_confirm_button").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeTestRule.onNodeWithTag("wallpaper_setup_confirm_button").performClick()
+
+        // THIRD: Verify overlay is gone and Tutorial appears
+        composeTestRule.waitUntil(15000) {
+            composeTestRule.onAllNodesWithText("Live Wallpaper Setup")
+                .fetchSemanticsNodes()
+                .isEmpty()
+        }
+        
+        composeTestRule.waitUntil(15000) {
+            composeTestRule.onAllNodesWithText("Create a task").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeTestRule.onNodeWithText("Create a task").assertExists()
     }
 }

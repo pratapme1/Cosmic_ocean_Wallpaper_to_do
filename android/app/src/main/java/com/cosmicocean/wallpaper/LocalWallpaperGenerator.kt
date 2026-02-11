@@ -491,23 +491,21 @@ object LocalWallpaperGenerator {
     }
 
     /**
-     * Generate wallpaper bitmap with generated theme
-     * Shows top 3 tasks with +more indicator
+     * Public entry point for Live Wallpaper (direct Canvas drawing)
      */
-    fun generate(
+    fun render(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
         tasks: List<StarEntity>,
         totalTaskCount: Int,
         theme: WallpaperTheme,
-        width: Int,
-        height: Int,
         achievementCount: Int = 0,
         streakDays: Int = 0,
         environmentPreferences: EnvironmentPreferences? = null,
         weatherTasks: List<StarEntity>? = null,
         recentCompletionAt: Long? = null
-    ): Bitmap {
-        Log.d(TAG, "Generating wallpaper: ${width}x${height}, theme=$theme, tasks=${tasks.size}, total=$totalTaskCount")
-
+    ) {
         val now = System.currentTimeMillis()
         val sortedTasks = sortTasksByDueDate(tasks)
         val allTasks = weatherTasks ?: tasks
@@ -523,9 +521,6 @@ object LocalWallpaperGenerator {
             isCustom = false,
             highContrast = environmentPreferences?.highContrastTextEnabled == true
         )
-
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
 
         // CRITICAL FIX: Fill with solid base color first to prevent black screen
         val urgency = if (sortedTasks.isNotEmpty()) calculateUrgency(sortedTasks[0]) else UrgencyLevel.CLEAR
@@ -604,30 +599,54 @@ object LocalWallpaperGenerator {
         } else {
             drawClearState(canvas, colors, width, height, readability)
         }
+    }
 
+    /**
+     * Generate wallpaper bitmap with generated theme
+     * LEGACY WRAPPER: Still exists for parity but uses render() logic.
+     */
+    fun generate(
+        tasks: List<StarEntity>,
+        totalTaskCount: Int,
+        theme: WallpaperTheme,
+        width: Int,
+        height: Int,
+        achievementCount: Int = 0,
+        streakDays: Int = 0,
+        environmentPreferences: EnvironmentPreferences? = null,
+        weatherTasks: List<StarEntity>? = null,
+        recentCompletionAt: Long? = null
+    ): Bitmap {
+        Log.d(TAG, "Generating legacy bitmap wallpaper: ${width}x${height}")
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        
+        render(
+            canvas, width, height, tasks, totalTaskCount, theme, 
+            achievementCount, streakDays, environmentPreferences, 
+            weatherTasks, recentCompletionAt
+        )
+        
         return bitmap
     }
 
     /**
-     * Generate wallpaper bitmap with custom background image
-     * Shows top 3 tasks with +more indicator
-     * Custom mode preserves the uploaded image (no overlays/effects)
+     * Public entry point for Live Wallpaper with custom background
      */
-    fun generateWithCustomBackground(
+    fun renderWithCustomBackground(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
         tasks: List<StarEntity>,
         totalTaskCount: Int,
         customBackground: Bitmap,
-        width: Int,
-        height: Int,
         achievementCount: Int = 0,
         streakDays: Int = 0,
         theme: WallpaperTheme = WallpaperTheme.DEEP_OCEAN,
         environmentPreferences: EnvironmentPreferences? = null,
         weatherTasks: List<StarEntity>? = null,
         recentCompletionAt: Long? = null
-    ): Bitmap {
-        Log.d(TAG, "Generating wallpaper with custom background: ${width}x${height}, tasks=${tasks.size}")
-
+    ) {
         val now = System.currentTimeMillis()
         val sortedTasks = sortTasksByDueDate(tasks)
         val allTasks = weatherTasks ?: tasks
@@ -637,33 +656,20 @@ object LocalWallpaperGenerator {
         val shortSuggestion = findShortSuggestion(allTasks, environmentPreferences)
         var backgroundLuminance = 0.5f
 
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-
         // CRITICAL FIX: Fill with solid black first to prevent transparency issues
         canvas.drawColor(Color.BLACK)
 
         // Layer 1: Custom background image (scaled to cover)
         try {
-            val safeBackground = if (customBackground.isRecycled) {
-                Log.w(TAG, "Custom background is recycled before scaling; falling back to solid color.")
-                null
-            } else {
-                customBackground.copy(Bitmap.Config.ARGB_8888, false)
-            }
-            val scaledBackground = safeBackground?.let { scaleToCover(it, width, height) }
+            val scaledBackground = if (customBackground.isRecycled) null else scaleToCover(customBackground, width, height)
             if (scaledBackground != null) {
-                Log.d(TAG, "Scaled background: ${scaledBackground.width}x${scaledBackground.height}")
                 backgroundLuminance = sampleAverageLuminance(scaledBackground)
                 canvas.drawBitmap(scaledBackground, 0f, 0f, null)
-                if (!scaledBackground.isRecycled) {
+                if (scaledBackground != customBackground) {
                     scaledBackground.recycle()
                 }
             } else {
-                Log.w(TAG, "Scaled background unavailable; using fallback color.")
-            }
-            if (safeBackground != null && safeBackground != customBackground && !safeBackground.isRecycled) {
-                safeBackground.recycle()
+                canvas.drawColor(Color.parseColor("#1A1A2E"))
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error drawing custom background: ${e.message}", e)
@@ -712,7 +718,35 @@ object LocalWallpaperGenerator {
         } else {
             drawClearState(canvas, colors, width, height, readability)
         }
+    }
 
+    /**
+     * Generate wallpaper bitmap with custom background image
+     * LEGACY WRAPPER
+     */
+    fun generateWithCustomBackground(
+        tasks: List<StarEntity>,
+        totalTaskCount: Int,
+        customBackground: Bitmap,
+        width: Int,
+        height: Int,
+        achievementCount: Int = 0,
+        streakDays: Int = 0,
+        theme: WallpaperTheme = WallpaperTheme.DEEP_OCEAN,
+        environmentPreferences: EnvironmentPreferences? = null,
+        weatherTasks: List<StarEntity>? = null,
+        recentCompletionAt: Long? = null
+    ): Bitmap {
+        Log.d(TAG, "Generating legacy custom bitmap wallpaper: ${width}x${height}")
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        
+        renderWithCustomBackground(
+            canvas, width, height, tasks, totalTaskCount, customBackground,
+            achievementCount, streakDays, theme, environmentPreferences,
+            weatherTasks, recentCompletionAt
+        )
+        
         return bitmap
     }
 

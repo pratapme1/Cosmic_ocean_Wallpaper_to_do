@@ -834,6 +834,16 @@ fun DrawScope.drawStarLabel(
         textLayoutResult = measuredText,
         topLeft = Offset(labelPos.x + 6f, labelPos.y + 3f)
     )
+    
+    // Draw recurring icon
+    if (star.isRecurring) {
+        drawText(
+            textMeasurer = textMeasurer,
+            text = "↻",
+            style = TextStyle(color = Color(0xFF00E5FF), fontSize = 14.sp, fontWeight = FontWeight.Bold),
+            topLeft = Offset(labelPos.x + labelWidth + 8f, labelPos.y + 3f)
+        )
+    }
 
     // Optional: Draw connection line from star to label
     // drawLine(

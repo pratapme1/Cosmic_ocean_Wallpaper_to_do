@@ -387,13 +387,7 @@ fun PrivacySettingsWrapper(
     val preferences by repo.preferencesFlow.collectAsState(initial = PrivacyPreferences())
 
     fun triggerWallpaperUpdate() {
-        scope.launch {
-            try {
-                com.cosmicocean.service.RealTimeWallpaperService.updateNow(context)
-            } catch (_: Exception) {
-                // Silent failure: privacy settings should still persist locally
-            }
-        }
+        // No-op: Live Wallpaper is reactive via Flow
     }
 
     Scaffold(

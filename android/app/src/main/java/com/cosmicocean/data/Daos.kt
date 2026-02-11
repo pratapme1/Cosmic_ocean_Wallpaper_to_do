@@ -110,6 +110,18 @@ interface StarDao {
     @Query("SELECT COUNT(*) FROM stars WHERE syncStatus = 'error'")
     suspend fun getErrorTaskCount(): Int
 
+    @Query("SELECT COUNT(*) FROM stars WHERE isArchived = 0 AND isDeleted = 0 AND isCompleted = 0")
+    fun getActiveTaskCountFlow(): Flow<Int>
+
+    @Query("SELECT MAX(completedAt) FROM stars WHERE isCompleted = 1")
+    fun getLatestCompletionTimestampFlow(): Flow<Long?>
+
+    @Query("SELECT * FROM stars WHERE isArchived = 0 AND isDeleted = 0")
+    fun getAllActiveStarsSyncFlow(): Flow<List<StarEntity>>
+
+    @Query("SELECT * FROM stars WHERE isArchived = 0 AND isDeleted = 0 AND isCompleted = 0 ORDER BY CASE WHEN dueDate IS NULL THEN 1 ELSE 0 END, dueDate ASC, urgency ASC LIMIT 3")
+    fun getTop3TasksFlow(): Flow<List<StarEntity>>
+
     @Query("SELECT MAX(completedAt) FROM stars WHERE isCompleted = 1")
     suspend fun getLatestCompletionTimestamp(): Long?
 }

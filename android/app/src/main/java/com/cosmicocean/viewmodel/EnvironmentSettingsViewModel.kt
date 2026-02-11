@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import com.cosmicocean.data.EnvironmentPreferencesRepository
 import com.cosmicocean.network.ApiService
 import com.cosmicocean.ui.state.*
-import com.cosmicocean.service.RealTimeWallpaperService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -133,11 +132,9 @@ class EnvironmentSettingsViewModel(
                 val response = apiService.getPreferences()
                 if (response.isSuccessful && response.body() != null) {
                     Log.d(TAG, "Backend sync successful")
-                    // Could merge with local preferences if needed
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Backend sync failed (offline?): ${e.message}")
-                // Silent failure - local-first continues working
             }
         }
     }
@@ -145,8 +142,7 @@ class EnvironmentSettingsViewModel(
     /**
      * LOCAL-FIRST: Update preference
      * 1. Save to local storage FIRST
-     * 2. Trigger wallpaper update
-     * 3. Sync to backend in background
+     * 2. Sync to backend in background
      */
     fun updatePreference(key: String, value: Any, context: Context? = null) {
         viewModelScope.launch {
@@ -201,9 +197,6 @@ class EnvironmentSettingsViewModel(
                 }
             }
 
-            // Trigger immediate wallpaper update
-            context?.let { RealTimeWallpaperService.updateNow(it) }
-
             // Background sync to backend (non-blocking)
             try {
                 if (com.cosmicocean.BuildConfig.LOCAL_ONLY) {
@@ -219,7 +212,6 @@ class EnvironmentSettingsViewModel(
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Backend sync failed (offline?): ${e.message}")
-                // Silent failure - local-first continues working
             }
         }
     }
@@ -236,12 +228,24 @@ class EnvironmentSettingsViewModel(
             _uiState.update {
                 it.copy(preferences = it.preferences.copy(isWallpaperEnabled = enabled))
             }
+        }
+    }
 
-            if (enabled) {
-                RealTimeWallpaperService.start(context)
-            } else {
-                RealTimeWallpaperService.stop(context)
+    /**
+     * Trigger the Android Live Wallpaper picker for the new native engine.
+     */
+    fun setLiveWallpaper(context: android.content.Context) {
+        try {
+            val intent = android.content.Intent(android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
+                putExtra(
+                    android.app.WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                    android.content.ComponentName(context, "com.cosmicocean.service.CosmicLiveWallpaperService")
+                )
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
             }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to launch live wallpaper picker", e)
         }
     }
 

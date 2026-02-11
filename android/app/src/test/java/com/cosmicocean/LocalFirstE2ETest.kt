@@ -54,8 +54,7 @@ class LocalFirstE2ETest {
             starDao = starDao,
             apiService = apiService,
             context = context,
-            syncManager = syncManager,
-            wallpaperUpdater = {}  // Disable wallpaper updates in tests
+            syncManager = syncManager
         )
     }
 

@@ -14,6 +14,31 @@
 ### Testing
 - (placeholder)
 
+## [2.8.5] - 2026-02-09 (Custom Wallpaper Fix)
+
+### Fixed
+- **Custom Wallpaper Persistence**: Fixed a major bug where uploading a new custom wallpaper would fail to refresh the display. The app now uses unique filenames for every upload to bypass the Live Wallpaper engine's path-based cache.
+
+## [2.8.3] - 2026-02-09 (Onboarding UX Polish)
+
+### Added
+- **WallpaperSetupOverlay**: Replaced the system AlertDialog with a custom, themed overlay that renders directly on the home canvas.
+- **Integrated Onboarding**: Wallpaper setup is now a seamless step between App Info (Discovery) and the CRUD Tutorial.
+
+### Changed
+- **Terminology**: Standardized on "Live Wallpaper Setup" and "Setup Wallpaper" throughout the initial flow.
+
+## [2.8.2] - 2026-02-09 (Onboarding Flow UX)
+
+### Changed
+- **Onboarding Sequence**: Reordered flow to App Info (Discovery) → Wallpaper Consent → Tutorial.
+- **First-Time Logic**: Onboarding now strictly appears only for first-time logins or fresh installs.
+- **Discovery Overlay**: Added "Skip tour" test tag and improved dismissal logic to chain into Wallpaper Setup.
+
+### Fixed
+- **Wallpaper Consent Test**: Improved E2E test resilience with explicit waits and UI interaction checks.
+- **Auth Handling**: E2E tests now robustly handle "Skip to Guest" authentication scenarios.
+
 ## [2.7.3] - 2026-02-06 (Device Test Build)
 
 ### Changed

@@ -18,9 +18,9 @@ fun SettingsOverlay(
     onDoneForToday: () -> Unit,
     onSnoozeOverdue: () -> Unit,
     onClearAll: () -> Unit,
-    onLogout: (() -> Unit)? = null,
     userEmail: String? = null,
     currentTheme: String = "cosmic",
+    isCustomWallpaper: Boolean = false,
     onThemeChange: (String) -> Unit = {},
     onOpenPrivacySettings: (() -> Unit)? = null,
     onOpenEnvironmentSettings: (() -> Unit)? = null
@@ -42,7 +42,7 @@ fun SettingsOverlay(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Settings & Guide", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF3AA0FF))
+                Text("Settings", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF3AA0FF))
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
                 }
@@ -68,11 +68,20 @@ fun SettingsOverlay(
             Spacer(modifier = Modifier.height(24.dp))
 
             // Theme Selection
-            Text(
-                "Wallpaper Theme",
-                style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFF3AA0FF)
-            )
+            Column {
+                Text(
+                    "Wallpaper Theme",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (isCustomWallpaper) Color.Gray else Color(0xFF3AA0FF)
+                )
+                if (isCustomWallpaper) {
+                    Text(
+                        "Disabled when using custom wallpaper",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(12.dp))
 
             Row(
@@ -82,52 +91,70 @@ fun SettingsOverlay(
                 // Cosmic Theme
                 OutlinedButton(
                     onClick = { onThemeChange("cosmic") },
+                    enabled = !isCustomWallpaper,
                     modifier = Modifier.weight(1f),
-                    colors = if (currentTheme == "cosmic") {
+                    colors = if (currentTheme == "cosmic" && !isCustomWallpaper) {
                         ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF3AA0FF).copy(alpha = 0.2f))
                     } else {
-                        ButtonDefaults.outlinedButtonColors()
+                        ButtonDefaults.outlinedButtonColors(
+                            disabledContentColor = Color.Gray.copy(alpha = 0.5f),
+                            disabledContainerColor = Color.Transparent
+                        )
                     },
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
-                        if (currentTheme == "cosmic") Color(0xFF3AA0FF) else Color.White.copy(alpha = 0.3f)
+                        if (currentTheme == "cosmic" && !isCustomWallpaper) Color(0xFF3AA0FF) 
+                        else if (isCustomWallpaper) Color.Gray.copy(alpha = 0.3f)
+                        else Color.White.copy(alpha = 0.3f)
                     )
                 ) {
-                    Text("🌌 Cosmic", color = Color.White)
+                    Text("🌌 Cosmic", color = if (isCustomWallpaper) Color.Gray else Color.White)
                 }
 
                 // Ocean Theme
                 OutlinedButton(
                     onClick = { onThemeChange("ocean") },
+                    enabled = !isCustomWallpaper,
                     modifier = Modifier.weight(1f),
-                    colors = if (currentTheme == "ocean") {
+                    colors = if (currentTheme == "ocean" && !isCustomWallpaper) {
                         ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF00CED1).copy(alpha = 0.2f))
                     } else {
-                        ButtonDefaults.outlinedButtonColors()
+                        ButtonDefaults.outlinedButtonColors(
+                            disabledContentColor = Color.Gray.copy(alpha = 0.5f),
+                            disabledContainerColor = Color.Transparent
+                        )
                     },
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
-                        if (currentTheme == "ocean") Color(0xFF00CED1) else Color.White.copy(alpha = 0.3f)
+                        if (currentTheme == "ocean" && !isCustomWallpaper) Color(0xFF00CED1)
+                        else if (isCustomWallpaper) Color.Gray.copy(alpha = 0.3f)
+                        else Color.White.copy(alpha = 0.3f)
                     )
                 ) {
-                    Text("🌊 Ocean", color = Color.White)
+                    Text("🌊 Ocean", color = if (isCustomWallpaper) Color.Gray else Color.White)
                 }
 
                 // Fantasy Theme
                 OutlinedButton(
                     onClick = { onThemeChange("fantasy") },
+                    enabled = !isCustomWallpaper,
                     modifier = Modifier.weight(1f),
-                    colors = if (currentTheme == "fantasy") {
+                    colors = if (currentTheme == "fantasy" && !isCustomWallpaper) {
                         ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFFDA70D6).copy(alpha = 0.2f))
                     } else {
-                        ButtonDefaults.outlinedButtonColors()
+                        ButtonDefaults.outlinedButtonColors(
+                            disabledContentColor = Color.Gray.copy(alpha = 0.5f),
+                            disabledContainerColor = Color.Transparent
+                        )
                     },
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
-                        if (currentTheme == "fantasy") Color(0xFFDA70D6) else Color.White.copy(alpha = 0.3f)
+                        if (currentTheme == "fantasy" && !isCustomWallpaper) Color(0xFFDA70D6)
+                        else if (isCustomWallpaper) Color.Gray.copy(alpha = 0.3f)
+                        else Color.White.copy(alpha = 0.3f)
                     )
                 ) {
-                    Text("✨ Fantasy", color = Color.White)
+                    Text("✨ Fantasy", color = if (isCustomWallpaper) Color.Gray else Color.White)
                 }
             }
 
@@ -176,29 +203,7 @@ fun SettingsOverlay(
                 Text("😴 Snooze Overdue", color = Color(0xFFFFB74D))
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            OutlinedButton(
-                onClick = { /* Export Logic */ },
-                modifier = Modifier.fillMaxWidth(),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3AA0FF))
-            ) {
-                Text("💾 Export Data", color = Color(0xFF3AA0FF))
-            }
-
             Spacer(modifier = Modifier.height(24.dp))
-
-            // Logout Button (if logged in)
-            if (onLogout != null && userEmail != null) {
-                OutlinedButton(
-                    onClick = onLogout,
-                    modifier = Modifier.fillMaxWidth(),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF9500))
-                ) {
-                    Text("🚪 Logout", color = Color(0xFFFF9500))
-                }
-                Spacer(modifier = Modifier.height(24.dp))
-            }
 
             // Danger Zone
             Divider(color = Color.White.copy(alpha = 0.1f))

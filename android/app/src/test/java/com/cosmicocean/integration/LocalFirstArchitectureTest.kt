@@ -48,8 +48,7 @@ class LocalFirstArchitectureTest {
             starDao = mockStarDao,
             apiService = mockApiService,
             context = mockContext,
-            syncManager = mockSyncManager,
-            wallpaperUpdater = { } // No-op for tests
+            syncManager = mockSyncManager
         )
     }
 

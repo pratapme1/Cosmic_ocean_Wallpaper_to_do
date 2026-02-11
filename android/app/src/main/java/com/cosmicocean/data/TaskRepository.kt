@@ -12,7 +12,6 @@ import com.cosmicocean.model.TaskResponse
 import com.cosmicocean.network.ApiService
 import com.cosmicocean.network.LocalOnlyUserStore
 import com.cosmicocean.sync.SyncManager
-import com.cosmicocean.service.RealTimeWallpaperService
 import com.cosmicocean.utils.HybridTaskParser
 import com.cosmicocean.systems.TrophyManager
 import com.cosmicocean.auth.TokenManager
@@ -38,19 +37,10 @@ class TaskRepository(
     private val starDao: StarDao,
     private val apiService: ApiService,
     private val context: Context,
-    private val syncManager: SyncManager,
-    private val wallpaperUpdater: (Context) -> Unit = { ctx ->
-        try {
-            RealTimeWallpaperService.updateNow(ctx)
-        } catch (e: Exception) {
-            Log.w("TaskRepository", "Wallpaper update failed: ${e.message}")
-        }
-    }
+    private val syncManager: SyncManager
 ) {
     companion object {
         private const val TAG = "TaskRepository"
-        // REMOVED: No throttling for instant wallpaper updates
-        // All task changes trigger immediate wallpaper refresh
     }
 
     private val hybridParser = HybridTaskParser(context)
@@ -105,11 +95,6 @@ class TaskRepository(
         )
     }
 
-    private fun extractContextTags(input: String): List<String> {
-        val regex = Regex("@\\w+")
-        return regex.findAll(input).map { it.value }.toList()
-    }
-
     private fun isNetworkAvailable(): Boolean {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
         val network = connectivityManager?.activeNetwork ?: return false
@@ -117,33 +102,21 @@ class TaskRepository(
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
-    // === CRITICAL FIX: Unified Write Operations (Issue #1) ===
+    // === Write Operations ===
 
-    /**
-     * CRITICAL FIX: Add star - Local-first with unified sync
-     * 
-     * 1. Generate localId immediately
-     * 2. Save to local DB with pending status
-     * 3. Queue to SyncManager (handles all API calls)
-     * 4. UI updates via Flow
-     */
     suspend fun addStar(star: Star): String {
-        // CRITICAL FIX: Generate localId immediately (never changes)
         val localId = star.id.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
         star.id = localId
 
-        // Save to local DB first with pending status
         val entity = star.toEntity().copy(
             localId = localId,
             syncStatus = "pending",
             updatedAt = System.currentTimeMillis()
         )
         
-        // CRITICAL FIX: Use transaction for atomic insert
         starDao.insertStarWithTransaction(entity)
         Log.d(TAG, "Saved star locally with ID: $localId (sync pending)")
 
-        // CRITICAL FIX: ALWAYS queue to SyncManager (unified sync path)
         syncManager.queueCreate(
             localTaskId = localId,
             data = mapOf(
@@ -159,19 +132,11 @@ class TaskRepository(
             )
         )
 
-        // Trigger wallpaper update (throttled)
-        triggerImmediateWallpaperUpdate()
-
-        // Return localId for immediate use
         return localId
     }
 
-    /**
-     * CRITICAL FIX: Update star - Local-first with unified sync
-     */
     suspend fun updateStar(star: Star) {
         val existing = starDao.getByLocalId(star.id)
-        // Update local DB immediately with pending status
         val entity = star.toEntity().copy(
             syncStatus = "pending",
             updatedAt = System.currentTimeMillis()
@@ -180,7 +145,6 @@ class TaskRepository(
         starDao.insertStarWithTransaction(entity)
         Log.d(TAG, "Updated star locally: ${star.id}")
 
-        // Achievement tracking for new completions
         if (star.isCompleted && existing?.isCompleted != true) {
             try {
                 val userId = resolveUserId()
@@ -190,13 +154,10 @@ class TaskRepository(
                 Log.w(TAG, "Achievement update failed: ${e.message}")
             }
         }
-        if ((star.isCompleted && existing?.isCompleted != true) ||
-            (star.isArchived && existing?.isArchived != true)
-        ) {
+        if (star.isArchived && existing?.isArchived != true) {
             unlinkChildrenForParent(star.id)
         }
 
-        // Queue to SyncManager
         val updateData = when {
             star.isCompleted -> mapOf(
                 "completed" to true,
@@ -224,60 +185,19 @@ class TaskRepository(
         }
         
         syncManager.queueUpdate(star.id, updateData)
-        
-        // Trigger wallpaper update (throttled)
-        triggerImmediateWallpaperUpdate()
     }
 
-    /**
-     * CRITICAL FIX: Delete star - Local-first with unified sync
-     */
     suspend fun deleteStar(star: Star) {
-        // Soft delete locally for sync
         starDao.softDelete(star.id)
         Log.d(TAG, "Soft deleted star locally: ${star.id}")
-
         unlinkChildrenForParent(star.id)
-
-        // Queue to SyncManager
         syncManager.queueDelete(star.id)
-
-        // Trigger wallpaper update immediately (no throttling)
-        triggerImmediateWallpaperUpdate()
     }
 
-    /**
-     * LOCAL-FIRST FIX: Clear all tasks
-     *
-     * 1. Clear local DB FIRST (instant UI feedback)
-     * 2. Queue clear_all to SyncManager (background sync)
-     * 3. Trigger wallpaper update
-     */
     suspend fun clearAllTasks() {
-        // CRITICAL: Clear local DB FIRST for instant UI feedback
         starDao.deleteAllStars()
         Log.d(TAG, "Cleared all stars from local DB")
-
-        // Queue to SyncManager for backend sync
         syncManager.queueClearAll()
-
-        // Trigger wallpaper update
-        triggerImmediateWallpaperUpdate()
-    }
-
-    /**
-     * CRITICAL FIX: Immediate wallpaper update (NO throttling)
-     * Every task change triggers instant wallpaper refresh
-     */
-    private fun triggerImmediateWallpaperUpdate() {
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            try {
-                wallpaperUpdater(context)
-                Log.d(TAG, "Triggered immediate wallpaper update after DB commit")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to trigger wallpaper update: ${e.message}")
-            }
-        }
     }
 
     private fun resolveUserId(): String {
@@ -311,8 +231,6 @@ class TaskRepository(
         }
     }
 
-    // === Entity Conversions ===
-
     private fun StarEntity.toDomain(): Star {
         val star = Star(
             x = x,
@@ -326,7 +244,7 @@ class TaskRepository(
             isRecurring = isRecurring,
             echoInterval = echoInterval?.let { EchoInterval.valueOf(it) },
             createdAt = createdAt,
-            id = localId  // Use localId for domain model
+            id = localId
         )
         star.isCompleted = isCompleted
         star.completedAt = completedAt
@@ -338,7 +256,7 @@ class TaskRepository(
     private fun Star.toEntity(): StarEntity {
         return StarEntity(
             localId = id,
-            serverId = null,  // Will be set after sync
+            serverId = null,
             title = title,
             urgency = urgency,
             dueDate = dueDate,

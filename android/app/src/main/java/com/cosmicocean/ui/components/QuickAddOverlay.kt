@@ -203,7 +203,8 @@ fun QuickAddOverlay(
                     )
                     ExposedDropdownMenu(
                         expanded = showParentMenu,
-                        onDismissRequest = { showParentMenu = false }
+                        onDismissRequest = { showParentMenu = false },
+                        modifier = Modifier.heightIn(max = 200.dp)
                     ) {
                         parentOptions.forEach { option ->
                             DropdownMenuItem(
