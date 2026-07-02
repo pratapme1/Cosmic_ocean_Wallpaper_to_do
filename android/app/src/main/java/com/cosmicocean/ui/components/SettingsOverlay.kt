@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Arrangement
 
@@ -23,7 +24,10 @@ fun SettingsOverlay(
     isCustomWallpaper: Boolean = false,
     onThemeChange: (String) -> Unit = {},
     onOpenPrivacySettings: (() -> Unit)? = null,
-    onOpenEnvironmentSettings: (() -> Unit)? = null
+    onOpenEnvironmentSettings: (() -> Unit)? = null,
+    hasViPat: Boolean = false,
+    onSaveViPat: ((String) -> Unit)? = null,
+    onClearViPat: (() -> Unit)? = null
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -182,6 +186,67 @@ fun SettingsOverlay(
                     Text("🌤️ Environment Settings", color = Color(0xFF00E5FF))
                 }
                 Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Vi Reminders (remote read-only tasks from GitHub)
+            if (onSaveViPat != null) {
+                Text(
+                    "Vi Reminders",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color(0xFF3AA0FF)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (hasViPat) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "✅ Connected — reminders sync with wallpaper refresh",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (onClearViPat != null) {
+                            TextButton(onClick = onClearViPat) {
+                                Text("Disconnect", color = Color(0xFFFF3B30))
+                            }
+                        }
+                    }
+                } else {
+                    var patInput by remember { mutableStateOf("") }
+                    OutlinedTextField(
+                        value = patInput,
+                        onValueChange = { patInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("GitHub token (entered once)", color = Color.White.copy(alpha = 0.6f)) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color(0xFF3AA0FF),
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.3f)
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            if (patInput.isNotBlank()) {
+                                onSaveViPat(patInput.trim())
+                                patInput = ""
+                            }
+                        },
+                        enabled = patInput.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3AA0FF))
+                    ) {
+                        Text("🔑 Save Token & Sync", color = Color(0xFF3AA0FF))
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
             // Quick Actions

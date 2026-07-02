@@ -15,11 +15,54 @@ import java.util.concurrent.TimeUnit
 
 object NetworkModule {
     private const val TAG = "NetworkModule"
+    private const val GITHUB_BASE_URL = "https://api.github.com/"
     private var baseUrl = com.cosmicocean.BuildConfig.API_BASE_URL
 
     // Flag to prevent concurrent token refresh
     @Volatile
     private var isRefreshing = false
+
+    /**
+     * GitHub API client for the Vi reminders feed. Separate from getApi():
+     * it talks to api.github.com with the user's PAT and must keep working
+     * even in LOCAL_ONLY builds (which stub out the app backend).
+     */
+    fun getGitHubApi(context: Context): GitHubApiService {
+        val patManager = com.cosmicocean.reminders.ViPatManager(context.applicationContext)
+
+        val logging = HttpLoggingInterceptor().apply {
+            // Never log bodies/headers for GitHub calls - the PAT must not leak into logcat
+            level = if (com.cosmicocean.BuildConfig.DEBUG) {
+                HttpLoggingInterceptor.Level.BASIC
+            } else {
+                HttpLoggingInterceptor.Level.NONE
+            }
+        }
+
+        val client = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor(logging)
+            .addInterceptor { chain ->
+                val pat = patManager.getPat()
+                val request = if (pat != null) {
+                    chain.request().newBuilder()
+                        .addHeader("Authorization", "Bearer $pat")
+                        .build()
+                } else {
+                    chain.request()
+                }
+                chain.proceed(request)
+            }
+            .build()
+
+        return Retrofit.Builder()
+            .baseUrl(GITHUB_BASE_URL)
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(GitHubApiService::class.java)
+    }
 
     fun getApi(context: Context): ApiService {
         if (com.cosmicocean.BuildConfig.LOCAL_ONLY) {

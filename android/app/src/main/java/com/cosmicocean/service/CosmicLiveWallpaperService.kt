@@ -6,6 +6,7 @@ import android.view.SurfaceHolder
 import android.util.Log
 import com.cosmicocean.data.CosmicDatabase
 import com.cosmicocean.data.EnvironmentPreferencesRepository
+import com.cosmicocean.reminders.RemoteRemindersRepository
 import com.cosmicocean.ui.state.EnvironmentPreferences
 import com.cosmicocean.utils.WallpaperPreferencesManager
 import com.cosmicocean.utils.AchievementUtils
@@ -64,33 +65,51 @@ class CosmicLiveWallpaperService : WallpaperService() {
 
         private fun startRendering() {
             if (renderJob?.isActive == true) return
-            
+
             renderJob = serviceScope.launch {
+                // Remote "Vi" reminders (read-only, fetched by WallpaperWorker)
+                val remindersRepo = RemoteRemindersRepository.getInstance(applicationContext)
+                remindersRepo.ensureCacheLoaded()
+
                 // Reactive data stream
                 val tasksFlow = database.starDao().getTop3TasksFlow() // Use specific flow for list
                 val allTasksFlow = database.starDao().getAllActiveStarsSyncFlow()
                 val totalCountFlow = database.starDao().getActiveTaskCountFlow()
                 val completionAtFlow = database.starDao().getLatestCompletionTimestampFlow()
                 val envFlow = envRepo.preferencesFlow
-                
+                val remoteFlow = remindersRepo.remindersFlow
+
                 // Clock ticker
                 val tickerFlow = flow {
                     while (currentCoroutineContext().isActive) {
                         emit(System.currentTimeMillis())
-                        delay(60_000L) 
+                        delay(60_000L)
                     }
                 }
 
                 combine(
-                    tasksFlow, envFlow, totalCountFlow, completionAtFlow, allTasksFlow, tickerFlow
+                    tasksFlow, envFlow, totalCountFlow, completionAtFlow, allTasksFlow, remoteFlow, tickerFlow
                 ) { arr ->
                     @Suppress("UNCHECKED_CAST")
-                    val tasks = arr[0] as List<com.cosmicocean.data.StarEntity>
+                    val localTasks = arr[0] as List<com.cosmicocean.data.StarEntity>
                     val env = arr[1] as EnvironmentPreferences
-                    val total = arr[2] as Int
+                    val localTotal = arr[2] as Int
                     val completionAt = arr[3] as? Long
-                    val allTasks = arr[4] as List<com.cosmicocean.data.StarEntity>
-                    
+                    val localAllTasks = arr[4] as List<com.cosmicocean.data.StarEntity>
+                    @Suppress("UNCHECKED_CAST")
+                    val remoteReminders = arr[5] as List<com.cosmicocean.data.StarEntity>
+
+                    // Merge remote reminders alongside local tasks, sorted by due date
+                    val tasks = (localTasks + remoteReminders)
+                        .sortedWith(
+                            compareBy<com.cosmicocean.data.StarEntity> { it.dueDate == null }
+                                .thenBy { it.dueDate ?: Long.MAX_VALUE }
+                                .thenBy { it.urgency }
+                        )
+                        .take(3)
+                    val total = localTotal + remoteReminders.size
+                    val allTasks = localAllTasks + remoteReminders
+
                     val mode = prefsManager.getWallpaperMode()
                     val theme = WallpaperTheme.fromString(prefsManager.getTheme())
                     

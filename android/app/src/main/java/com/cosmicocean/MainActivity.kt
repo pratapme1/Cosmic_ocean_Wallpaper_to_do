@@ -117,6 +117,7 @@ class MainActivity : ComponentActivity() {
         }
 
         scheduleDueHaptics()
+        scheduleWallpaperRefresh()
 
         setContent {
             var isAuthenticated by remember { 
@@ -665,6 +666,8 @@ class MainActivity : ComponentActivity() {
                         }
 
                         if (showSettings) {
+                            val viPatManager = remember { com.cosmicocean.reminders.ViPatManager(applicationContext) }
+                            var hasViPat by remember { mutableStateOf(viPatManager.hasPat()) }
                             SettingsOverlay(
                                 onDismiss = { showSettings = false },
                                 onDoneForToday = { showSettings = false; markDoneForToday() },
@@ -684,6 +687,20 @@ class MainActivity : ComponentActivity() {
                                 onOpenEnvironmentSettings = {
                                     showSettings = false
                                     showEnvironmentSettings = true
+                                },
+                                hasViPat = hasViPat,
+                                onSaveViPat = { pat ->
+                                    viPatManager.savePat(pat)
+                                    hasViPat = true
+                                    coroutineScope.launch {
+                                        com.cosmicocean.reminders.RemoteRemindersRepository
+                                            .getInstance(applicationContext)
+                                            .refresh()
+                                    }
+                                },
+                                onClearViPat = {
+                                    viPatManager.clearPat()
+                                    hasViPat = false
                                 }
                             )
                         }
@@ -993,6 +1010,11 @@ class MainActivity : ComponentActivity() {
     private fun scheduleDueHaptics() {
         val periodicWorkRequest = androidx.work.PeriodicWorkRequestBuilder<com.cosmicocean.worker.DueHapticsWorker>(15, java.util.concurrent.TimeUnit.MINUTES).build()
         androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork("due_haptics_worker", androidx.work.ExistingPeriodicWorkPolicy.UPDATE, periodicWorkRequest)
+    }
+
+    private fun scheduleWallpaperRefresh() {
+        val periodicWorkRequest = androidx.work.PeriodicWorkRequestBuilder<WallpaperWorker>(15, java.util.concurrent.TimeUnit.MINUTES).build()
+        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork("wallpaper_refresh_worker", androidx.work.ExistingPeriodicWorkPolicy.UPDATE, periodicWorkRequest)
     }
 
     private fun handleLogin(email: String, password: String, onSuccess: () -> Unit, onError: (String) -> Unit) {

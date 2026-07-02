@@ -20,9 +20,27 @@ class WallpaperWorker(
 
     override suspend fun doWork(): Result {
         Log.d("WallpaperWorker", "Starting background wallpaper update...")
-        
+
+        // Refresh remote "Vi" reminders on every cycle. Guarded so an offline
+        // device or a bad fetch can never crash or fail the worker - the
+        // repository keeps serving the last cached copy.
+        try {
+            com.cosmicocean.reminders.RemoteRemindersRepository
+                .getInstance(applicationContext)
+                .refresh()
+        } catch (e: Exception) {
+            Log.w("WallpaperWorker", "Vi reminders refresh failed: ${e.message}")
+        }
+
+        // The live wallpaper engine renders reactively (including remote
+        // reminders); overwriting it with a static bitmap would clobber it.
+        if (isLiveWallpaperActive()) {
+            Log.d("WallpaperWorker", "Live wallpaper active - skipping static update.")
+            return Result.success()
+        }
+
         val service = WallpaperUpdateService(applicationContext)
-        
+
         // Generate a "Cosmic" bitmap
         val width = 1080
         val height = 1920
@@ -60,6 +78,15 @@ class WallpaperWorker(
         } else {
             Log.e("WallpaperWorker", "Background wallpaper update failed.")
             Result.retry()
+        }
+    }
+
+    private fun isLiveWallpaperActive(): Boolean {
+        return try {
+            val info = WallpaperManager.getInstance(applicationContext).wallpaperInfo
+            info?.serviceName == com.cosmicocean.service.CosmicLiveWallpaperService::class.java.name
+        } catch (e: Exception) {
+            false
         }
     }
 }
