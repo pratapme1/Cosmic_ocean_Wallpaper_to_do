@@ -32,6 +32,7 @@
 ### Testing
 - `ANDROID_HOME=/home/vi/Android/Sdk ./gradlew testDebugUnitTest --rerun-tasks`
 - Live Supabase REST smoke: upsert create, fetch, upsert update, complete/filter inactive, and delete cleanup.
+- Live app-path Supabase CRUD instrumentation: `adb shell am instrument -w -r -e supabaseAnonKey <redacted> -e class com.cosmicocean.integration.SupabaseReminderCrudE2ETest com.cosmicocean.test/androidx.test.runner.AndroidJUnitRunner`
 - `adb shell am instrument -w -r -e class com.cosmicocean.e2e.WallpaperConsentE2ETest#testWallpaperConsentFlow com.cosmicocean.test/androidx.test.runner.AndroidJUnitRunner`
 - Screenshot evidence reviewed in `qa-runs/2026-07-02-supabase-reminders`.
 
