@@ -166,7 +166,11 @@ class EnvironmentSettingsViewModel(
                             }
                             repo.setParticleIntensity(intensity)
                         }
-                        "wallpaper_mode" -> repo.setWallpaperMode(value.toString())
+                        "wallpaper_mode" -> {
+                            val mode = value.toString()
+                            repo.setWallpaperMode(mode)
+                            wallpaperPreferences.setWallpaperMode(mode)
+                        }
                         "context_mode" -> {
                             val mode = if (value.toString().lowercase() == "manual")
                                 com.cosmicocean.ui.state.ContextMode.MANUAL

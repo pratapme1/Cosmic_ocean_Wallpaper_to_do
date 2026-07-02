@@ -9,6 +9,7 @@ import com.cosmicocean.data.EnvironmentPreferencesRepository
 import com.cosmicocean.reminders.RemoteRemindersRepository
 import com.cosmicocean.ui.state.EnvironmentPreferences
 import com.cosmicocean.utils.WallpaperPreferencesManager
+import com.cosmicocean.utils.WallpaperRenderPreferences
 import com.cosmicocean.utils.AchievementUtils
 import com.cosmicocean.utils.AchievementSnapshot
 import com.cosmicocean.wallpaper.LocalWallpaperGenerator
@@ -22,6 +23,9 @@ import java.io.File
  * Provides 100% parity with legacy bitmap generation but with battery efficiency and real-time reactivity.
  */
 class CosmicLiveWallpaperService : WallpaperService() {
+    companion object {
+        const val REMOTE_REMINDER_REFRESH_INTERVAL_MS = 5 * 60 * 1000L
+    }
 
     override fun onCreateEngine(): Engine {
         return CosmicEngine()
@@ -29,8 +33,9 @@ class CosmicLiveWallpaperService : WallpaperService() {
 
     inner class CosmicEngine : Engine() {
         private val TAG = "CosmicEngine"
-        private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+        private var serviceScope = newServiceScope()
         private var renderJob: Job? = null
+        private var remoteRefreshJob: Job? = null
         
         private lateinit var database: CosmicDatabase
         private lateinit var envRepo: EnvironmentPreferencesRepository
@@ -58,18 +63,41 @@ class CosmicLiveWallpaperService : WallpaperService() {
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
             super.onSurfaceDestroyed(holder)
             stopRendering()
+            recycleCachedBitmap()
+        }
+
+        override fun onDestroy() {
+            stopRendering()
             serviceScope.cancel()
+            recycleCachedBitmap()
+            super.onDestroy()
+        }
+
+        private fun newServiceScope(): CoroutineScope {
+            return CoroutineScope(Dispatchers.Default + SupervisorJob())
+        }
+
+        private fun ensureServiceScopeActive() {
+            if (!serviceScope.isActive) {
+                serviceScope = newServiceScope()
+            }
+        }
+
+        private fun recycleCachedBitmap() {
             cachedBitmap?.recycle()
             cachedBitmap = null
+            lastBitmapPath = null
         }
 
         private fun startRendering() {
             if (renderJob?.isActive == true) return
+            ensureServiceScopeActive()
 
             renderJob = serviceScope.launch {
-                // Remote "Vi" reminders (read-only, fetched by WallpaperWorker)
+                // Remote "Vi" reminders (read-only, fetched on a five-minute live wallpaper cadence).
                 val remindersRepo = RemoteRemindersRepository.getInstance(applicationContext)
                 remindersRepo.ensureCacheLoaded()
+                startRemoteRefreshLoop(remindersRepo)
 
                 // Reactive data stream
                 val tasksFlow = database.starDao().getTop3TasksFlow() // Use specific flow for list
@@ -78,6 +106,7 @@ class CosmicLiveWallpaperService : WallpaperService() {
                 val completionAtFlow = database.starDao().getLatestCompletionTimestampFlow()
                 val envFlow = envRepo.preferencesFlow
                 val remoteFlow = remindersRepo.remindersFlow
+                val wallpaperPrefsFlow = prefsManager.renderPreferencesFlow()
 
                 // Clock ticker
                 val tickerFlow = flow {
@@ -88,7 +117,7 @@ class CosmicLiveWallpaperService : WallpaperService() {
                 }
 
                 combine(
-                    tasksFlow, envFlow, totalCountFlow, completionAtFlow, allTasksFlow, remoteFlow, tickerFlow
+                    tasksFlow, envFlow, totalCountFlow, completionAtFlow, allTasksFlow, remoteFlow, wallpaperPrefsFlow, tickerFlow
                 ) { arr ->
                     @Suppress("UNCHECKED_CAST")
                     val localTasks = arr[0] as List<com.cosmicocean.data.StarEntity>
@@ -98,6 +127,7 @@ class CosmicLiveWallpaperService : WallpaperService() {
                     val localAllTasks = arr[4] as List<com.cosmicocean.data.StarEntity>
                     @Suppress("UNCHECKED_CAST")
                     val remoteReminders = arr[5] as List<com.cosmicocean.data.StarEntity>
+                    val wallpaperPrefs = arr[6] as WallpaperRenderPreferences
 
                     // Merge remote reminders alongside local tasks, sorted by due date
                     val tasks = (localTasks + remoteReminders)
@@ -110,23 +140,20 @@ class CosmicLiveWallpaperService : WallpaperService() {
                     val total = localTotal + remoteReminders.size
                     val allTasks = localAllTasks + remoteReminders
 
-                    val mode = prefsManager.getWallpaperMode()
-                    val theme = WallpaperTheme.fromString(prefsManager.getTheme())
-                    
                     // Fetch achievements
                     val achievements = AchievementUtils.getSnapshot(applicationContext)
-                    
-                    val metadata = mutableMapOf<String, Any>()
-                    metadata["mode"] = mode
-                    metadata["theme"] = theme
-                    metadata["total"] = total
-                    if (completionAt != null) metadata["completionAt"] = completionAt
-                    metadata["achievements"] = achievements
-                    metadata["allTasks"] = allTasks
-                    
-                    Triple(tasks, env, metadata.toMap())
-                }.collect { (tasks, env, metadata) ->
-                    draw(tasks, env, metadata)
+
+                    RenderFrame(
+                        tasks = tasks,
+                        env = env,
+                        preferences = wallpaperPrefs,
+                        totalCount = total,
+                        completionAt = completionAt,
+                        achievements = achievements,
+                        allTasks = allTasks
+                    )
+                }.collect { frame ->
+                    draw(frame)
                 }
             }
         }
@@ -134,52 +161,66 @@ class CosmicLiveWallpaperService : WallpaperService() {
         private fun stopRendering() {
             renderJob?.cancel()
             renderJob = null
+            remoteRefreshJob?.cancel()
+            remoteRefreshJob = null
         }
 
-        private fun draw(tasks: List<com.cosmicocean.data.StarEntity>, env: EnvironmentPreferences, metadata: Map<String, Any>) {
+        private fun startRemoteRefreshLoop(remindersRepo: RemoteRemindersRepository) {
+            if (remoteRefreshJob?.isActive == true) return
+            remoteRefreshJob = serviceScope.launch(Dispatchers.IO) {
+                while (isActive) {
+                    try {
+                        remindersRepo.refresh()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Remote reminder refresh failed: ${e.message}")
+                    }
+                    delay(REMOTE_REMINDER_REFRESH_INTERVAL_MS)
+                }
+            }
+        }
+
+        private fun draw(frame: RenderFrame) {
             val holder = surfaceHolder
             val canvas = holder.lockCanvas() ?: return
             
             try {
                 val width = canvas.width
                 val height = canvas.height
-                val theme = metadata["theme"] as WallpaperTheme
-                val totalCount = metadata["total"] as Int
-                val completionAt = metadata["completionAt"] as? Long
-                val achievements = metadata["achievements"] as AchievementSnapshot
-                val allTasks = metadata["allTasks"] as List<com.cosmicocean.data.StarEntity>
-                val mode = metadata["mode"] as String
+                val theme = WallpaperTheme.fromString(frame.preferences.theme)
 
-                if (mode == WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM) {
-                    val path = prefsManager.getCustomWallpaperPath()
-                    if (path != null) {
-                        val bitmap = getOrLoadBitmap(path)
-                        if (bitmap != null) {
-                            LocalWallpaperGenerator.renderWithCustomBackground(
-                                canvas, width, height, tasks, totalCount, bitmap,
-                                achievements.achievementCount, achievements.streakDays,
-                                theme, env, allTasks, completionAt
-                            )
-                        } else {
-                            LocalWallpaperGenerator.render(
-                                canvas, width, height, tasks, totalCount, theme,
-                                achievements.achievementCount, achievements.streakDays,
-                                env, allTasks, completionAt
-                            )
-                        }
+                if (frame.preferences.wallpaperMode == WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM) {
+                    val bitmap = frame.preferences.customWallpaperPath?.let { getOrLoadBitmap(it) }
+                    if (bitmap != null) {
+                        LocalWallpaperGenerator.renderWithCustomBackground(
+                            canvas, width, height, frame.tasks, frame.totalCount, bitmap,
+                            frame.achievements.achievementCount, frame.achievements.streakDays,
+                            theme, frame.env, frame.allTasks, frame.completionAt
+                        )
+                    } else {
+                        renderGenerated(canvas, width, height, frame, theme)
                     }
                 } else {
-                    LocalWallpaperGenerator.render(
-                        canvas, width, height, tasks, totalCount, theme,
-                        achievements.achievementCount, achievements.streakDays,
-                        env, allTasks, completionAt
-                    )
+                    renderGenerated(canvas, width, height, frame, theme)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Render failed", e)
             } finally {
                 holder.unlockCanvasAndPost(canvas)
             }
+        }
+
+        private fun renderGenerated(
+            canvas: android.graphics.Canvas,
+            width: Int,
+            height: Int,
+            frame: RenderFrame,
+            theme: WallpaperTheme
+        ) {
+            LocalWallpaperGenerator.render(
+                canvas, width, height, frame.tasks, frame.totalCount, theme,
+                frame.achievements.achievementCount, frame.achievements.streakDays,
+                frame.env, frame.allTasks, frame.completionAt
+            )
         }
 
         private fun getOrLoadBitmap(path: String): Bitmap? {
@@ -204,3 +245,13 @@ class CosmicLiveWallpaperService : WallpaperService() {
         }
     }
 }
+
+private data class RenderFrame(
+    val tasks: List<com.cosmicocean.data.StarEntity>,
+    val env: EnvironmentPreferences,
+    val preferences: WallpaperRenderPreferences,
+    val totalCount: Int,
+    val completionAt: Long?,
+    val achievements: AchievementSnapshot,
+    val allTasks: List<com.cosmicocean.data.StarEntity>
+)

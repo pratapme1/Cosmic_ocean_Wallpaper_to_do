@@ -5,6 +5,16 @@ import android.content.SharedPreferences
 import android.util.DisplayMetrics
 import android.view.WindowManager
 import com.cosmicocean.model.UserProfile
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+
+data class WallpaperRenderPreferences(
+    val theme: String = WallpaperPreferencesManager.DEFAULT_THEME,
+    val wallpaperMode: String = WallpaperPreferencesManager.WALLPAPER_MODE_GENERATED,
+    val customWallpaperPath: String? = null
+)
 
 class WallpaperPreferencesManager(private val context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -25,6 +35,27 @@ class WallpaperPreferencesManager(private val context: Context) {
         const val WALLPAPER_MODE_CUSTOM = "custom"
 
         val AVAILABLE_THEMES = listOf("cosmic", "ocean", "fantasy")
+    }
+
+    fun getRenderPreferences(): WallpaperRenderPreferences {
+        return WallpaperRenderPreferences(
+            theme = getTheme(),
+            wallpaperMode = getWallpaperMode(),
+            customWallpaperPath = getCustomWallpaperPath()
+        )
+    }
+
+    fun renderPreferencesFlow(): Flow<WallpaperRenderPreferences> {
+        return callbackFlow {
+            val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                if (key == null || key == KEY_THEME || key == KEY_WALLPAPER_MODE || key == KEY_CUSTOM_WALLPAPER_PATH) {
+                    trySend(getRenderPreferences())
+                }
+            }
+            prefs.registerOnSharedPreferenceChangeListener(listener)
+            trySend(getRenderPreferences())
+            awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+        }.distinctUntilChanged()
     }
 
     fun getTheme(): String {

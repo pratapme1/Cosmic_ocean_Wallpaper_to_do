@@ -29,6 +29,7 @@
 | 2026-02-06 | Codex | Custom wallpaper overlay removal + action-based tutorial + recurring/subtask UX + consent flow fix | Pass | android/app/build/reports/tests/testDebugUnitTest, android/app/build/reports/androidTests/connected, qa-runs/2026-02-06-consent-test, qa-runs/2026-02-06-e2e-full-run6 |
 | 2026-02-06 | Codex | Parent-linked subtasks + orbit canvas + wallpaper indent + full e2e run | Pass | android/app/build/reports/tests/testDebugUnitTest, android/app/build/reports/androidTests/connected, qa-runs/2026-02-06-subtasks |
 | 2026-02-06 | Codex | Release 2.7.3 device test build | Pass | android/app/build/outputs/apk/release/app-release.apk, cosmic-ocean-v2.7.3.apk |
+| 2026-07-02 | Codex | Live wallpaper cloud refresh cadence + immediate local wallpaper preference updates | Pass | android/app/build/reports/tests/testDebugUnitTest, android/app/build/reports/androidTests/connected, qa-runs/2026-07-02-wallpaper-refresh |
 
 ## Blockers
 | Date | Item | Reason | Owner |

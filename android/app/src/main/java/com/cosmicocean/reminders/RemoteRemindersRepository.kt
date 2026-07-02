@@ -112,4 +112,18 @@ class RemoteRemindersRepository private constructor(private val appContext: Cont
             false
         }
     }
+
+    suspend fun clearCache() = withContext(Dispatchers.IO) {
+        try {
+            if (cacheFile.exists()) {
+                cacheFile.delete()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to delete reminders cache: ${e.message}")
+        } finally {
+            cacheLoaded = true
+            _reminders.value = emptyList()
+        }
+        Unit
+    }
 }

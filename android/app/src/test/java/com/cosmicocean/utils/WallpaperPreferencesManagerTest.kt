@@ -6,10 +6,18 @@ import android.util.DisplayMetrics
 import android.view.Display
 import android.view.WindowManager
 import com.cosmicocean.model.UserProfile
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.ArgumentCaptor
 import org.mockito.Mock
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.verify
@@ -99,6 +107,54 @@ class WallpaperPreferencesManagerTest {
             val result = prefsManager.setTheme(theme)
             assertTrue("Theme $theme should be valid", result)
         }
+    }
+
+    @Test
+    fun getRenderPreferences_returnsCurrentWallpaperSnapshot() {
+        `when`(mockSharedPreferences.getString("theme", WallpaperPreferencesManager.DEFAULT_THEME))
+            .thenReturn("ocean")
+        `when`(mockSharedPreferences.getString("wallpaper_mode", WallpaperPreferencesManager.WALLPAPER_MODE_GENERATED))
+            .thenReturn(WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM)
+        `when`(mockSharedPreferences.getString("custom_wallpaper_path", null))
+            .thenReturn("/tmp/custom.jpg")
+
+        val snapshot = prefsManager.getRenderPreferences()
+
+        assertEquals("ocean", snapshot.theme)
+        assertEquals(WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM, snapshot.wallpaperMode)
+        assertEquals("/tmp/custom.jpg", snapshot.customWallpaperPath)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun renderPreferencesFlow_emitsSnapshotWhenWallpaperPreferencesChange() = runTest {
+        `when`(mockSharedPreferences.getString("theme", WallpaperPreferencesManager.DEFAULT_THEME))
+            .thenReturn(WallpaperPreferencesManager.DEFAULT_THEME)
+        `when`(mockSharedPreferences.getString("wallpaper_mode", WallpaperPreferencesManager.WALLPAPER_MODE_GENERATED))
+            .thenReturn(
+                WallpaperPreferencesManager.WALLPAPER_MODE_GENERATED,
+                WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM
+            )
+        `when`(mockSharedPreferences.getString("custom_wallpaper_path", null))
+            .thenReturn(null, "/tmp/custom.jpg")
+
+        val emissions = mutableListOf<WallpaperRenderPreferences>()
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            prefsManager.renderPreferencesFlow().take(2).toList(emissions)
+        }
+
+        val listenerCaptor = ArgumentCaptor.forClass(SharedPreferences.OnSharedPreferenceChangeListener::class.java)
+        verify(mockSharedPreferences).registerOnSharedPreferenceChangeListener(listenerCaptor.capture())
+        listenerCaptor.value.onSharedPreferenceChanged(mockSharedPreferences, "custom_wallpaper_path")
+        advanceUntilIdle()
+
+        assertEquals(2, emissions.size)
+        assertEquals(WallpaperPreferencesManager.WALLPAPER_MODE_GENERATED, emissions[0].wallpaperMode)
+        assertNull(emissions[0].customWallpaperPath)
+        assertEquals(WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM, emissions[1].wallpaperMode)
+        assertEquals("/tmp/custom.jpg", emissions[1].customWallpaperPath)
+
+        job.cancel()
     }
 
     @Test

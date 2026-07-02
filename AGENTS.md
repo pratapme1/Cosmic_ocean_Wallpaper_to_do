@@ -19,6 +19,7 @@
 - 2026-02-06: Lock screen wallpaper CRUD verification + full e2e run (screenshots saved, qa-runs/2026-02-06-e2e-run4).
 - 2026-02-06: Custom wallpaper overlay removal + action-based tutorial + recurring/subtask UX + consent flow fix (unit + UI tests, screenshots saved, qa-runs/2026-02-06-e2e-full-run6).
 - 2026-02-06: Parent-linked subtasks with orbit canvas + wallpaper indent (unit + UI tests, screenshots saved, qa-runs/2026-02-06-subtasks).
+- 2026-07-02: Live wallpaper cloud refresh cadence + immediate local wallpaper preference updates (unit + UI tests, screenshot reviewed, qa-runs/2026-07-02-wallpaper-refresh).
 
 ## Release Discipline
 - Every release APK build must follow this order: update `CHANGELOG.md` → commit/push → rebuild APK named from changelog version.

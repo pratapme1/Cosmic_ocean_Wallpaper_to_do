@@ -398,3 +398,4 @@
 - 2026-02-06: Deep e2e expansion run completed twice with screenshots; no skips after stabilizing edit/focus flows (see `docs/STATUS_TRACKING.md`).
 - 2026-02-06: Verified no-skip e2e runs with screenshot review (see `docs/STATUS_TRACKING.md`).
 - 2026-02-06: Recurring + subtask UX + consent flow verified with full e2e run (see `qa-runs/2026-02-06-e2e-full-run6`).
+- 2026-07-02: Live wallpaper refresh regression verified. Remote reminders now refresh on a 5-minute live wallpaper cadence, local custom wallpaper path changes update immediately, and screenshot evidence is saved in `qa-runs/2026-07-02-wallpaper-refresh`.

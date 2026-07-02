@@ -14,6 +14,22 @@
 ### Testing
 - (placeholder)
 
+## [2.8.6] - 2026-07-02 (Wallpaper Refresh Reliability)
+
+### Changed
+- Live wallpaper now refreshes remote Vi reminders every 5 minutes while the wallpaper engine is running; WorkManager remains a 15-minute background cache fallback because Android does not support 5-minute periodic work.
+- Wallpaper refresh worker no longer writes a legacy static gradient over the user's lock wallpaper.
+
+### Fixed
+- Local custom wallpaper mode/path and theme changes now emit an observable render preference snapshot so the live wallpaper updates immediately instead of waiting for a ticker or unrelated database event.
+- Environment settings and custom wallpaper uploads now keep wallpaper mode in sync across DataStore and `WallpaperPreferencesManager`.
+- Custom mode falls back to generated rendering when the custom path is missing or invalid, avoiding blank wallpaper frames.
+
+### Testing
+- `ANDROID_HOME=/home/vi/Android/Sdk ./gradlew testDebugUnitTest`
+- `ANDROID_HOME=/home/vi/Android/Sdk PATH=/home/vi/Android/Sdk/platform-tools:$PATH ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.cosmicocean.e2e.CustomWallpaperMultiUploadE2ETest`
+- Screenshot evidence reviewed in `qa-runs/2026-07-02-wallpaper-refresh`.
+
 ## [2.8.5] - 2026-02-09 (Custom Wallpaper Fix)
 
 ### Fixed

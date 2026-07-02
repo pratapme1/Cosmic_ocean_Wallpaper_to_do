@@ -10,11 +10,11 @@ import com.cosmicocean.MainActivity
 import com.cosmicocean.auth.TokenManager
 import com.cosmicocean.utils.WallpaperPreferencesManager
 import com.cosmicocean.test.ScreenshotTestRule
+import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class CustomWallpaperMultiUploadE2ETest {
@@ -39,23 +39,28 @@ class CustomWallpaperMultiUploadE2ETest {
     }
 
     @Test
-    fun testDirectWallpaperPathUpdates() {
+    fun testDirectWallpaperPathUpdates() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val wallpaperPrefs = WallpaperPreferencesManager(context)
         
         // 1. Simulate first upload
         val path1 = "/sdcard/Download/image1.png"
+        val path2 = "/sdcard/Download/image2.png"
+
         wallpaperPrefs.setWallpaperMode(WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM)
         wallpaperPrefs.setCustomWallpaperPath(path1)
+        org.junit.Assert.assertEquals(
+            path1,
+            wallpaperPrefs.getRenderPreferences().customWallpaperPath
+        )
         
-        composeTestRule.waitForIdle()
-        Thread.sleep(5000) // Wait for Live Wallpaper engine to react (it observes preferences)
-        
-        // 2. Simulate second upload (The path should be DIFFERENT in real fix, but let's test path change first)
-        val path2 = "/sdcard/Download/image2.png"
+        // 2. Simulate second upload. The live wallpaper observes this flow, so
+        // the stored render snapshot must change immediately, without waiting
+        // for a ticker or another database event.
         wallpaperPrefs.setCustomWallpaperPath(path2)
-        
+
         composeTestRule.waitForIdle()
-        Thread.sleep(5000)
+
+        org.junit.Assert.assertEquals(path2, wallpaperPrefs.getRenderPreferences().customWallpaperPath)
     }
 }

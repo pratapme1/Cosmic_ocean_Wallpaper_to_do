@@ -308,6 +308,7 @@ class MainActivity : ComponentActivity() {
                                 // LOCAL-FIRST FIX: Set wallpaper mode and path in preferences
                                 wallpaperPreferences.setWallpaperMode(WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM)
                                 wallpaperPreferences.setCustomWallpaperPath(permanentFile.absolutePath)
+                                envRepo.setWallpaperMode(WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM)
 
                                 advanceTutorialStep(4)
                                 Toast.makeText(context, "Custom wallpaper applied!", Toast.LENGTH_SHORT).show()
@@ -701,6 +702,11 @@ class MainActivity : ComponentActivity() {
                                 onClearViPat = {
                                     viPatManager.clearPat()
                                     hasViPat = false
+                                    coroutineScope.launch {
+                                        com.cosmicocean.reminders.RemoteRemindersRepository
+                                            .getInstance(applicationContext)
+                                            .clearCache()
+                                    }
                                 }
                             )
                         }
@@ -1013,8 +1019,21 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun scheduleWallpaperRefresh() {
-        val periodicWorkRequest = androidx.work.PeriodicWorkRequestBuilder<WallpaperWorker>(15, java.util.concurrent.TimeUnit.MINUTES).build()
-        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork("wallpaper_refresh_worker", androidx.work.ExistingPeriodicWorkPolicy.UPDATE, periodicWorkRequest)
+        val periodicWorkRequest = androidx.work.PeriodicWorkRequestBuilder<WallpaperWorker>(
+            WallpaperWorker.WORK_MANAGER_REFRESH_INTERVAL_MINUTES,
+            java.util.concurrent.TimeUnit.MINUTES
+        ).build()
+        val workManager = androidx.work.WorkManager.getInstance(this)
+        workManager.enqueueUniquePeriodicWork(
+            WallpaperWorker.UNIQUE_WORK_NAME,
+            androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
+            periodicWorkRequest
+        )
+        workManager.enqueueUniqueWork(
+            "${WallpaperWorker.UNIQUE_WORK_NAME}_startup",
+            androidx.work.ExistingWorkPolicy.REPLACE,
+            androidx.work.OneTimeWorkRequestBuilder<WallpaperWorker>().build()
+        )
     }
 
     private fun handleLogin(email: String, password: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
