@@ -119,6 +119,13 @@ class MainActivity : ComponentActivity() {
         scheduleDueHaptics()
         scheduleWallpaperRefresh()
 
+        // Pull the latest Vi reminders (and flush queued completions) on app open
+        lifecycleScope.launch {
+            com.cosmicocean.reminders.RemoteRemindersRepository
+                .getInstance(applicationContext)
+                .refresh()
+        }
+
         setContent {
             var isAuthenticated by remember { 
                 mutableStateOf(tokenManager.isLoggedIn() || BuildConfig.LOCAL_ONLY) 
@@ -166,6 +173,7 @@ class MainActivity : ComponentActivity() {
                 var lastTapOffset by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
                 var isInteracting by remember { mutableStateOf(false) }
                 var currentTheme by remember { mutableStateOf(wallpaperPreferences.getTheme()) }
+                var currentTaskPlacement by remember { mutableStateOf(wallpaperPreferences.getTaskPlacement()) }
                 var showWallpaperConsent by remember { mutableStateOf(false) }
                 var showDiscovery by remember { mutableStateOf(false) }
                 var isUploadingWallpaper by remember { mutableStateOf(false) }
@@ -667,8 +675,8 @@ class MainActivity : ComponentActivity() {
                         }
 
                         if (showSettings) {
-                            val viPatManager = remember { com.cosmicocean.reminders.ViPatManager(applicationContext) }
-                            var hasViPat by remember { mutableStateOf(viPatManager.hasPat()) }
+                            val viKeyManager = remember { com.cosmicocean.reminders.ViSupabaseKeyManager(applicationContext) }
+                            var hasViKey by remember { mutableStateOf(viKeyManager.hasKey()) }
                             SettingsOverlay(
                                 onDismiss = { showSettings = false },
                                 onDoneForToday = { showSettings = false; markDoneForToday() },
@@ -681,6 +689,11 @@ class MainActivity : ComponentActivity() {
                                     currentTheme = newTheme
                                     changeWallpaperTheme(newTheme)
                                 },
+                                currentTaskPlacement = currentTaskPlacement,
+                                onTaskPlacementChange = { newPlacement ->
+                                    currentTaskPlacement = newPlacement
+                                    wallpaperPreferences.setTaskPlacement(newPlacement)
+                                },
                                 onOpenPrivacySettings = {
                                     showSettings = false
                                     showPrivacySettings = true
@@ -689,23 +702,23 @@ class MainActivity : ComponentActivity() {
                                     showSettings = false
                                     showEnvironmentSettings = true
                                 },
-                                hasViPat = hasViPat,
-                                onSaveViPat = { pat ->
-                                    viPatManager.savePat(pat)
-                                    hasViPat = true
+                                hasViKey = hasViKey,
+                                onSaveViKey = { key ->
+                                    viKeyManager.saveKey(key)
+                                    hasViKey = true
                                     coroutineScope.launch {
                                         com.cosmicocean.reminders.RemoteRemindersRepository
                                             .getInstance(applicationContext)
                                             .refresh()
                                     }
                                 },
-                                onClearViPat = {
-                                    viPatManager.clearPat()
-                                    hasViPat = false
+                                onClearViKey = {
+                                    viKeyManager.clearKey()
+                                    hasViKey = false
                                     coroutineScope.launch {
                                         com.cosmicocean.reminders.RemoteRemindersRepository
                                             .getInstance(applicationContext)
-                                            .clearCache()
+                                            .clearLocal()
                                     }
                                 }
                             )

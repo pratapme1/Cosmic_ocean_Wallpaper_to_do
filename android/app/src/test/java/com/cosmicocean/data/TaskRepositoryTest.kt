@@ -75,6 +75,53 @@ class TaskRepositoryTest {
     }
 
     @Test
+    fun `updating remote Vi reminder stays out of app sync queue`() = runTest {
+        val star = Star(
+            x = 100f,
+            y = 100f,
+            title = "Vi · Remote reminder",
+            urgency = 2,
+            dueDate = null,
+            id = "vi_remote_remote-1"
+        )
+
+        coEvery { starDao.getByLocalId("vi_remote_remote-1") } returns null
+        coEvery { starDao.insertStarWithTransaction(any()) } returns Unit
+
+        repository.updateStar(star)
+
+        coVerify {
+            starDao.insertStarWithTransaction(match {
+                it.localId == "vi_remote_remote-1" &&
+                    it.contextTag == com.cosmicocean.reminders.ViReminderMapper.VI_CONTEXT_TAG &&
+                    it.syncStatus == com.cosmicocean.reminders.ViReminderMapper.SYNC_STATUS_REMOTE
+            })
+        }
+        coVerify(exactly = 0) { syncManager.queueUpdate(any(), any()) }
+        coVerify(exactly = 0) { syncManager.queueCreate(any(), any(), any()) }
+    }
+
+    @Test
+    fun `deleting remote Vi reminder stays out of app sync queue`() = runTest {
+        val star = Star(
+            x = 100f,
+            y = 100f,
+            title = "Vi · Remote reminder",
+            urgency = 2,
+            dueDate = null,
+            id = "vi_remote_remote-1"
+        )
+
+        coEvery { starDao.softDelete(any(), any()) } returns Unit
+        coEvery { starDao.getChildrenForParent("vi_remote_remote-1") } returns emptyList()
+
+        repository.deleteStar(star)
+
+        coVerify { starDao.softDelete("vi_remote_remote-1", any()) }
+        coVerify(exactly = 0) { syncManager.queueDelete(any()) }
+    }
+
+    @Test
     fun `clearAllTasks queues clear`() = runTest {
         coEvery { starDao.deleteAllStars() } returns Unit
         coEvery { syncManager.queueClearAll() } returns Unit

@@ -190,6 +190,17 @@
   - Lock screen wallpaper changes after add/edit/complete
   - Screenshots saved for review
 
+### 11g) Supabase Vi Reminder Sync
+- **Problem**: Assistant reminders and app reminders needed a shared API-backed source instead of one-way GitHub JSON import.
+- **Outcome**: Supabase-backed reminder CRUD sync across assistant-created rows and app-created tasks.
+- **Est.**: 1 day
+- **Status**: Done (2026-07-02)
+- **Acceptance Criteria**:
+  - Assistant-created active reminders appear in the app, widget, and wallpaper
+  - App-created reminders are mirrored to Supabase
+  - App edits, completions, archives, and deletes update the Supabase row or active state
+  - Offline or failed writes are queued and retried without deleting local tasks
+
 ## P2 — Core Flow Enhancements
 
 ### 12) Focus Sessions

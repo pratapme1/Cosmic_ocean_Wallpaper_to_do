@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 
 object NetworkModule {
     private const val TAG = "NetworkModule"
-    private const val GITHUB_BASE_URL = "https://api.github.com/"
+    private const val VI_SUPABASE_BASE_URL = "https://lxzqrweszoziuviscigd.supabase.co/rest/v1/"
     private var baseUrl = com.cosmicocean.BuildConfig.API_BASE_URL
 
     // Flag to prevent concurrent token refresh
@@ -23,15 +23,15 @@ object NetworkModule {
     private var isRefreshing = false
 
     /**
-     * GitHub API client for the Vi reminders feed. Separate from getApi():
-     * it talks to api.github.com with the user's PAT and must keep working
-     * even in LOCAL_ONLY builds (which stub out the app backend).
+     * Supabase REST client for the Vi reminders table. Separate from getApi():
+     * it talks to the Supabase project with the user's anon key and must keep
+     * working even in LOCAL_ONLY builds (which stub out the app backend).
      */
-    fun getGitHubApi(context: Context): GitHubApiService {
-        val patManager = com.cosmicocean.reminders.ViPatManager(context.applicationContext)
+    fun getViSupabaseApi(context: Context): ViSupabaseApiService {
+        val keyManager = com.cosmicocean.reminders.ViSupabaseKeyManager(context.applicationContext)
 
         val logging = HttpLoggingInterceptor().apply {
-            // Never log bodies/headers for GitHub calls - the PAT must not leak into logcat
+            // Never log bodies/headers for Supabase calls - the anon key must not leak into logcat
             level = if (com.cosmicocean.BuildConfig.DEBUG) {
                 HttpLoggingInterceptor.Level.BASIC
             } else {
@@ -44,10 +44,11 @@ object NetworkModule {
             .readTimeout(30, TimeUnit.SECONDS)
             .addInterceptor(logging)
             .addInterceptor { chain ->
-                val pat = patManager.getPat()
-                val request = if (pat != null) {
+                val key = keyManager.getKey()
+                val request = if (key != null) {
                     chain.request().newBuilder()
-                        .addHeader("Authorization", "Bearer $pat")
+                        .addHeader("apikey", key)
+                        .addHeader("Authorization", "Bearer $key")
                         .build()
                 } else {
                     chain.request()
@@ -57,11 +58,11 @@ object NetworkModule {
             .build()
 
         return Retrofit.Builder()
-            .baseUrl(GITHUB_BASE_URL)
+            .baseUrl(VI_SUPABASE_BASE_URL)
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
-            .create(GitHubApiService::class.java)
+            .create(ViSupabaseApiService::class.java)
     }
 
     fun getApi(context: Context): ApiService {

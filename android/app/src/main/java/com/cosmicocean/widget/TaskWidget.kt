@@ -195,6 +195,21 @@ class ToggleTaskAction : ActionCallback {
         Log.d("TaskWidget", "Completing task: $taskId")
 
         try {
+            if (taskId != null && com.cosmicocean.reminders.ViReminderMapper.isRemoteReminder(taskId)) {
+                // Remote Vi reminder: complete in Room + push the Supabase PATCH
+                val db = com.cosmicocean.data.CosmicDatabase.getDatabase(context)
+                val now = System.currentTimeMillis()
+                db.starDao().markCompleted(taskId, now)
+                db.starDao().updateSyncStatus(
+                    taskId,
+                    com.cosmicocean.reminders.ViReminderMapper.SYNC_STATUS_REMOTE
+                )
+                com.cosmicocean.reminders.RemoteRemindersRepository
+                    .getInstance(context)
+                    .completeReminder(taskId)
+                TaskWidget().update(context, glanceId)
+                return
+            }
             if (taskId != null) {
                 // Use updateTask with completed=true (completeTask endpoint doesn't exist)
                 val response = NetworkModule.getApi(context).updateTask(

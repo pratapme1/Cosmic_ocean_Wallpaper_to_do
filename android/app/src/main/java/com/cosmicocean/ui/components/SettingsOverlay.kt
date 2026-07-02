@@ -23,11 +23,13 @@ fun SettingsOverlay(
     currentTheme: String = "cosmic",
     isCustomWallpaper: Boolean = false,
     onThemeChange: (String) -> Unit = {},
+    currentTaskPlacement: String = "auto",
+    onTaskPlacementChange: (String) -> Unit = {},
     onOpenPrivacySettings: (() -> Unit)? = null,
     onOpenEnvironmentSettings: (() -> Unit)? = null,
-    hasViPat: Boolean = false,
-    onSaveViPat: ((String) -> Unit)? = null,
-    onClearViPat: (() -> Unit)? = null
+    hasViKey: Boolean = false,
+    onSaveViKey: ((String) -> Unit)? = null,
+    onClearViKey: (() -> Unit)? = null
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -164,6 +166,49 @@ fun SettingsOverlay(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Task position on the wallpaper (keeps tasks clear of lock screen notifications)
+            Text(
+                "Task Position",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color(0xFF3AA0FF)
+            )
+            Text(
+                "Auto keeps tasks clear of lock screen notifications on your Android version",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.6f)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    Triple("auto", "✨ Auto", Color(0xFF3AA0FF)),
+                    Triple("top", "⬆️ Top", Color(0xFF00CED1)),
+                    Triple("bottom", "⬇️ Bottom", Color(0xFFDA70D6))
+                ).forEach { (value, label, accent) ->
+                    val selected = currentTaskPlacement == value
+                    OutlinedButton(
+                        onClick = { onTaskPlacementChange(value) },
+                        modifier = Modifier.weight(1f),
+                        colors = if (selected) {
+                            ButtonDefaults.outlinedButtonColors(containerColor = accent.copy(alpha = 0.2f))
+                        } else {
+                            ButtonDefaults.outlinedButtonColors()
+                        },
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (selected) accent else Color.White.copy(alpha = 0.3f)
+                        )
+                    ) {
+                        Text(label, color = Color.White)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Privacy Settings
             if (onOpenPrivacySettings != null) {
                 OutlinedButton(
@@ -188,8 +233,8 @@ fun SettingsOverlay(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            // Vi Reminders (remote read-only tasks from GitHub)
-            if (onSaveViPat != null) {
+            // Vi Reminders (remote tasks synced from Supabase; complete from the app)
+            if (onSaveViKey != null) {
                 Text(
                     "Vi Reminders",
                     style = MaterialTheme.typography.titleMedium,
@@ -197,31 +242,31 @@ fun SettingsOverlay(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                if (hasViPat) {
+                if (hasViKey) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "✅ Connected — reminders sync with wallpaper refresh",
+                            "✅ Connected — reminders sync with wallpaper refresh, completions sync back",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.7f),
                             modifier = Modifier.weight(1f)
                         )
-                        if (onClearViPat != null) {
-                            TextButton(onClick = onClearViPat) {
+                        if (onClearViKey != null) {
+                            TextButton(onClick = onClearViKey) {
                                 Text("Disconnect", color = Color(0xFFFF3B30))
                             }
                         }
                     }
                 } else {
-                    var patInput by remember { mutableStateOf("") }
+                    var keyInput by remember { mutableStateOf("") }
                     OutlinedTextField(
-                        value = patInput,
-                        onValueChange = { patInput = it },
+                        value = keyInput,
+                        onValueChange = { keyInput = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("GitHub token (entered once)", color = Color.White.copy(alpha = 0.6f)) },
+                        label = { Text("Supabase key (entered once)", color = Color.White.copy(alpha = 0.6f)) },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -234,16 +279,16 @@ fun SettingsOverlay(
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = {
-                            if (patInput.isNotBlank()) {
-                                onSaveViPat(patInput.trim())
-                                patInput = ""
+                            if (keyInput.isNotBlank()) {
+                                onSaveViKey(keyInput.trim())
+                                keyInput = ""
                             }
                         },
-                        enabled = patInput.isNotBlank(),
+                        enabled = keyInput.isNotBlank(),
                         modifier = Modifier.fillMaxWidth(),
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3AA0FF))
                     ) {
-                        Text("🔑 Save Token & Sync", color = Color(0xFF3AA0FF))
+                        Text("🔑 Save Key & Sync", color = Color(0xFF3AA0FF))
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))

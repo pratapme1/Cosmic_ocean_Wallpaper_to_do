@@ -53,6 +53,27 @@ import kotlin.math.sin
  * - Auto font contrast adjustment
  * - WCAG-compliant text rendering
  */
+/**
+ * Where the task list sits vertically on the wallpaper.
+ *
+ * Android has no API telling a wallpaper where the lock screen stacks its
+ * notifications, and that position changes across releases (below the clock
+ * up to Android 15, pinned to the bottom from Android 16). AUTO picks the
+ * band notifications are least likely to cover on the running release; TOP
+ * and BOTTOM are explicit overrides so the user is never hostage to a future
+ * relayout.
+ */
+enum class TaskPlacement(val prefValue: String) {
+    AUTO("auto"),
+    TOP("top"),
+    BOTTOM("bottom");
+
+    companion object {
+        fun fromPref(value: String?): TaskPlacement =
+            values().firstOrNull { it.prefValue == value } ?: AUTO
+    }
+}
+
 object LocalWallpaperGenerator {
     private const val TAG = "LocalWallpaperGen"
     private const val NOISE_TILE_SIZE = 96
@@ -218,13 +239,24 @@ object LocalWallpaperGenerator {
         val typography: TypographyScale
     )
 
-    private fun getLayoutConfig(width: Int, height: Int): LayoutConfig {
+    private fun getLayoutConfig(width: Int, height: Int, placement: TaskPlacement = TaskPlacement.BOTTOM): LayoutConfig {
         val safe = calculateSafeInsets(width, height)
-        val zones = calculateLayoutZones(width, height, safe)
+        val zones = calculateLayoutZones(width, height, safe, tasksOnTop = placement == TaskPlacement.TOP)
         val category = getBreakpointCategory(width / safe.density)
         val margins = getResponsiveMargins(category, safe.density)
         val typography = getTypographyScale(safe.density, category)
         return LayoutConfig(width, height, safe, zones, margins, typography)
+    }
+
+    /**
+     * AUTO placement: Android 16 (API 36) moved lock screen notifications to
+     * the bottom of the screen — exactly where the classic task band sits —
+     * so tasks move up under the clock there. Older releases stack
+     * notifications below the clock, so tasks stay in the lower band.
+     */
+    private fun resolvePlacement(placement: TaskPlacement): TaskPlacement {
+        if (placement != TaskPlacement.AUTO) return placement
+        return if (android.os.Build.VERSION.SDK_INT >= 36) TaskPlacement.TOP else TaskPlacement.BOTTOM
     }
 
     private fun calculateSafeInsets(width: Int, height: Int): SafeInsets {
@@ -252,7 +284,7 @@ object LocalWallpaperGenerator {
         )
     }
 
-    private fun calculateLayoutZones(width: Int, height: Int, safe: SafeInsets): LayoutZones {
+    private fun calculateLayoutZones(width: Int, height: Int, safe: SafeInsets, tasksOnTop: Boolean = false): LayoutZones {
         val systemZoneHeight = safe.top
         val navZoneHeight = safe.bottom
         val availableHeight = height - systemZoneHeight - navZoneHeight
@@ -263,37 +295,10 @@ object LocalWallpaperGenerator {
         val taskZoneHeight = (availableHeight * 0.28f)
         val interactionZoneHeight = (availableHeight * 0.07f)
 
-        var currentY = systemZoneHeight
-
         val system = LayoutZone(
             y = 0f,
             height = systemZoneHeight,
             centerY = systemZoneHeight / 2f
-        )
-        val clock = LayoutZone(
-            y = currentY,
-            height = clockZoneHeight,
-            centerY = currentY + clockZoneHeight / 2f
-        )
-        val scene = LayoutZone(
-            y = currentY + clockZoneHeight,
-            height = sceneZoneHeight,
-            centerY = currentY + clockZoneHeight + sceneZoneHeight / 2f
-        )
-        val transition = LayoutZone(
-            y = currentY + clockZoneHeight + sceneZoneHeight,
-            height = transitionZoneHeight,
-            centerY = currentY + clockZoneHeight + sceneZoneHeight + transitionZoneHeight / 2f
-        )
-        val task = LayoutZone(
-            y = currentY + clockZoneHeight + sceneZoneHeight + transitionZoneHeight,
-            height = taskZoneHeight,
-            centerY = currentY + clockZoneHeight + sceneZoneHeight + transitionZoneHeight + taskZoneHeight / 2f
-        )
-        val interaction = LayoutZone(
-            y = currentY + clockZoneHeight + sceneZoneHeight + transitionZoneHeight + taskZoneHeight,
-            height = interactionZoneHeight,
-            centerY = currentY + clockZoneHeight + sceneZoneHeight + transitionZoneHeight + taskZoneHeight + interactionZoneHeight / 2f
         )
         val navigation = LayoutZone(
             y = height - navZoneHeight,
@@ -301,7 +306,48 @@ object LocalWallpaperGenerator {
             centerY = height - navZoneHeight / 2f
         )
 
-        return LayoutZones(system, clock, scene, transition, task, interaction, navigation)
+        // Stack the flexible zones top-to-bottom. Classic order keeps tasks in
+        // the lower band; tasksOnTop tucks them right under the clock (with the
+        // transition gradient between them) and pushes the scene to the bottom,
+        // clear of Android 16's bottom-anchored lock screen notifications.
+        val order = if (tasksOnTop) {
+            listOf(
+                "clock" to clockZoneHeight,
+                "transition" to transitionZoneHeight,
+                "task" to taskZoneHeight,
+                "scene" to sceneZoneHeight,
+                "interaction" to interactionZoneHeight
+            )
+        } else {
+            listOf(
+                "clock" to clockZoneHeight,
+                "scene" to sceneZoneHeight,
+                "transition" to transitionZoneHeight,
+                "task" to taskZoneHeight,
+                "interaction" to interactionZoneHeight
+            )
+        }
+
+        var currentY = systemZoneHeight
+        val stacked = mutableMapOf<String, LayoutZone>()
+        for ((name, zoneHeight) in order) {
+            stacked[name] = LayoutZone(
+                y = currentY,
+                height = zoneHeight,
+                centerY = currentY + zoneHeight / 2f
+            )
+            currentY += zoneHeight
+        }
+
+        return LayoutZones(
+            system = system,
+            clock = stacked.getValue("clock"),
+            scene = stacked.getValue("scene"),
+            transition = stacked.getValue("transition"),
+            task = stacked.getValue("task"),
+            interaction = stacked.getValue("interaction"),
+            navigation = navigation
+        )
     }
 
     private fun getBreakpointCategory(widthDp: Float): String {
@@ -504,8 +550,10 @@ object LocalWallpaperGenerator {
         streakDays: Int = 0,
         environmentPreferences: EnvironmentPreferences? = null,
         weatherTasks: List<StarEntity>? = null,
-        recentCompletionAt: Long? = null
+        recentCompletionAt: Long? = null,
+        taskPlacement: TaskPlacement = TaskPlacement.AUTO
     ) {
+        val placement = resolvePlacement(taskPlacement)
         val now = System.currentTimeMillis()
         val sortedTasks = sortTasksByDueDate(tasks)
         val allTasks = weatherTasks ?: tasks
@@ -548,7 +596,7 @@ object LocalWallpaperGenerator {
 
         // Layer 2: Theme particle system (scaled by environment intensity)
         if (envEnabled) {
-            drawParticles(canvas, colors, width, height, theme, urgency, intensityMultiplier)
+            drawParticles(canvas, colors, width, height, theme, urgency, intensityMultiplier, placement)
         }
 
         if (envEnabled && environmentPreferences?.overdueHeatmapEnabled == true) {
@@ -557,7 +605,7 @@ object LocalWallpaperGenerator {
         }
 
         if (showAmbientPulse) {
-            drawAmbientPulse(canvas, width, height, colors, now)
+            drawAmbientPulse(canvas, width, height, colors, now, placement)
         }
 
         if (focusEnabled) {
@@ -565,15 +613,15 @@ object LocalWallpaperGenerator {
         }
 
         if (showCelebration) {
-            drawCompletionBurst(canvas, width, height, colors, now)
+            drawCompletionBurst(canvas, width, height, colors, now, placement)
         }
 
         // Layer 2.5: Transition gradient (scene → task zone)
-        drawTransitionGradient(canvas, colors, width, height)
+        drawTransitionGradient(canvas, colors, width, height, placement)
 
         // Layer 3: Achievement panel (if any)
         val achievementReservedSpace = if (achievementCount > 0 || streakDays > 0) {
-            drawAchievementPanel(canvas, achievementCount, streakDays, colors, width, height, readability)
+            drawAchievementPanel(canvas, achievementCount, streakDays, colors, width, height, readability, placement)
         } else {
             0f
         }
@@ -594,10 +642,11 @@ object LocalWallpaperGenerator {
                     focusEnabled = focusEnabled,
                     contextBadge = contextBadge,
                     shortSuggestion = shortSuggestion
-                )
+                ),
+                placement = placement
             )
         } else {
-            drawClearState(canvas, colors, width, height, readability)
+            drawClearState(canvas, colors, width, height, readability, placement)
         }
     }
 
@@ -615,18 +664,19 @@ object LocalWallpaperGenerator {
         streakDays: Int = 0,
         environmentPreferences: EnvironmentPreferences? = null,
         weatherTasks: List<StarEntity>? = null,
-        recentCompletionAt: Long? = null
+        recentCompletionAt: Long? = null,
+        taskPlacement: TaskPlacement = TaskPlacement.AUTO
     ): Bitmap {
         Log.d(TAG, "Generating legacy bitmap wallpaper: ${width}x${height}")
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        
+
         render(
-            canvas, width, height, tasks, totalTaskCount, theme, 
-            achievementCount, streakDays, environmentPreferences, 
-            weatherTasks, recentCompletionAt
+            canvas, width, height, tasks, totalTaskCount, theme,
+            achievementCount, streakDays, environmentPreferences,
+            weatherTasks, recentCompletionAt, taskPlacement
         )
-        
+
         return bitmap
     }
 
@@ -645,8 +695,10 @@ object LocalWallpaperGenerator {
         theme: WallpaperTheme = WallpaperTheme.DEEP_OCEAN,
         environmentPreferences: EnvironmentPreferences? = null,
         weatherTasks: List<StarEntity>? = null,
-        recentCompletionAt: Long? = null
+        recentCompletionAt: Long? = null,
+        taskPlacement: TaskPlacement = TaskPlacement.AUTO
     ) {
+        val placement = resolvePlacement(taskPlacement)
         val now = System.currentTimeMillis()
         val sortedTasks = sortTasksByDueDate(tasks)
         val allTasks = weatherTasks ?: tasks
@@ -692,7 +744,7 @@ object LocalWallpaperGenerator {
 
         // Layer 3: Achievement panel (if any)
         val achievementReservedSpace = if (achievementCount > 0 || streakDays > 0) {
-            drawAchievementPanel(canvas, achievementCount, streakDays, colors, width, height, readability)
+            drawAchievementPanel(canvas, achievementCount, streakDays, colors, width, height, readability, placement)
         } else {
             0f
         }
@@ -713,10 +765,11 @@ object LocalWallpaperGenerator {
                     focusEnabled = focusEnabled,
                     contextBadge = contextBadge,
                     shortSuggestion = shortSuggestion
-                )
+                ),
+                placement = placement
             )
         } else {
-            drawClearState(canvas, colors, width, height, readability)
+            drawClearState(canvas, colors, width, height, readability, placement)
         }
     }
 
@@ -735,18 +788,19 @@ object LocalWallpaperGenerator {
         theme: WallpaperTheme = WallpaperTheme.DEEP_OCEAN,
         environmentPreferences: EnvironmentPreferences? = null,
         weatherTasks: List<StarEntity>? = null,
-        recentCompletionAt: Long? = null
+        recentCompletionAt: Long? = null,
+        taskPlacement: TaskPlacement = TaskPlacement.AUTO
     ): Bitmap {
         Log.d(TAG, "Generating legacy custom bitmap wallpaper: ${width}x${height}")
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        
+
         renderWithCustomBackground(
             canvas, width, height, tasks, totalTaskCount, customBackground,
             achievementCount, streakDays, theme, environmentPreferences,
-            weatherTasks, recentCompletionAt
+            weatherTasks, recentCompletionAt, taskPlacement
         )
-        
+
         return bitmap
     }
 
@@ -858,9 +912,10 @@ object LocalWallpaperGenerator {
         width: Int,
         height: Int,
         colors: ThemeColors,
-        now: Long
+        now: Long,
+        placement: TaskPlacement
     ) {
-        val layout = getLayoutConfig(width, height)
+        val layout = getLayoutConfig(width, height, placement)
         val centerX = width / 2f
         val centerY = layout.layoutZones.task.centerY
         val phase = (now % 60000L).toFloat() / 60000f
@@ -886,9 +941,10 @@ object LocalWallpaperGenerator {
         width: Int,
         height: Int,
         colors: ThemeColors,
-        now: Long
+        now: Long,
+        placement: TaskPlacement
     ) {
-        val layout = getLayoutConfig(width, height)
+        val layout = getLayoutConfig(width, height, placement)
         val centerX = width - layout.margins.horizontal * 2.5f
         val centerY = layout.layoutZones.task.y + layout.margins.vertical * 2f
         val baseRadius = width * 0.03f
@@ -1951,9 +2007,10 @@ object LocalWallpaperGenerator {
         canvas: Canvas,
         colors: ThemeColors,
         width: Int,
-        height: Int
+        height: Int,
+        placement: TaskPlacement
     ) {
-        val layout = getLayoutConfig(width, height)
+        val layout = getLayoutConfig(width, height, placement)
         val zone = layout.layoutZones.transition
 
         val transparent = Color.argb(0, Color.red(colors.gradientEnd), Color.green(colors.gradientEnd), Color.blue(colors.gradientEnd))
@@ -1988,9 +2045,10 @@ object LocalWallpaperGenerator {
         height: Int,
         theme: WallpaperTheme,
         urgency: UrgencyLevel,
-        intensityMultiplier: Float
+        intensityMultiplier: Float,
+        placement: TaskPlacement
     ) {
-        val layout = getLayoutConfig(width, height)
+        val layout = getLayoutConfig(width, height, placement)
         val density = layout.safeInsets.density
         val timestamp = System.currentTimeMillis()
 
@@ -2135,9 +2193,10 @@ object LocalWallpaperGenerator {
         colors: ThemeColors,
         width: Int,
         height: Int,
-        readability: TextReadability
+        readability: TextReadability,
+        placement: TaskPlacement
     ): Float {
-        val layout = getLayoutConfig(width, height)
+        val layout = getLayoutConfig(width, height, placement)
         val density = layout.safeInsets.density
         val typography = layout.typography
         val taskZone = layout.layoutZones.task
@@ -2312,9 +2371,10 @@ object LocalWallpaperGenerator {
         reservedRightSpace: Float = 0f,
         readability: TextReadability,
         highlightTaskId: String? = null,
-        badges: List<String> = emptyList()
+        badges: List<String> = emptyList(),
+        placement: TaskPlacement = TaskPlacement.BOTTOM
     ) {
-        val layout = getLayoutConfig(width, height)
+        val layout = getLayoutConfig(width, height, placement)
         val marginH = layout.margins.horizontal
         val taskZone = layout.layoutZones.task
         val typography = layout.typography
@@ -2715,10 +2775,11 @@ object LocalWallpaperGenerator {
         colors: ThemeColors,
         width: Int,
         height: Int,
-        readability: TextReadability
+        readability: TextReadability,
+        placement: TaskPlacement
     ) {
         val centerX = width / 2f
-        val layout = getLayoutConfig(width, height)
+        val layout = getLayoutConfig(width, height, placement)
         val centerY = layout.layoutZones.task.centerY
         val typography = layout.typography
 

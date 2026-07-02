@@ -13,7 +13,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 data class WallpaperRenderPreferences(
     val theme: String = WallpaperPreferencesManager.DEFAULT_THEME,
     val wallpaperMode: String = WallpaperPreferencesManager.WALLPAPER_MODE_GENERATED,
-    val customWallpaperPath: String? = null
+    val customWallpaperPath: String? = null,
+    val taskPlacement: String = WallpaperPreferencesManager.DEFAULT_TASK_PLACEMENT
 )
 
 class WallpaperPreferencesManager(private val context: Context) {
@@ -28,27 +29,31 @@ class WallpaperPreferencesManager(private val context: Context) {
         private const val KEY_WALLPAPER_CONSENT = "wallpaper_consent"
         private const val KEY_WALLPAPER_MODE = "wallpaper_mode"
         private const val KEY_CUSTOM_WALLPAPER_PATH = "custom_wallpaper_path"
+        private const val KEY_TASK_PLACEMENT = "task_placement"
 
         const val DEFAULT_THEME = "cosmic"
         const val DEFAULT_RESOLUTION = "1080x1920"
         const val WALLPAPER_MODE_GENERATED = "generated"
         const val WALLPAPER_MODE_CUSTOM = "custom"
+        const val DEFAULT_TASK_PLACEMENT = "auto"
 
         val AVAILABLE_THEMES = listOf("cosmic", "ocean", "fantasy")
+        val AVAILABLE_TASK_PLACEMENTS = listOf("auto", "top", "bottom")
     }
 
     fun getRenderPreferences(): WallpaperRenderPreferences {
         return WallpaperRenderPreferences(
             theme = getTheme(),
             wallpaperMode = getWallpaperMode(),
-            customWallpaperPath = getCustomWallpaperPath()
+            customWallpaperPath = getCustomWallpaperPath(),
+            taskPlacement = getTaskPlacement()
         )
     }
 
     fun renderPreferencesFlow(): Flow<WallpaperRenderPreferences> {
         return callbackFlow {
             val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-                if (key == null || key == KEY_THEME || key == KEY_WALLPAPER_MODE || key == KEY_CUSTOM_WALLPAPER_PATH) {
+                if (key == null || key == KEY_THEME || key == KEY_WALLPAPER_MODE || key == KEY_CUSTOM_WALLPAPER_PATH || key == KEY_TASK_PLACEMENT) {
                     trySend(getRenderPreferences())
                 }
             }
@@ -56,6 +61,17 @@ class WallpaperPreferencesManager(private val context: Context) {
             trySend(getRenderPreferences())
             awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
         }.distinctUntilChanged()
+    }
+
+    fun getTaskPlacement(): String {
+        return prefs.getString(KEY_TASK_PLACEMENT, DEFAULT_TASK_PLACEMENT) ?: DEFAULT_TASK_PLACEMENT
+    }
+
+    fun setTaskPlacement(placement: String): Boolean {
+        if (!AVAILABLE_TASK_PLACEMENTS.contains(placement)) {
+            return false
+        }
+        return prefs.edit().putString(KEY_TASK_PLACEMENT, placement).commit()
     }
 
     fun getTheme(): String {

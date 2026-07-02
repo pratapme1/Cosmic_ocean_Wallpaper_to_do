@@ -14,6 +14,27 @@
 ### Testing
 - (placeholder)
 
+## [2.9.0] - 2026-07-02 (Supabase Reminder Sync)
+
+### Added
+- Vi reminders now sync through the Supabase `vi_assistant_reminders` table instead of the legacy GitHub JSON feed.
+- App-created reminders are mirrored to Supabase with deterministic remote IDs, and app edits, completions, archives, and deletes are queued/retried against Supabase.
+- Assistant-created reminders reconcile into Room so the app canvas, widget, and live wallpaper all render the same active reminder set.
+
+### Changed
+- Settings now store the Supabase anon key in encrypted preferences and clear legacy GitHub PAT storage.
+- Remote reminder refresh runs through Room reconciliation, preserving local canvas positions while allowing Supabase title/date changes to flow back into the app.
+
+### Fixed
+- Deleting an assistant-created Vi reminder in the app now removes the Supabase row while staying out of the legacy app sync queue.
+- Pending Supabase mirror writes are protected during reconciliation so a failed or offline upsert does not delete the local app task.
+
+### Testing
+- `ANDROID_HOME=/home/vi/Android/Sdk ./gradlew testDebugUnitTest --rerun-tasks`
+- Live Supabase REST smoke: upsert create, fetch, upsert update, complete/filter inactive, and delete cleanup.
+- `adb shell am instrument -w -r -e class com.cosmicocean.e2e.WallpaperConsentE2ETest#testWallpaperConsentFlow com.cosmicocean.test/androidx.test.runner.AndroidJUnitRunner`
+- Screenshot evidence reviewed in `qa-runs/2026-07-02-supabase-reminders`.
+
 ## [2.8.6] - 2026-07-02 (Wallpaper Refresh Reliability)
 
 ### Changed

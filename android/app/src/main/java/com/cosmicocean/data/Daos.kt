@@ -33,7 +33,11 @@ interface StarDao {
 
     @Query("SELECT * FROM stars WHERE parentId = :parentId AND isDeleted = 0")
     suspend fun getChildrenForParent(parentId: String): List<StarEntity>
-    
+
+    // Remote "Vi" reminders (all rows, including completed/deleted, for reconciliation)
+    @Query("SELECT * FROM stars WHERE localId LIKE 'vi\\_remote\\_%' ESCAPE '\\'")
+    suspend fun getViReminders(): List<StarEntity>
+
     // === Transaction Methods (CRITICAL FIX: Issue #3) ===
     
     @Transaction

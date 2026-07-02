@@ -1,92 +1,82 @@
 package com.cosmicocean.reminders
 
 import com.cosmicocean.data.StarEntity
-import com.google.gson.Gson
-import com.google.gson.annotations.SerializedName
-import java.time.Instant
+import com.cosmicocean.network.ViSupabaseReminderRow
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import kotlin.math.abs
 
 /**
- * Remote reminders feed schema:
- * { "generated_at": ISO8601, "reminders": [ { "due": "YYYY-MM-DD", "text": "..." } ] }
- */
-data class ViRemindersPayload(
-    @SerializedName("generated_at") val generatedAt: String? = null,
-    val reminders: List<ViReminder>? = null
-)
-
-data class ViReminder(
-    val due: String? = null,
-    val text: String? = null
-)
-
-/**
- * Parses the reminders JSON and maps entries to read-only StarEntity
- * instances for wallpaper rendering. These entities are never written to
- * Room and never enter the sync queue - they exist only in memory.
+ * Maps rows of the Supabase vi_assistant_reminders table to StarEntity rows.
+ * Vi reminders live in Room like normal tasks (so the app canvas, widget and
+ * wallpaper all see them), but are remote-owned: title/due date follow the
+ * table on every sync, completion is pushed back as a PATCH, and rows vanish
+ * once the table no longer returns their id.
  */
 object ViReminderMapper {
     const val REMOTE_ID_PREFIX = "vi_remote_"
     const val VI_CONTEXT_TAG = "vi"
+    const val SYNC_STATUS_REMOTE = "remote"
     private const val VI_TITLE_PREFIX = "Vi · "
 
-    private val gson = Gson()
+    fun localIdFor(remoteId: String): String = REMOTE_ID_PREFIX + remoteId
 
-    fun parsePayload(json: String): ViRemindersPayload? {
-        return try {
-            gson.fromJson(json, ViRemindersPayload::class.java)
-        } catch (e: Exception) {
+    /** Inverse of [localIdFor]; null when the id is not a Vi reminder. */
+    fun remoteIdOf(localId: String): String? =
+        if (localId.startsWith(REMOTE_ID_PREFIX)) {
+            localId.removePrefix(REMOTE_ID_PREFIX).takeIf { it.isNotBlank() }
+        } else {
             null
         }
-    }
 
-    fun toStarEntities(
-        payload: ViRemindersPayload?,
+    fun isRemoteReminder(localId: String): Boolean = localId.startsWith(REMOTE_ID_PREFIX)
+
+    fun isRemoteReminder(task: StarEntity): Boolean = isRemoteReminder(task.localId)
+
+    /**
+     * Maps one table row to a fresh StarEntity. Returns null for rows the app
+     * cannot render (missing id or blank text). The x/y scatter is derived
+     * from the id so a reminder keeps its spot on the app canvas across syncs.
+     */
+    fun toStarEntity(
+        row: ViSupabaseReminderRow,
         zone: ZoneId = ZoneId.systemDefault(),
         now: Long = System.currentTimeMillis()
-    ): List<StarEntity> {
-        val reminders = payload?.reminders ?: return emptyList()
-        val createdAt = parseGeneratedAt(payload.generatedAt) ?: now
+    ): StarEntity? {
+        val remoteId = row.id?.trim().orEmpty()
+        val text = row.text?.trim().orEmpty()
+        if (remoteId.isEmpty() || text.isEmpty()) return null
 
-        return reminders.mapIndexedNotNull { index, reminder ->
-            val text = reminder.text?.trim().orEmpty()
-            if (text.isEmpty()) return@mapIndexedNotNull null
-
-            StarEntity(
-                // Stable per content so the renderer's flows don't see churn
-                localId = "$REMOTE_ID_PREFIX${index}_${(reminder.due + text).hashCode()}",
-                serverId = null,
-                title = VI_TITLE_PREFIX + text,
-                urgency = 2,
-                dueDate = parseDueDate(reminder.due, zone),
-                x = 0.5f,
-                y = 0.5f,
-                createdAt = createdAt,
-                isSubtask = false,
-                parentId = null,
-                isRecurring = false,
-                echoInterval = null,
-                isCompleted = false,
-                completedAt = null,
-                isArchived = false,
-                archivedAt = null,
-                contextTag = VI_CONTEXT_TAG,
-                syncStatus = "remote"
-            )
-        }
+        val hash = abs(remoteId.hashCode())
+        return StarEntity(
+            localId = localIdFor(remoteId),
+            serverId = null,
+            title = VI_TITLE_PREFIX + text,
+            urgency = 2,
+            dueDate = parseDueDate(row.due, zone),
+            x = 150f + (hash % 700),
+            y = 400f + ((hash / 7) % 900),
+            createdAt = now,
+            isSubtask = false,
+            parentId = null,
+            isRecurring = false,
+            echoInterval = null,
+            isCompleted = false,
+            completedAt = null,
+            isArchived = false,
+            archivedAt = null,
+            contextTag = VI_CONTEXT_TAG,
+            syncStatus = SYNC_STATUS_REMOTE
+        )
     }
-
-    fun isRemoteReminder(task: StarEntity): Boolean =
-        task.localId.startsWith(REMOTE_ID_PREFIX)
 
     /**
      * "YYYY-MM-DD" -> end of that day in the given zone, matching how
      * SyncManager treats date-only due dates. Overdue rendering (red) kicks
      * in via the generator once the date is in the past.
      */
-    private fun parseDueDate(due: String?, zone: ZoneId): Long? {
+    fun parseDueDate(due: String?, zone: ZoneId): Long? {
         if (due.isNullOrBlank()) return null
         return try {
             LocalDate.parse(due.trim())
@@ -96,21 +86,6 @@ object ViReminderMapper {
                 .toEpochMilli()
         } catch (e: Exception) {
             null
-        }
-    }
-
-    private fun parseGeneratedAt(generatedAt: String?): Long? {
-        if (generatedAt.isNullOrBlank()) return null
-        val value = generatedAt.trim()
-        return try {
-            Instant.parse(value).toEpochMilli()
-        } catch (e: Exception) {
-            // Instant.parse only accepts "Z"; the feed may use offsets like +05:30
-            try {
-                java.time.OffsetDateTime.parse(value).toInstant().toEpochMilli()
-            } catch (e2: Exception) {
-                null
-            }
         }
     }
 }

@@ -11,6 +11,8 @@ import com.cosmicocean.model.Star
 import com.cosmicocean.model.TaskResponse
 import com.cosmicocean.network.ApiService
 import com.cosmicocean.network.LocalOnlyUserStore
+import com.cosmicocean.reminders.RemoteRemindersRepository
+import com.cosmicocean.reminders.ViReminderMapper
 import com.cosmicocean.sync.SyncManager
 import com.cosmicocean.utils.HybridTaskParser
 import com.cosmicocean.systems.TrophyManager
@@ -131,11 +133,16 @@ class TaskRepository(
                 "due_date" to star.dueDate
             )
         )
+        mirrorLocalReminderCreate(localId, star.title, star.dueDate)
 
         return localId
     }
 
     suspend fun updateStar(star: Star) {
+        if (ViReminderMapper.isRemoteReminder(star.id)) {
+            updateViReminder(star)
+            return
+        }
         val existing = starDao.getByLocalId(star.id)
         val entity = star.toEntity().copy(
             syncStatus = "pending",
@@ -185,13 +192,50 @@ class TaskRepository(
         }
         
         syncManager.queueUpdate(star.id, updateData)
+        when {
+            star.isCompleted -> mirrorLocalReminderComplete(star.id, star.completedAt)
+            star.isArchived -> mirrorLocalReminderDelete(star.id)
+            else -> mirrorLocalReminderUpdate(star.id, star.title, star.dueDate)
+        }
+    }
+
+    /**
+     * Vi reminders are remote-owned rows synced from Supabase: edits stay in
+     * Room only (title/due are re-asserted by the next sync), completion is
+     * pushed back to the table, and nothing enters the backend sync queue.
+     */
+    private suspend fun updateViReminder(star: Star) {
+        val existing = starDao.getByLocalId(star.id)
+        val entity = star.toEntity().copy(
+            contextTag = com.cosmicocean.reminders.ViReminderMapper.VI_CONTEXT_TAG,
+            syncStatus = com.cosmicocean.reminders.ViReminderMapper.SYNC_STATUS_REMOTE,
+            updatedAt = System.currentTimeMillis()
+        )
+        starDao.insertStarWithTransaction(entity)
+
+        if (star.isCompleted && existing?.isCompleted != true) {
+            try {
+                val userId = resolveUserId()
+                val trophyManager = TrophyManager(CosmicDatabase.getDatabase(context), userId)
+                trophyManager.recordCompletion()
+            } catch (e: Exception) {
+                Log.w(TAG, "Achievement update failed: ${e.message}")
+            }
+            mirrorRemoteReminderComplete(star.id)
+        }
+        if (star.isArchived && existing?.isArchived != true) {
+            mirrorLocalReminderDelete(star.id)
+        }
     }
 
     suspend fun deleteStar(star: Star) {
         starDao.softDelete(star.id)
         Log.d(TAG, "Soft deleted star locally: ${star.id}")
         unlinkChildrenForParent(star.id)
-        syncManager.queueDelete(star.id)
+        mirrorLocalReminderDelete(star.id)
+        if (!ViReminderMapper.isRemoteReminder(star.id)) {
+            syncManager.queueDelete(star.id)
+        }
     }
 
     suspend fun clearAllTasks() {
@@ -228,6 +272,46 @@ class TaskRepository(
                     "parent_id" to ""
                 )
             )
+        }
+    }
+
+    private suspend fun mirrorLocalReminderCreate(localId: String, title: String, dueDate: Long?) {
+        try {
+            RemoteRemindersRepository.getInstance(context).mirrorLocalCreate(localId, title, dueDate)
+        } catch (e: Exception) {
+            Log.w(TAG, "Supabase reminder create mirror skipped: ${e.message}")
+        }
+    }
+
+    private suspend fun mirrorLocalReminderUpdate(localId: String, title: String, dueDate: Long?) {
+        try {
+            RemoteRemindersRepository.getInstance(context).mirrorLocalUpdate(localId, title, dueDate)
+        } catch (e: Exception) {
+            Log.w(TAG, "Supabase reminder update mirror skipped: ${e.message}")
+        }
+    }
+
+    private suspend fun mirrorLocalReminderComplete(localId: String, completedAt: Long?) {
+        try {
+            RemoteRemindersRepository.getInstance(context).mirrorLocalComplete(localId, completedAt)
+        } catch (e: Exception) {
+            Log.w(TAG, "Supabase reminder completion mirror skipped: ${e.message}")
+        }
+    }
+
+    private suspend fun mirrorRemoteReminderComplete(localId: String) {
+        try {
+            RemoteRemindersRepository.getInstance(context).completeReminder(localId)
+        } catch (e: Exception) {
+            Log.w(TAG, "Supabase remote reminder completion skipped: ${e.message}")
+        }
+    }
+
+    private suspend fun mirrorLocalReminderDelete(localId: String) {
+        try {
+            RemoteRemindersRepository.getInstance(context).mirrorLocalDelete(localId)
+        } catch (e: Exception) {
+            Log.w(TAG, "Supabase reminder delete mirror skipped: ${e.message}")
         }
     }
 

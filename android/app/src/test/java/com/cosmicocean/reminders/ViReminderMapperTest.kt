@@ -1,5 +1,6 @@
 package com.cosmicocean.reminders
 
+import com.cosmicocean.network.ViSupabaseReminderRow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -15,94 +16,61 @@ class ViReminderMapperTest {
     private val zone = ZoneId.of("UTC")
 
     @Test
-    fun `parses valid payload`() {
-        val json = """
-            {
-              "generated_at": "2026-07-01T10:00:00Z",
-              "reminders": [
-                { "due": "2026-07-04", "text": "Renew passport" },
-                { "due": "2026-06-30", "text": "Pay rent" }
-              ]
-            }
-        """.trimIndent()
-
-        val payload = ViReminderMapper.parsePayload(json)
-        assertNotNull(payload)
-        assertEquals(2, payload!!.reminders?.size)
-        assertEquals("2026-07-01T10:00:00Z", payload.generatedAt)
-    }
-
-    @Test
-    fun `malformed json returns null instead of throwing`() {
-        assertNull(ViReminderMapper.parsePayload("not json {{{"))
-    }
-
-    @Test
-    fun `maps reminders to read-only Vi entities`() {
-        val payload = ViRemindersPayload(
-            generatedAt = "2026-07-01T10:00:00Z",
-            reminders = listOf(ViReminder(due = "2026-07-04", text = "Renew passport"))
+    fun `maps a table row to a remote Vi entity`() {
+        val entity = ViReminderMapper.toStarEntity(
+            ViSupabaseReminderRow(id = "443f961d", due = "2026-07-06", text = "Carry Form 11"),
+            zone
         )
 
-        val entities = ViReminderMapper.toStarEntities(payload, zone)
-        assertEquals(1, entities.size)
-
-        val entity = entities[0]
-        assertTrue(entity.localId.startsWith(ViReminderMapper.REMOTE_ID_PREFIX))
+        assertNotNull(entity)
+        assertEquals("vi_remote_443f961d", entity!!.localId)
         assertTrue(ViReminderMapper.isRemoteReminder(entity))
-        assertEquals("Vi · Renew passport", entity.title)
+        assertEquals("Vi · Carry Form 11", entity.title)
         assertEquals(ViReminderMapper.VI_CONTEXT_TAG, entity.contextTag)
-        assertEquals("remote", entity.syncStatus)
+        assertEquals(ViReminderMapper.SYNC_STATUS_REMOTE, entity.syncStatus)
         assertFalse(entity.isCompleted)
         assertFalse(entity.isArchived)
 
         // Due date is end of day in the given zone
-        val expected = LocalDate.parse("2026-07-04")
+        val expected = LocalDate.parse("2026-07-06")
             .atTime(LocalTime.of(23, 59, 59))
             .atZone(zone).toInstant().toEpochMilli()
         assertEquals(expected, entity.dueDate)
     }
 
     @Test
-    fun `skips reminders with blank text and tolerates bad dates`() {
-        val payload = ViRemindersPayload(
-            reminders = listOf(
-                ViReminder(due = "2026-07-04", text = "  "),
-                ViReminder(due = "not-a-date", text = "Call dentist"),
-                ViReminder(due = null, text = "No due date")
-            )
-        )
-
-        val entities = ViReminderMapper.toStarEntities(payload, zone)
-        assertEquals(2, entities.size)
-        assertNull(entities[0].dueDate)
-        assertNull(entities[1].dueDate)
+    fun `rows without id or text are skipped`() {
+        assertNull(ViReminderMapper.toStarEntity(ViSupabaseReminderRow(id = null, due = "2026-07-06", text = "x"), zone))
+        assertNull(ViReminderMapper.toStarEntity(ViSupabaseReminderRow(id = "abc", due = "2026-07-06", text = "  "), zone))
+        assertNull(ViReminderMapper.toStarEntity(ViSupabaseReminderRow(id = " ", due = null, text = "x"), zone))
     }
 
     @Test
-    fun `null payload or reminders maps to empty list`() {
-        assertTrue(ViReminderMapper.toStarEntities(null, zone).isEmpty())
-        assertTrue(ViReminderMapper.toStarEntities(ViRemindersPayload(), zone).isEmpty())
+    fun `bad or missing due dates map to null`() {
+        assertNull(
+            ViReminderMapper.toStarEntity(ViSupabaseReminderRow(id = "a1", due = "not-a-date", text = "Call dentist"), zone)!!.dueDate
+        )
+        assertNull(
+            ViReminderMapper.toStarEntity(ViSupabaseReminderRow(id = "a2", due = null, text = "No due date"), zone)!!.dueDate
+        )
     }
 
     @Test
-    fun `handles generated_at with non-UTC offset`() {
-        val payload = ViRemindersPayload(
-            generatedAt = "2026-07-02T16:23:47+05:30",
-            reminders = listOf(ViReminder(due = "2026-07-04", text = "Dry run"))
-        )
-        val entities = ViReminderMapper.toStarEntities(payload, zone)
-        // 16:23:47+05:30 == 10:53:47Z
-        assertEquals(1782989627000L, entities[0].createdAt)
+    fun `local ids and canvas positions are stable across syncs`() {
+        val row = ViSupabaseReminderRow(id = "443f961d", due = "2026-07-06", text = "Carry Form 11")
+        val first = ViReminderMapper.toStarEntity(row, zone)!!
+        val second = ViReminderMapper.toStarEntity(row, zone)!!
+        assertEquals(first.localId, second.localId)
+        assertEquals(first.x, second.x, 0f)
+        assertEquals(first.y, second.y, 0f)
     }
 
     @Test
-    fun `entity ids are stable across identical fetches`() {
-        val payload = ViRemindersPayload(
-            reminders = listOf(ViReminder(due = "2026-07-04", text = "Renew passport"))
-        )
-        val first = ViReminderMapper.toStarEntities(payload, zone)
-        val second = ViReminderMapper.toStarEntities(payload, zone)
-        assertEquals(first[0].localId, second[0].localId)
+    fun `remote id round-trips through the local id`() {
+        assertEquals("443f961d", ViReminderMapper.remoteIdOf(ViReminderMapper.localIdFor("443f961d")))
+        assertNull(ViReminderMapper.remoteIdOf("star-12345"))
+        assertNull(ViReminderMapper.remoteIdOf("vi_remote_"))
+        assertTrue(ViReminderMapper.isRemoteReminder("vi_remote_abc"))
+        assertFalse(ViReminderMapper.isRemoteReminder("vi_task"))
     }
 }
