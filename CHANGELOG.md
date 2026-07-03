@@ -3,6 +3,20 @@
 ## [Unreleased]
 
 ### Added
+- (placeholder)
+
+### Changed
+- (placeholder)
+
+### Fixed
+- (placeholder)
+
+### Testing
+- (placeholder)
+
+## [2.10.0] - 2026-07-03 (HUD Overlay)
+
+### Added
 - Live wallpaper HUD overlay support for a user-picked transparent PNG, with persisted document URI, vertical position, opacity, and clear controls in Settings.
 - Wallpaper screenshot coverage for generated and custom backgrounds with the HUD overlay visible and task text unobscured.
 
