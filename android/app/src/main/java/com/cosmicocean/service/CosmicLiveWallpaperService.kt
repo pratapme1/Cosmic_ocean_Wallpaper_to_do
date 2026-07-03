@@ -1,6 +1,8 @@
 package com.cosmicocean.service
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.service.wallpaper.WallpaperService
 import android.view.SurfaceHolder
 import android.util.Log
@@ -12,6 +14,7 @@ import com.cosmicocean.utils.WallpaperPreferencesManager
 import com.cosmicocean.utils.WallpaperRenderPreferences
 import com.cosmicocean.utils.AchievementUtils
 import com.cosmicocean.utils.AchievementSnapshot
+import com.cosmicocean.wallpaper.HudOverlayRenderConfig
 import com.cosmicocean.wallpaper.LocalWallpaperGenerator
 import com.cosmicocean.wallpaper.WallpaperTheme
 import kotlinx.coroutines.*
@@ -44,6 +47,9 @@ class CosmicLiveWallpaperService : WallpaperService() {
         // Cached bitmap for custom backgrounds to prevent re-decoding
         private var cachedBitmap: Bitmap? = null
         private var lastBitmapPath: String? = null
+        private var cachedHudBitmap: Bitmap? = null
+        private var lastHudUri: String? = null
+        private var lastHudSurfaceWidth: Int = 0
 
         override fun onCreate(surfaceHolder: SurfaceHolder?) {
             super.onCreate(surfaceHolder)
@@ -87,6 +93,10 @@ class CosmicLiveWallpaperService : WallpaperService() {
             cachedBitmap?.recycle()
             cachedBitmap = null
             lastBitmapPath = null
+            cachedHudBitmap?.recycle()
+            cachedHudBitmap = null
+            lastHudUri = null
+            lastHudSurfaceWidth = 0
         }
 
         private fun startRendering() {
@@ -176,6 +186,13 @@ class CosmicLiveWallpaperService : WallpaperService() {
                 val theme = WallpaperTheme.fromString(frame.preferences.theme)
 
                 val placement = com.cosmicocean.wallpaper.TaskPlacement.fromPref(frame.preferences.taskPlacement)
+                val hudOverlay = getOrLoadHudOverlay(frame.preferences.hudOverlayUri, width)?.let { bitmap ->
+                    HudOverlayRenderConfig(
+                        bitmap = bitmap,
+                        verticalPositionPercent = frame.preferences.hudOverlayVerticalPercent,
+                        opacityPercent = frame.preferences.hudOverlayOpacityPercent
+                    )
+                }
 
                 if (frame.preferences.wallpaperMode == WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM) {
                     val bitmap = frame.preferences.customWallpaperPath?.let { getOrLoadBitmap(it) }
@@ -183,13 +200,13 @@ class CosmicLiveWallpaperService : WallpaperService() {
                         LocalWallpaperGenerator.renderWithCustomBackground(
                             canvas, width, height, frame.tasks, frame.totalCount, bitmap,
                             frame.achievements.achievementCount, frame.achievements.streakDays,
-                            theme, frame.env, frame.allTasks, frame.completionAt, placement
+                            theme, frame.env, frame.allTasks, frame.completionAt, placement, hudOverlay
                         )
                     } else {
-                        renderGenerated(canvas, width, height, frame, theme, placement)
+                        renderGenerated(canvas, width, height, frame, theme, placement, hudOverlay)
                     }
                 } else {
-                    renderGenerated(canvas, width, height, frame, theme, placement)
+                    renderGenerated(canvas, width, height, frame, theme, placement, hudOverlay)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Render failed", e)
@@ -204,12 +221,13 @@ class CosmicLiveWallpaperService : WallpaperService() {
             height: Int,
             frame: RenderFrame,
             theme: WallpaperTheme,
-            placement: com.cosmicocean.wallpaper.TaskPlacement
+            placement: com.cosmicocean.wallpaper.TaskPlacement,
+            hudOverlay: HudOverlayRenderConfig?
         ) {
             LocalWallpaperGenerator.render(
                 canvas, width, height, frame.tasks, frame.totalCount, theme,
                 frame.achievements.achievementCount, frame.achievements.streakDays,
-                frame.env, frame.allTasks, frame.completionAt, placement
+                frame.env, frame.allTasks, frame.completionAt, placement, hudOverlay
             )
         }
 
@@ -232,6 +250,68 @@ class CosmicLiveWallpaperService : WallpaperService() {
             } catch (e: Exception) {
                 null
             }
+        }
+
+        private fun getOrLoadHudOverlay(uriString: String?, surfaceWidth: Int): Bitmap? {
+            if (uriString.isNullOrBlank()) {
+                cachedHudBitmap?.recycle()
+                cachedHudBitmap = null
+                lastHudUri = null
+                lastHudSurfaceWidth = 0
+                return null
+            }
+
+            val cached = cachedHudBitmap
+            if (
+                cached != null &&
+                !cached.isRecycled &&
+                uriString == lastHudUri &&
+                surfaceWidth == lastHudSurfaceWidth
+            ) {
+                return cached
+            }
+
+            cachedHudBitmap?.recycle()
+            cachedHudBitmap = null
+            lastHudUri = null
+            lastHudSurfaceWidth = 0
+
+            return try {
+                val uri = Uri.parse(uriString)
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                applicationContext.contentResolver.openInputStream(uri)?.use { input ->
+                    BitmapFactory.decodeStream(input, null, bounds)
+                }
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+                val maxDecodedWidth = (surfaceWidth * 2).coerceAtLeast(1)
+                val sampleSize = calculateHudSampleSize(bounds.outWidth, maxDecodedWidth)
+                val decodeOptions = BitmapFactory.Options().apply {
+                    inSampleSize = sampleSize
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                }
+                val decoded = applicationContext.contentResolver.openInputStream(uri)?.use { input ->
+                    BitmapFactory.decodeStream(input, null, decodeOptions)
+                }
+
+                if (decoded != null && !decoded.isRecycled) {
+                    cachedHudBitmap = decoded
+                    lastHudUri = uriString
+                    lastHudSurfaceWidth = surfaceWidth
+                }
+                decoded
+            } catch (e: Exception) {
+                Log.w(TAG, "HUD overlay decode skipped: ${e.message}")
+                null
+            }
+        }
+
+        private fun calculateHudSampleSize(sourceWidth: Int, maxWidth: Int): Int {
+            var sampleSize = 1
+            while (sourceWidth / sampleSize > maxWidth) {
+                sampleSize *= 2
+            }
+            return sampleSize
         }
     }
 }

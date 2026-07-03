@@ -74,6 +74,12 @@ enum class TaskPlacement(val prefValue: String) {
     }
 }
 
+data class HudOverlayRenderConfig(
+    val bitmap: Bitmap,
+    val verticalPositionPercent: Int = 80,
+    val opacityPercent: Int = 90
+)
+
 object LocalWallpaperGenerator {
     private const val TAG = "LocalWallpaperGen"
     private const val NOISE_TILE_SIZE = 96
@@ -551,7 +557,8 @@ object LocalWallpaperGenerator {
         environmentPreferences: EnvironmentPreferences? = null,
         weatherTasks: List<StarEntity>? = null,
         recentCompletionAt: Long? = null,
-        taskPlacement: TaskPlacement = TaskPlacement.AUTO
+        taskPlacement: TaskPlacement = TaskPlacement.AUTO,
+        hudOverlay: HudOverlayRenderConfig? = null
     ) {
         val placement = resolvePlacement(taskPlacement)
         val now = System.currentTimeMillis()
@@ -619,6 +626,9 @@ object LocalWallpaperGenerator {
         // Layer 2.5: Transition gradient (scene → task zone)
         drawTransitionGradient(canvas, colors, width, height, placement)
 
+        // Layer 3: User HUD overlay, kept clear of the task text zone.
+        drawHudOverlay(canvas, width, height, placement, hudOverlay)
+
         // Layer 3: Achievement panel (if any)
         val achievementReservedSpace = if (achievementCount > 0 || streakDays > 0) {
             drawAchievementPanel(canvas, achievementCount, streakDays, colors, width, height, readability, placement)
@@ -665,7 +675,8 @@ object LocalWallpaperGenerator {
         environmentPreferences: EnvironmentPreferences? = null,
         weatherTasks: List<StarEntity>? = null,
         recentCompletionAt: Long? = null,
-        taskPlacement: TaskPlacement = TaskPlacement.AUTO
+        taskPlacement: TaskPlacement = TaskPlacement.AUTO,
+        hudOverlay: HudOverlayRenderConfig? = null
     ): Bitmap {
         Log.d(TAG, "Generating legacy bitmap wallpaper: ${width}x${height}")
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -674,7 +685,7 @@ object LocalWallpaperGenerator {
         render(
             canvas, width, height, tasks, totalTaskCount, theme,
             achievementCount, streakDays, environmentPreferences,
-            weatherTasks, recentCompletionAt, taskPlacement
+            weatherTasks, recentCompletionAt, taskPlacement, hudOverlay
         )
 
         return bitmap
@@ -696,7 +707,8 @@ object LocalWallpaperGenerator {
         environmentPreferences: EnvironmentPreferences? = null,
         weatherTasks: List<StarEntity>? = null,
         recentCompletionAt: Long? = null,
-        taskPlacement: TaskPlacement = TaskPlacement.AUTO
+        taskPlacement: TaskPlacement = TaskPlacement.AUTO,
+        hudOverlay: HudOverlayRenderConfig? = null
     ) {
         val placement = resolvePlacement(taskPlacement)
         val now = System.currentTimeMillis()
@@ -741,6 +753,9 @@ object LocalWallpaperGenerator {
 
         // NOTE: Custom wallpaper mode intentionally skips all environment overlays,
         // heatmaps, pulses, and transition gradients to preserve the uploaded image.
+
+        // Layer 2: User HUD overlay, kept clear of the task text zone.
+        drawHudOverlay(canvas, width, height, placement, hudOverlay)
 
         // Layer 3: Achievement panel (if any)
         val achievementReservedSpace = if (achievementCount > 0 || streakDays > 0) {
@@ -789,7 +804,8 @@ object LocalWallpaperGenerator {
         environmentPreferences: EnvironmentPreferences? = null,
         weatherTasks: List<StarEntity>? = null,
         recentCompletionAt: Long? = null,
-        taskPlacement: TaskPlacement = TaskPlacement.AUTO
+        taskPlacement: TaskPlacement = TaskPlacement.AUTO,
+        hudOverlay: HudOverlayRenderConfig? = null
     ): Bitmap {
         Log.d(TAG, "Generating legacy custom bitmap wallpaper: ${width}x${height}")
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -798,10 +814,68 @@ object LocalWallpaperGenerator {
         renderWithCustomBackground(
             canvas, width, height, tasks, totalTaskCount, customBackground,
             achievementCount, streakDays, theme, environmentPreferences,
-            weatherTasks, recentCompletionAt, taskPlacement
+            weatherTasks, recentCompletionAt, taskPlacement, hudOverlay
         )
 
         return bitmap
+    }
+
+    private fun drawHudOverlay(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
+        placement: TaskPlacement,
+        overlay: HudOverlayRenderConfig?
+    ) {
+        val bitmap = overlay?.bitmap ?: return
+        if (bitmap.isRecycled || bitmap.width <= 0 || bitmap.height <= 0) return
+
+        val layout = getLayoutConfig(width, height, placement)
+        val density = layout.safeInsets.density
+        val targetWidth = width * 0.9f
+        val targetHeight = targetWidth * bitmap.height.toFloat() / bitmap.width.toFloat()
+        if (targetHeight <= 0f) return
+
+        val left = (width - targetWidth) / 2f
+        val safeTop = layout.safeInsets.top + layout.margins.vertical
+        val safeBottom = height - layout.safeInsets.bottom - layout.margins.vertical
+        val maxTop = max(safeTop, safeBottom - targetHeight)
+        val desiredCenterY = height * (overlay.verticalPositionPercent.coerceIn(0, 100) / 100f)
+        val desiredTop = desiredCenterY - targetHeight / 2f
+        var top = desiredTop.coerceIn(safeTop, maxTop)
+
+        val taskZone = layout.layoutZones.task
+        val clearance = max(16f * density, layout.margins.vertical * 0.75f)
+        val protectedTaskRect = RectF(
+            0f,
+            max(0f, taskZone.y - clearance),
+            width.toFloat(),
+            min(height.toFloat(), taskZone.y + taskZone.height + clearance)
+        )
+
+        val proposedRect = RectF(left, top, left + targetWidth, top + targetHeight)
+        if (RectF.intersects(proposedRect, protectedTaskRect)) {
+            val aboveTop = protectedTaskRect.top - targetHeight - clearance
+            val belowTop = protectedTaskRect.bottom + clearance
+            val canMoveAbove = aboveTop >= safeTop
+            val canMoveBelow = belowTop + targetHeight <= safeBottom
+            top = when {
+                desiredCenterY <= protectedTaskRect.centerY() && canMoveAbove -> aboveTop
+                desiredCenterY > protectedTaskRect.centerY() && canMoveBelow -> belowTop
+                canMoveAbove -> aboveTop
+                canMoveBelow -> belowTop
+                abs(aboveTop - desiredTop) <= abs(belowTop - desiredTop) -> aboveTop
+                else -> belowTop
+            }.coerceIn(safeTop, maxTop)
+        }
+
+        val dest = RectF(left, top, left + targetWidth, top + targetHeight)
+        val paint = Paint().apply {
+            isAntiAlias = true
+            isFilterBitmap = true
+            alpha = (overlay.opacityPercent.coerceIn(10, 100) * 255 / 100)
+        }
+        canvas.drawBitmap(bitmap, null, dest, paint)
     }
 
     private fun drawEnvironmentLayers(

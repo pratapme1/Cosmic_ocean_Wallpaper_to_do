@@ -31,6 +31,7 @@
 | 2026-02-06 | Codex | Release 2.7.3 device test build | Pass | android/app/build/outputs/apk/release/app-release.apk, cosmic-ocean-v2.7.3.apk |
 | 2026-07-02 | Codex | Live wallpaper cloud refresh cadence + immediate local wallpaper preference updates | Pass | android/app/build/reports/tests/testDebugUnitTest, android/app/build/reports/androidTests/connected, qa-runs/2026-07-02-wallpaper-refresh |
 | 2026-07-02 | Codex | Supabase Vi reminder bidirectional CRUD sync + release validation | Pass | android/app/build/reports/tests/testDebugUnitTest, live Supabase REST smoke, live app-path CRUD instrumentation, qa-runs/2026-07-02-supabase-reminders |
+| 2026-07-03 | Codex | Live wallpaper HUD overlay image picker + cached render layer | Pass | android/app/build/reports/tests/testDebugUnitTest, android/app/build/reports/androidTests/connected, qa-runs/2026-07-03-hud-overlay |
 
 ## Blockers
 | Date | Item | Reason | Owner |

@@ -201,6 +201,17 @@
   - App edits, completions, archives, and deletes update the Supabase row or active state
   - Offline or failed writes are queued and retried without deleting local tasks
 
+### 11h) Live Wallpaper HUD Overlay Image
+- **Problem**: The owner needs a personal memory-cue HUD strip over the live wallpaper without app updates when the PNG content changes.
+- **Outcome**: Settings can pick a persisted local transparent PNG and the live wallpaper draws it as a cached overlay layer clear of task text.
+- **Est.**: 1 day
+- **Status**: Done (2026-07-03)
+- **Acceptance Criteria**:
+  - User can pick/clear a local PNG HUD overlay from Settings
+  - Vertical position and opacity are configurable
+  - Live wallpaper caches the decoded bitmap and skips bad/missing URIs without crashing
+  - Overlay appears on generated and custom wallpapers without obscuring reminder text
+
 ## P2 — Core Flow Enhancements
 
 ### 12) Focus Sessions

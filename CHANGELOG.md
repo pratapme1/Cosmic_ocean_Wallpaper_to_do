@@ -3,16 +3,19 @@
 ## [Unreleased]
 
 ### Added
-- (placeholder)
+- Live wallpaper HUD overlay support for a user-picked transparent PNG, with persisted document URI, vertical position, opacity, and clear controls in Settings.
+- Wallpaper screenshot coverage for generated and custom backgrounds with the HUD overlay visible and task text unobscured.
 
 ### Changed
-- (placeholder)
+- Live wallpaper render preferences now include HUD overlay state so position/opacity changes flow through the existing wallpaper preference observer.
 
 ### Fixed
-- (placeholder)
+- HUD overlay decode failures, missing files, or revoked URI access are skipped without crashing the wallpaper engine; Settings surfaces an "Overlay image not found" note.
 
 ### Testing
-- (placeholder)
+- `ANDROID_HOME=/home/vi/Android/Sdk ./gradlew testDebugUnitTest --rerun-tasks`
+- `ANDROID_HOME=/home/vi/Android/Sdk PATH=/home/vi/Android/Sdk/platform-tools:$PATH ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.cosmicocean.integration.HudOverlayWallpaperScreenshotE2ETest`
+- Screenshot evidence reviewed in `qa-runs/2026-07-03-hud-overlay`.
 
 ## [2.9.0] - 2026-07-02 (Supabase Reminder Sync)
 

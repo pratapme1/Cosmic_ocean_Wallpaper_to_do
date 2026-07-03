@@ -55,9 +55,17 @@ class WallpaperPreferencesManagerTest {
             .thenReturn(mockEditor)
         lenient().`when`(mockEditor.putLong(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong()))
             .thenReturn(mockEditor)
+        lenient().`when`(mockEditor.putInt(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyInt()))
+            .thenReturn(mockEditor)
+        lenient().`when`(mockEditor.remove(org.mockito.ArgumentMatchers.anyString()))
+            .thenReturn(mockEditor)
         lenient().`when`(mockEditor.clear()).thenReturn(mockEditor)
         lenient().`when`(mockEditor.commit()).thenReturn(true)
         lenient().doNothing().`when`(mockEditor).apply()
+        lenient().`when`(mockSharedPreferences.getInt("hud_overlay_vertical_percent", WallpaperPreferencesManager.DEFAULT_HUD_OVERLAY_VERTICAL_PERCENT))
+            .thenReturn(WallpaperPreferencesManager.DEFAULT_HUD_OVERLAY_VERTICAL_PERCENT)
+        lenient().`when`(mockSharedPreferences.getInt("hud_overlay_opacity_percent", WallpaperPreferencesManager.DEFAULT_HUD_OVERLAY_OPACITY_PERCENT))
+            .thenReturn(WallpaperPreferencesManager.DEFAULT_HUD_OVERLAY_OPACITY_PERCENT)
 
         prefsManager = WallpaperPreferencesManager(mockContext)
     }
@@ -117,12 +125,21 @@ class WallpaperPreferencesManagerTest {
             .thenReturn(WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM)
         `when`(mockSharedPreferences.getString("custom_wallpaper_path", null))
             .thenReturn("/tmp/custom.jpg")
+        `when`(mockSharedPreferences.getString("hud_overlay_uri", null))
+            .thenReturn("content://hud-overlay")
+        `when`(mockSharedPreferences.getInt("hud_overlay_vertical_percent", WallpaperPreferencesManager.DEFAULT_HUD_OVERLAY_VERTICAL_PERCENT))
+            .thenReturn(72)
+        `when`(mockSharedPreferences.getInt("hud_overlay_opacity_percent", WallpaperPreferencesManager.DEFAULT_HUD_OVERLAY_OPACITY_PERCENT))
+            .thenReturn(64)
 
         val snapshot = prefsManager.getRenderPreferences()
 
         assertEquals("ocean", snapshot.theme)
         assertEquals(WallpaperPreferencesManager.WALLPAPER_MODE_CUSTOM, snapshot.wallpaperMode)
         assertEquals("/tmp/custom.jpg", snapshot.customWallpaperPath)
+        assertEquals("content://hud-overlay", snapshot.hudOverlayUri)
+        assertEquals(72, snapshot.hudOverlayVerticalPercent)
+        assertEquals(64, snapshot.hudOverlayOpacityPercent)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -155,6 +172,33 @@ class WallpaperPreferencesManagerTest {
         assertEquals("/tmp/custom.jpg", emissions[1].customWallpaperPath)
 
         job.cancel()
+    }
+
+    @Test
+    fun hudOverlayPreferences_storeValidatedValues() {
+        assertTrue(prefsManager.setHudOverlayUri("content://overlay"))
+        assertTrue(prefsManager.setHudOverlayVerticalPercent(80))
+        assertTrue(prefsManager.setHudOverlayOpacityPercent(90))
+
+        verify(mockEditor).putString("hud_overlay_uri", "content://overlay")
+        verify(mockEditor).putInt("hud_overlay_vertical_percent", 80)
+        verify(mockEditor).putInt("hud_overlay_opacity_percent", 90)
+    }
+
+    @Test
+    fun hudOverlayPreferences_rejectInvalidSliderValues() {
+        assertFalse(prefsManager.setHudOverlayVerticalPercent(-1))
+        assertFalse(prefsManager.setHudOverlayVerticalPercent(101))
+        assertFalse(prefsManager.setHudOverlayOpacityPercent(9))
+        assertFalse(prefsManager.setHudOverlayOpacityPercent(101))
+    }
+
+    @Test
+    fun clearHudOverlay_removesOnlyImageUri() {
+        assertTrue(prefsManager.clearHudOverlay())
+
+        verify(mockEditor).remove("hud_overlay_uri")
+        verify(mockEditor).commit()
     }
 
     @Test

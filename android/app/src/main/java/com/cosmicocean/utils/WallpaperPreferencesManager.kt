@@ -14,7 +14,10 @@ data class WallpaperRenderPreferences(
     val theme: String = WallpaperPreferencesManager.DEFAULT_THEME,
     val wallpaperMode: String = WallpaperPreferencesManager.WALLPAPER_MODE_GENERATED,
     val customWallpaperPath: String? = null,
-    val taskPlacement: String = WallpaperPreferencesManager.DEFAULT_TASK_PLACEMENT
+    val taskPlacement: String = WallpaperPreferencesManager.DEFAULT_TASK_PLACEMENT,
+    val hudOverlayUri: String? = null,
+    val hudOverlayVerticalPercent: Int = WallpaperPreferencesManager.DEFAULT_HUD_OVERLAY_VERTICAL_PERCENT,
+    val hudOverlayOpacityPercent: Int = WallpaperPreferencesManager.DEFAULT_HUD_OVERLAY_OPACITY_PERCENT
 )
 
 class WallpaperPreferencesManager(private val context: Context) {
@@ -30,12 +33,18 @@ class WallpaperPreferencesManager(private val context: Context) {
         private const val KEY_WALLPAPER_MODE = "wallpaper_mode"
         private const val KEY_CUSTOM_WALLPAPER_PATH = "custom_wallpaper_path"
         private const val KEY_TASK_PLACEMENT = "task_placement"
+        private const val KEY_HUD_OVERLAY_URI = "hud_overlay_uri"
+        private const val KEY_HUD_OVERLAY_VERTICAL_PERCENT = "hud_overlay_vertical_percent"
+        private const val KEY_HUD_OVERLAY_OPACITY_PERCENT = "hud_overlay_opacity_percent"
 
         const val DEFAULT_THEME = "cosmic"
         const val DEFAULT_RESOLUTION = "1080x1920"
         const val WALLPAPER_MODE_GENERATED = "generated"
         const val WALLPAPER_MODE_CUSTOM = "custom"
         const val DEFAULT_TASK_PLACEMENT = "auto"
+        const val DEFAULT_HUD_OVERLAY_VERTICAL_PERCENT = 80
+        const val DEFAULT_HUD_OVERLAY_OPACITY_PERCENT = 90
+        const val MIN_HUD_OVERLAY_OPACITY_PERCENT = 10
 
         val AVAILABLE_THEMES = listOf("cosmic", "ocean", "fantasy")
         val AVAILABLE_TASK_PLACEMENTS = listOf("auto", "top", "bottom")
@@ -46,14 +55,26 @@ class WallpaperPreferencesManager(private val context: Context) {
             theme = getTheme(),
             wallpaperMode = getWallpaperMode(),
             customWallpaperPath = getCustomWallpaperPath(),
-            taskPlacement = getTaskPlacement()
+            taskPlacement = getTaskPlacement(),
+            hudOverlayUri = getHudOverlayUri(),
+            hudOverlayVerticalPercent = getHudOverlayVerticalPercent(),
+            hudOverlayOpacityPercent = getHudOverlayOpacityPercent()
         )
     }
 
     fun renderPreferencesFlow(): Flow<WallpaperRenderPreferences> {
         return callbackFlow {
             val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-                if (key == null || key == KEY_THEME || key == KEY_WALLPAPER_MODE || key == KEY_CUSTOM_WALLPAPER_PATH || key == KEY_TASK_PLACEMENT) {
+                if (
+                    key == null ||
+                    key == KEY_THEME ||
+                    key == KEY_WALLPAPER_MODE ||
+                    key == KEY_CUSTOM_WALLPAPER_PATH ||
+                    key == KEY_TASK_PLACEMENT ||
+                    key == KEY_HUD_OVERLAY_URI ||
+                    key == KEY_HUD_OVERLAY_VERTICAL_PERCENT ||
+                    key == KEY_HUD_OVERLAY_OPACITY_PERCENT
+                ) {
                     trySend(getRenderPreferences())
                 }
             }
@@ -191,6 +212,48 @@ class WallpaperPreferencesManager(private val context: Context) {
         } else {
             prefs.edit().putString(KEY_CUSTOM_WALLPAPER_PATH, path).commit()
         }
+    }
+
+    fun getHudOverlayUri(): String? {
+        return prefs.getString(KEY_HUD_OVERLAY_URI, null)
+    }
+
+    fun setHudOverlayUri(uri: String?): Boolean {
+        return if (uri == null) {
+            prefs.edit().remove(KEY_HUD_OVERLAY_URI).commit()
+        } else {
+            prefs.edit().putString(KEY_HUD_OVERLAY_URI, uri).commit()
+        }
+    }
+
+    fun getHudOverlayVerticalPercent(): Int {
+        return prefs.getInt(
+            KEY_HUD_OVERLAY_VERTICAL_PERCENT,
+            DEFAULT_HUD_OVERLAY_VERTICAL_PERCENT
+        ).coerceIn(0, 100)
+    }
+
+    fun setHudOverlayVerticalPercent(percent: Int): Boolean {
+        if (percent !in 0..100) return false
+        return prefs.edit().putInt(KEY_HUD_OVERLAY_VERTICAL_PERCENT, percent).commit()
+    }
+
+    fun getHudOverlayOpacityPercent(): Int {
+        return prefs.getInt(
+            KEY_HUD_OVERLAY_OPACITY_PERCENT,
+            DEFAULT_HUD_OVERLAY_OPACITY_PERCENT
+        ).coerceIn(MIN_HUD_OVERLAY_OPACITY_PERCENT, 100)
+    }
+
+    fun setHudOverlayOpacityPercent(percent: Int): Boolean {
+        if (percent !in MIN_HUD_OVERLAY_OPACITY_PERCENT..100) return false
+        return prefs.edit().putInt(KEY_HUD_OVERLAY_OPACITY_PERCENT, percent).commit()
+    }
+
+    fun clearHudOverlay(): Boolean {
+        return prefs.edit()
+            .remove(KEY_HUD_OVERLAY_URI)
+            .commit()
     }
 
     fun needsSync(): Boolean {

@@ -1,5 +1,7 @@
 package com.cosmicocean
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -56,6 +58,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import androidx.annotation.VisibleForTesting
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -174,6 +177,10 @@ class MainActivity : ComponentActivity() {
                 var isInteracting by remember { mutableStateOf(false) }
                 var currentTheme by remember { mutableStateOf(wallpaperPreferences.getTheme()) }
                 var currentTaskPlacement by remember { mutableStateOf(wallpaperPreferences.getTaskPlacement()) }
+                var currentHudOverlayUri by remember { mutableStateOf(wallpaperPreferences.getHudOverlayUri()) }
+                var currentHudOverlayVertical by remember { mutableIntStateOf(wallpaperPreferences.getHudOverlayVerticalPercent()) }
+                var currentHudOverlayOpacity by remember { mutableIntStateOf(wallpaperPreferences.getHudOverlayOpacityPercent()) }
+                var hudOverlayMissing by remember { mutableStateOf(false) }
                 var showWallpaperConsent by remember { mutableStateOf(false) }
                 var showDiscovery by remember { mutableStateOf(false) }
                 var isUploadingWallpaper by remember { mutableStateOf(false) }
@@ -336,6 +343,35 @@ class MainActivity : ComponentActivity() {
                                 isUploadingWallpaper = false
                             }
                         }
+                    }
+                }
+
+                val hudOverlayPickerLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocument()
+                ) { uri ->
+                    uri?.let { selectedUri ->
+                        try {
+                            contentResolver.takePersistableUriPermission(
+                                selectedUri,
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        } catch (e: Exception) {
+                            android.util.Log.w("MainActivity", "HUD overlay permission not persisted: ${e.message}")
+                        }
+                        val uriString = selectedUri.toString()
+                        wallpaperPreferences.setHudOverlayUri(uriString)
+                        currentHudOverlayUri = uriString
+                        hudOverlayMissing = false
+                        Toast.makeText(context, "HUD overlay selected", Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+                LaunchedEffect(showSettings, currentHudOverlayUri) {
+                    val uri = currentHudOverlayUri
+                    hudOverlayMissing = if (showSettings && uri != null) {
+                        withContext(Dispatchers.IO) { !canReadUriString(uri) }
+                    } else {
+                        false
                     }
                 }
 
@@ -694,6 +730,26 @@ class MainActivity : ComponentActivity() {
                                     currentTaskPlacement = newPlacement
                                     wallpaperPreferences.setTaskPlacement(newPlacement)
                                 },
+                                hudOverlayUri = currentHudOverlayUri,
+                                hudOverlayVerticalPercent = currentHudOverlayVertical,
+                                hudOverlayOpacityPercent = currentHudOverlayOpacity,
+                                hudOverlayMissing = hudOverlayMissing,
+                                onPickHudOverlay = {
+                                    hudOverlayPickerLauncher.launch(arrayOf("image/png"))
+                                },
+                                onHudOverlayVerticalChange = { newPosition ->
+                                    currentHudOverlayVertical = newPosition
+                                    wallpaperPreferences.setHudOverlayVerticalPercent(newPosition)
+                                },
+                                onHudOverlayOpacityChange = { newOpacity ->
+                                    currentHudOverlayOpacity = newOpacity
+                                    wallpaperPreferences.setHudOverlayOpacityPercent(newOpacity)
+                                },
+                                onClearHudOverlay = {
+                                    wallpaperPreferences.clearHudOverlay()
+                                    currentHudOverlayUri = null
+                                    hudOverlayMissing = false
+                                },
                                 onOpenPrivacySettings = {
                                     showSettings = false
                                     showPrivacySettings = true
@@ -1020,6 +1076,14 @@ class MainActivity : ComponentActivity() {
 
     private fun reportAppOpen() {
         lifecycleScope.launch { try { NetworkModule.getApi(this@MainActivity).reportAppOpen() } catch (e: Exception) {} }
+    }
+
+    private fun canReadUriString(uriString: String): Boolean {
+        return try {
+            contentResolver.openInputStream(Uri.parse(uriString))?.use { true } ?: false
+        } catch (e: Exception) {
+            false
+        }
     }
 
     private fun markDoneForToday() {

@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Arrangement
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,7 +30,15 @@ fun SettingsOverlay(
     onOpenEnvironmentSettings: (() -> Unit)? = null,
     hasViKey: Boolean = false,
     onSaveViKey: ((String) -> Unit)? = null,
-    onClearViKey: (() -> Unit)? = null
+    onClearViKey: (() -> Unit)? = null,
+    hudOverlayUri: String? = null,
+    hudOverlayVerticalPercent: Int = 80,
+    hudOverlayOpacityPercent: Int = 90,
+    hudOverlayMissing: Boolean = false,
+    onPickHudOverlay: (() -> Unit)? = null,
+    onHudOverlayVerticalChange: (Int) -> Unit = {},
+    onHudOverlayOpacityChange: (Int) -> Unit = {},
+    onClearHudOverlay: (() -> Unit)? = null
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -208,6 +217,69 @@ fun SettingsOverlay(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+
+            if (onPickHudOverlay != null) {
+                Text(
+                    "HUD Overlay Image",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color(0xFF3AA0FF)
+                )
+                Text(
+                    "Use a wide transparent PNG named hud-overlay.png from Pictures; replacing that file updates after wallpaper restart/redraw.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.6f)
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onPickHudOverlay,
+                        modifier = Modifier.weight(1f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3AA0FF))
+                    ) {
+                        Text(if (hudOverlayUri == null) "Pick PNG" else "Replace PNG", color = Color(0xFF3AA0FF))
+                    }
+                    if (hudOverlayUri != null && onClearHudOverlay != null) {
+                        TextButton(onClick = onClearHudOverlay) {
+                            Text("Clear overlay", color = Color(0xFFFF3B30))
+                        }
+                    }
+                }
+                if (hudOverlayMissing) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "Overlay image not found",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFFFB74D)
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    "Vertical position ${hudOverlayVerticalPercent.coerceIn(0, 100)}%",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.75f)
+                )
+                Slider(
+                    value = hudOverlayVerticalPercent.coerceIn(0, 100).toFloat(),
+                    onValueChange = { onHudOverlayVerticalChange(it.roundToInt().coerceIn(0, 100)) },
+                    valueRange = 0f..100f,
+                    steps = 99
+                )
+                Text(
+                    "Opacity ${hudOverlayOpacityPercent.coerceIn(10, 100)}%",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.75f)
+                )
+                Slider(
+                    value = hudOverlayOpacityPercent.coerceIn(10, 100).toFloat(),
+                    onValueChange = { onHudOverlayOpacityChange(it.roundToInt().coerceIn(10, 100)) },
+                    valueRange = 10f..100f,
+                    steps = 89
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
             // Privacy Settings
             if (onOpenPrivacySettings != null) {
